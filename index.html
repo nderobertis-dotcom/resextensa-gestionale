@@ -336,10 +336,30 @@ let nextId = 1;
 let sheetRowMap = {};
 
 // ─── AUTH (GAPI implicit flow — funziona su http://localhost) ─────────────────
-window.onload = () => {};
+window.onload = () => {
+  // Controlla se torniamo da redirect OAuth con token nell'hash
+  const hash = window.location.hash;
+  if (hash && hash.includes('access_token')) {
+    const params = new URLSearchParams(hash.substring(1));
+    const token = params.get('access_token');
+    if (token) {
+      accessToken = token;
+      history.replaceState(null, '', window.location.pathname);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'block';
+      loadFromSheets();
+      return;
+    }
+  }
+};
 
 function handleAuthClick() {
-  const redirectUri = window.location.origin + window.location.pathname;
+  // Calcola redirect URI in base all'ambiente (localhost o GitHub Pages)
+  const isLocal = window.location.hostname === 'localhost';
+  const redirectUri = isLocal
+    ? 'http://localhost'
+    : 'https://nderobertis-dotcom.github.io/resextensa-gestionale';
+
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: redirectUri,
@@ -348,35 +368,7 @@ function handleAuthClick() {
     include_granted_scopes: 'true',
     prompt: 'consent'
   });
-
-  const w = 500, h = 600;
-  const left = (screen.width / 2) - (w / 2);
-  const top = (screen.height / 2) - (h / 2);
-  const popup = window.open(
-    'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString(),
-    'google_auth',
-    `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`
-  );
-
-  const timer = setInterval(() => {
-    try {
-      const url = popup.location.href;
-      if (url && url.includes('access_token')) {
-        const hash = popup.location.hash.substring(1);
-        const p = new URLSearchParams(hash);
-        const token = p.get('access_token');
-        if (token) {
-          clearInterval(timer);
-          popup.close();
-          accessToken = token;
-          document.getElementById('loginScreen').style.display = 'none';
-          document.getElementById('appScreen').style.display = 'block';
-          loadFromSheets();
-        }
-      }
-    } catch(e) {}
-    if (popup.closed) clearInterval(timer);
-  }, 500);
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
 }
 
 // ─── SHEETS API ───────────────────────────────────────────────────────────────
