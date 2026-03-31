@@ -339,10 +339,10 @@ let sheetRowMap = {};
 window.onload = () => {};
 
 function handleAuthClick() {
-  // Apre il login Google in un popup — nessun redirect, token catturato direttamente
+  const redirectUri = window.location.origin + window.location.pathname;
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
-    redirect_uri: 'http://localhost',
+    redirect_uri: redirectUri,
     response_type: 'token',
     scope: SCOPES,
     include_granted_scopes: 'true',
@@ -358,7 +358,6 @@ function handleAuthClick() {
     `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`
   );
 
-  // Controlla ogni 500ms se il popup ha ricevuto il token
   const timer = setInterval(() => {
     try {
       const url = popup.location.href;
@@ -375,9 +374,7 @@ function handleAuthClick() {
           loadFromSheets();
         }
       }
-    } catch(e) {
-      // Cross-origin — il popup è ancora sulla pagina Google, aspetta
-    }
+    } catch(e) {}
     if (popup.closed) clearInterval(timer);
   }, 500);
 }
