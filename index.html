@@ -175,6 +175,66 @@
   /* Saving spinner */
   .saving-badge { display: none; align-items: center; gap: 6px; font-size: 12px; color: var(--accent); }
   .saving-badge.show { display: flex; }
+
+  /* Bottone torna alla lista (solo mobile) */
+  .btn-back { display: none; background: none; border: none; color: var(--accent); font-size: 13px; padding: 0; cursor: pointer; }
+
+  /* ── TABLET (max 900px) ── */
+  @media (max-width: 900px) {
+    header { padding: 0 16px; height: 56px; }
+    .logo span { display: none; }
+    .header-stats { gap: 14px; }
+    .stat-n { font-size: 18px; }
+    .sync-status span { display: none; }
+    aside { width: 260px; min-width: 260px; }
+    .detail { padding: 20px; }
+    .detail-name { font-size: 24px; }
+    .topbar { padding: 10px 16px; }
+    .modal { width: 90vw; }
+  }
+
+  /* ── MOBILE (max 600px) ── */
+  @media (max-width: 600px) {
+    header { padding: 0 12px; height: 52px; }
+    .header-stats { gap: 10px; }
+    .stat-n { font-size: 16px; }
+    .stat-l { display: none; }
+
+    /* Layout: sidebar e main non affiancati ma sovrapposti */
+    .app { position: relative; }
+    aside {
+      width: 100%; min-width: 100%;
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10; transition: transform 0.25s;
+    }
+    aside.hidden { transform: translateX(-100%); }
+    main {
+      width: 100%;
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 5;
+    }
+
+    /* Mostra il bottone torna alla lista */
+    .btn-back { display: inline-flex; align-items: center; gap: 4px; }
+
+    .detail { padding: 16px; }
+    .detail-name { font-size: 22px; }
+    .detail-header { gap: 12px; }
+    .avatar-lg { width: 52px; height: 52px; font-size: 18px; }
+    .fields-grid { grid-template-columns: 1fr; }
+    .topbar { padding: 8px 12px; flex-wrap: wrap; gap: 6px; }
+    .topbar-right { gap: 6px; }
+    .topbar-right button { font-size: 11px; padding: 5px 8px; }
+    .modal { width: 95vw; padding: 18px; max-height: 90vh; }
+    .modal-grid { grid-template-columns: 1fr; }
+    .filters { flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+    .filters > div { flex: 1; min-width: 120px; }
+    .checkboxes-wrap { gap: 6px; }
+    .toast { bottom: 12px; right: 12px; left: 12px; font-size: 12px; }
+    .login-screen { padding: 20px; gap: 16px; }
+    .login-logo { font-size: 28px; }
+    .login-card { padding: 20px; }
+  }
 </style>
 </head>
 <body>
@@ -607,7 +667,10 @@ function renderDetail(c) {
   const statoClass = c.stato==='ATTIVO' ? 'badge-attivo' : c.stato==='CESSATO' ? 'badge-cessato' : 'badge-unknown';
   document.getElementById('mainPanel').innerHTML = `
   <div class="topbar">
-    <div class="topbar-left"><span style="color:var(--text3);font-size:12px">${filteredContacts().indexOf(c)+1} di ${filteredContacts().length}</span></div>
+    <div class="topbar-left">
+      <button class="btn-back" onclick="showSidebar()">← Lista</button>
+      <span style="color:var(--text3);font-size:12px">${filteredContacts().indexOf(c)+1} di ${filteredContacts().length}</span>
+    </div>
     <div class="topbar-right">
       <button class="btn-export" onclick="exportCSV()">↓ CSV</button>
       <button class="btn-secondary" onclick="startEdit()">✎ Modifica</button>
@@ -715,10 +778,17 @@ function renderEdit(c) {
 
 
 
+function showSidebar() {
+  document.querySelector('aside').classList.remove('hidden');
+}
+function hideSidebar() {
+  if (window.innerWidth <= 600) document.querySelector('aside').classList.add('hidden');
+}
+
 function selectContact(id) {
   selectedId = id; editMode = false;
   const c = contacts.find(x=>x.id===id);
-  renderList(); if (c) renderDetail(c);
+  renderList(); if (c) { renderDetail(c); hideSidebar(); }
 }
 function startEdit() { editMode = true; renderDetail(contacts.find(x=>x.id===selectedId)); }
 function cancelEdit() { editMode = false; renderDetail(contacts.find(x=>x.id===selectedId)); }
