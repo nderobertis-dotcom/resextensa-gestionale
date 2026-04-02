@@ -338,6 +338,43 @@ const SHEET_ID    = '1G57PEEHP8WuMMEdrwmPI7BfcOQiuonp5xIrzkjpW3ac';
 const SHEET_NAME  = 'Componenti';
 const DATA_RANGE  = 'Componenti!B5:W';
 const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets';
+const DRIVE_CU_FOLDER = '1-Pyjd-tKJyNPxaveTAQkvJvcXP0R6dE1';
+
+// ─── GOOGLE DRIVE ─────────────────────────────────────────────────────────────
+async function downloadCU(codiceFiscale) {
+  if (!codiceFiscale) { showToast('Codice fiscale non presente nella scheda', 'error'); return; }
+  showToast('Ricerca CU in corso…', 'info');
+  try {
+    // Cerca il file nella cartella Drive con nome = CODICEFISCALE.pdf
+    const query = encodeURIComponent(`'${DRIVE_CU_FOLDER}' in parents and name = '${codiceFiscale.toUpperCase()}.pdf' and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&key=${API_KEY}`;
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    const data = await r.json();
+
+    if (!data.files || data.files.length === 0) {
+      showToast('CU 2025 non ancora disponibile', 'error');
+      return;
+    }
+
+    const fileId = data.files[0].id;
+    const fileName = data.files[0].name;
+
+    // Scarica il file
+    const dlUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${API_KEY}`;
+    const dlR = await fetch(dlUrl, { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (!dlR.ok) throw new Error('Errore download ' + dlR.status);
+
+    const blob = await dlR.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('CU 2025 scaricata!', 'success');
+  } catch(e) {
+    showToast('Errore: ' + e.message, 'error');
+  }
+}
 
 // Mappatura colonne Sheets → campi app (0-based, colonna B=1, C=2 …)
 const COL = {
@@ -441,7 +478,7 @@ function handleAuthClick() {
     client_id: CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'token',
-    scope: SCOPES + ' https://www.googleapis.com/auth/userinfo.email',
+    scope: SCOPES + ' https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.readonly',
     include_granted_scopes: 'true',
     prompt: 'consent'
   });
@@ -788,7 +825,16 @@ function renderDetail(c) {
         <div class="field"><div class="field-label">CV</div>${val(c.cv)}</div>
       </div>
     </div>
-  </div>`;
+    ${c.codice_fiscale ? `
+    <div class="section"><div class="section-title">Documenti</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-secondary" style="display:flex;align-items:center;gap:8px;padding:10px 18px" onclick="downloadCU('${c.codice_fiscale}')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          CU 2025
+        </button>
+      </div>
+    </div>` : ''}
+  </div>\`;
 }
 
 function renderEdit(c) {
