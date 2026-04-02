@@ -568,10 +568,6 @@ async function loadFromSheets() {
       sheetRowMap[c.id] = i + 5;
     });
 
-    // Debug date nascita
-    const dateCheck = contacts.filter(c=>c.data_nascita).map(c=>c.cognome+': '+c.data_nascita);
-    console.log('Date nascita trovate:', dateCheck.length, dateCheck.slice(0,5));
-
     // Se è un membro (non admin), controlla che la sua email sia nel foglio
     if (userRole === 'member') {
       const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
@@ -827,27 +823,31 @@ function valDate(d) {
 
 function getNextBirthdays() {
   const today = new Date();
-  const todayMD = (today.getMonth()+1)*100 + today.getDate(); // es. 403 = 3 aprile
+  today.setHours(0,0,0,0);
 
-  // Costruisce lista con distanza in giorni dal compleanno
   const list = contacts
-    .filter(c => c.data_nascita && c.data_nascita.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/))
+    .filter(c => c.data_nascita)
     .map(c => {
-      const m = c.data_nascita.match(/(\d{4})[-\/](\d{2})[-\/](\d{2})/);
-      const month = parseInt(m[2]), day = parseInt(m[3]);
+      // Supporta sia GG/MM/AAAA che AAAA-MM-GG
+      let day, month;
+      const m1 = c.data_nascita.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      const m2 = c.data_nascita.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
+      if (m1) { day = parseInt(m1[1]); month = parseInt(m1[2]); }
+      else if (m2) { day = parseInt(m2[3]); month = parseInt(m2[2]); }
+      else return null;
+
       const bday = new Date(today.getFullYear(), month-1, day);
       if (bday < today) bday.setFullYear(today.getFullYear()+1);
       const diff = Math.round((bday - today) / (1000*60*60*24));
       return { c, day, month, diff };
     })
+    .filter(Boolean)
     .sort((a,b) => a.diff - b.diff);
 
   if (!list.length) return null;
 
-  // Raggruppa i primi per stesso giorno
   const first = list[0];
   const sameDay = list.filter(x => x.day === first.day && x.month === first.month);
-
   const dayStr = first.diff === 0 ? 'OGGI' : first.diff === 1 ? 'domani' : `${first.day.toString().padStart(2,'0')}/${first.month.toString().padStart(2,'0')}`;
   const names = sameDay.map(x => `${x.c.nome} ${x.c.cognome}`).join(', ');
   return { dayStr, names, isToday: first.diff === 0 };
