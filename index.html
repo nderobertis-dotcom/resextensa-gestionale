@@ -379,15 +379,24 @@ const FIELDS = [
 ];
 
 let accessToken = null;
+let userEmail = null;
+let userRole = null; // 'admin' | 'member' | null
 let contacts = [];
 let selectedId = null;
 let editMode = false;
 let nextId = 1;
 let sheetRowMap = {};
 
+// ─── AMMINISTRATORI ───────────────────────────────────────────────────────────
+// Aggiungi qui le email degli amministratori che possono vedere e modificare tutto
+const ADMINS = [
+  'nderobertis@gmail.com',
+  'elisa@resextensa.it',
+];
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ─── AUTH (GAPI implicit flow — funziona su http://localhost) ─────────────────
 window.onload = () => {
-  // Controlla se torniamo da redirect OAuth con token nell'hash
   const hash = window.location.hash;
   if (hash && hash.includes('access_token')) {
     const params = new URLSearchParams(hash.substring(1));
@@ -395,13 +404,31 @@ window.onload = () => {
     if (token) {
       accessToken = token;
       history.replaceState(null, '', window.location.pathname);
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('appScreen').style.display = 'block';
-      loadFromSheets();
+      // Recupera email utente prima di mostrare l'app
+      fetchUserEmail().then(() => {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appScreen').style.display = 'block';
+        loadFromSheets();
+      });
       return;
     }
   }
 };
+
+async function fetchUserEmail() {
+  try {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const data = await r.json();
+    userEmail = (data.email || '').toLowerCase().trim();
+    userRole = ADMINS.map(e => e.toLowerCase()).includes(userEmail) ? 'admin' : 'member';
+    console.log('Utente:', userEmail, '| Ruolo:', userRole);
+  } catch(e) {
+    userEmail = null;
+    userRole = 'member';
+  }
+}
 
 function handleAuthClick() {
   // Calcola redirect URI in base all'ambiente (localhost o GitHub Pages)
@@ -414,7 +441,7 @@ function handleAuthClick() {
     client_id: CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'token',
-    scope: SCOPES,
+    scope: SCOPES + ' https://www.googleapis.com/auth/userinfo.email',
     include_granted_scopes: 'true',
     prompt: 'consent'
   });
@@ -486,14 +513,33 @@ async function loadFromSheets() {
       const c = { id: nextId++ };
       Object.keys(COL).forEach(k => { c[k] = g(k); });
       contacts.push(c);
-      // sheet row = header rows (4) + 1-based index + 1 = i+5
       sheetRowMap[c.id] = i + 5;
     });
 
-    populateFilters(); renderList(); updateStats();
-    setSyncStatus('ok', 'Sincronizzato');
+    // Se è un membro (non admin), controlla che la sua email sia nel foglio
+    if (userRole === 'member') {
+      const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
+      if (!myContact) {
+        document.getElementById('appScreen').style.display = 'none';
+        document.getElementById('loginScreen').style.display = 'flex';
+        showToast('Accesso non autorizzato: email non trovata nel sistema', 'error');
+        return;
+      }
+      // Mostra badge ruolo in header
+      setSyncStatus('ok', `Accesso come: ${myContact.nome} ${myContact.cognome}`);
+    } else {
+      setSyncStatus('ok', 'Admin — tutto modificabile');
+    }
 
-    if (selectedId) {
+    // Aggiorna UI in base al ruolo
+    updateHeaderForRole();
+    populateFilters(); renderList(); updateStats();
+
+    if (userRole === 'member') {
+      // I membri vedono subito la propria scheda
+      const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
+      if (myContact) { selectedId = myContact.id; renderList(); renderDetail(myContact); hideSidebar(); }
+    } else if (selectedId) {
       const found = contacts.find(c => c.id === selectedId);
       if (found) renderDetail(found);
     } else {
@@ -509,6 +555,21 @@ async function loadFromSheets() {
     setSyncStatus('error', 'Errore connessione');
     console.error('SHEETS ERROR:', e.message, e);
     showToast('Errore: ' + e.message, 'error');
+  }
+}
+
+function isOwnContact(c) {
+  return userEmail && c.email && c.email.toLowerCase().trim() === userEmail;
+}
+
+function canEdit(c) {
+  return userRole === 'admin' || isOwnContact(c);
+}
+
+function updateHeaderForRole() {
+  // Nasconde il pulsante "+ Nuovo" e i filtri avanzati per i membri
+  if (userRole === 'member') {
+    document.querySelectorAll('.btn-new').forEach(b => b.style.display = 'none');
   }
 }
 
@@ -665,6 +726,8 @@ function renderDetail(c) {
   const [bg,fg] = getColor(c.cognome+c.nome);
   const chips = c.spettacoli ? c.spettacoli.split(',').map(s=>`<span class="chip">${s.trim()}</span>`).join('') : '';
   const statoClass = c.stato==='ATTIVO' ? 'badge-attivo' : c.stato==='CESSATO' ? 'badge-cessato' : 'badge-unknown';
+  const editable = canEdit(c);
+  const isAdmin = userRole === 'admin';
   document.getElementById('mainPanel').innerHTML = `
   <div class="topbar">
     <div class="topbar-left">
@@ -672,10 +735,10 @@ function renderDetail(c) {
       <span style="color:var(--text3);font-size:12px">${filteredContacts().indexOf(c)+1} di ${filteredContacts().length}</span>
     </div>
     <div class="topbar-right">
-      <button class="btn-export" onclick="exportCSV()">↓ CSV</button>
-      <button class="btn-secondary" onclick="startEdit()">✎ Modifica</button>
-      <button class="btn-danger" onclick="deleteContact(${c.id})">✕ Rimuovi</button>
-      <button class="btn-new" onclick="openNewModal()">+ Nuovo</button>
+      ${isAdmin ? `<button class="btn-export" onclick="exportCSV()">↓ CSV</button>` : ''}
+      ${editable ? `<button class="btn-secondary" onclick="startEdit()">✎ Modifica</button>` : ''}
+      ${isAdmin ? `<button class="btn-danger" onclick="deleteContact(${c.id})">✕ Rimuovi</button>` : ''}
+      ${isAdmin ? `<button class="btn-new" onclick="openNewModal()">+ Nuovo</button>` : ''}
     </div>
   </div>
   <div class="detail">
@@ -790,7 +853,11 @@ function selectContact(id) {
   const c = contacts.find(x=>x.id===id);
   renderList(); if (c) { renderDetail(c); hideSidebar(); }
 }
-function startEdit() { editMode = true; renderDetail(contacts.find(x=>x.id===selectedId)); }
+function startEdit() {
+  const c = contacts.find(x=>x.id===selectedId);
+  if (!canEdit(c)) { showToast('Non hai i permessi per modificare questo contatto', 'error'); return; }
+  editMode = true; renderDetail(c);
+}
 function cancelEdit() { editMode = false; renderDetail(contacts.find(x=>x.id===selectedId)); }
 
 async function saveEdit(id) {
