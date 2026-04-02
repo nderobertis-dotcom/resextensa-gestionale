@@ -348,8 +348,11 @@ async function downloadCU(codiceFiscale) {
     // Cerca il file nella cartella Drive con nome = CODICEFISCALE.pdf
     const query = encodeURIComponent(`'${DRIVE_CU_FOLDER}' in parents and name = '${codiceFiscale.toUpperCase()}.pdf' and trashed = false`);
     const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&key=${API_KEY}`;
+    console.log('Drive query:', decodeURIComponent(query));
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    console.log('Drive status:', r.status);
     const data = await r.json();
+    console.log('Drive result:', JSON.stringify(data));
 
     if (!data.files || data.files.length === 0) {
       showToast('CU 2025 non ancora disponibile', 'error');
