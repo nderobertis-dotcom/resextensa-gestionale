@@ -179,6 +179,18 @@
   /* Bottone torna alla lista (solo mobile) */
   .btn-back { display: none; background: none; border: none; color: var(--accent); font-size: 13px; padding: 0; cursor: pointer; }
 
+  /* Box compleanno */
+  .bday-box {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--border2); background: var(--surface2);
+    font-size: 11px; color: var(--text2); white-space: nowrap;
+  }
+  .bday-box.today { border-color: var(--attivo); background: var(--attivo-bg); color: var(--attivo); }
+  .bday-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); display: block; }
+  .bday-box.today .bday-label { color: var(--attivo); opacity: 0.8; }
+  .bday-names { font-weight: 500; font-size: 12px; }
+
   /* ── TABLET (max 900px) ── */
   @media (max-width: 900px) {
     header { padding: 0 16px; height: 56px; }
@@ -795,6 +807,48 @@ function renderList() {
 }
 
 function val(v) { return v ? `<span class="field-value">${v}</span>` : `<span class="field-value empty">—</span>`; }
+
+function formatDate(d) {
+  if (!d) return '';
+  // Converte YYYY-MM-DD o YYYY/MM/DD in GG/MM/AAAA
+  const m = d.match(/(\d{4})[-\/](\d{2})[-\/](\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return d;
+}
+
+function valDate(d) {
+  const f = formatDate(d);
+  return f ? `<span class="field-value">${f}</span>` : `<span class="field-value empty">—</span>`;
+}
+
+function getNextBirthdays() {
+  const today = new Date();
+  const todayMD = (today.getMonth()+1)*100 + today.getDate(); // es. 403 = 3 aprile
+
+  // Costruisce lista con distanza in giorni dal compleanno
+  const list = contacts
+    .filter(c => c.data_nascita && c.data_nascita.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/))
+    .map(c => {
+      const m = c.data_nascita.match(/(\d{4})[-\/](\d{2})[-\/](\d{2})/);
+      const month = parseInt(m[2]), day = parseInt(m[3]);
+      const bday = new Date(today.getFullYear(), month-1, day);
+      if (bday < today) bday.setFullYear(today.getFullYear()+1);
+      const diff = Math.round((bday - today) / (1000*60*60*24));
+      return { c, day, month, diff };
+    })
+    .sort((a,b) => a.diff - b.diff);
+
+  if (!list.length) return null;
+
+  // Raggruppa i primi per stesso giorno
+  const first = list[0];
+  const sameDay = list.filter(x => x.day === first.day && x.month === first.month);
+
+  const dayStr = first.diff === 0 ? 'OGGI' : first.diff === 1 ? 'domani' : `${first.day.toString().padStart(2,'0')}/${first.month.toString().padStart(2,'0')}`;
+  const names = sameDay.map(x => `${x.c.nome} ${x.c.cognome}`).join(', ');
+  return { dayStr, names, isToday: first.diff === 0 };
+}
+
 function valLink(v, type) {
   if (!v) return `<span class="field-value empty">—</span>`;
   if (type==='email') return `<span class="field-value"><a href="mailto:${v}">${v}</a></span>`;
@@ -809,11 +863,20 @@ function renderDetail(c) {
   const statoClass = c.stato==='ATTIVO' ? 'badge-attivo' : c.stato==='CESSATO' ? 'badge-cessato' : 'badge-unknown';
   const editable = canEdit(c);
   const isAdmin = userRole === 'admin';
+  const bday = getNextBirthdays();
+  const bdayHtml = bday ? `
+    <div class="bday-box${bday.isToday?' today':''}">
+      <span>🎂</span>
+      <div>
+        <span class="bday-label">Prossimo compleanno</span>
+        <span class="bday-names">${bday.dayStr} — ${bday.names}</span>
+      </div>
+    </div>` : '';
   document.getElementById('mainPanel').innerHTML = `
   <div class="topbar">
-    <div class="topbar-left">
+    <div class="topbar-left" style="gap:10px">
       <button class="btn-back" onclick="showSidebar()">← Lista</button>
-      <span style="color:var(--text3);font-size:12px">${filteredContacts().indexOf(c)+1} di ${filteredContacts().length}</span>
+      ${bdayHtml}
     </div>
     <div class="topbar-right">
       ${isAdmin ? `<button class="btn-export" onclick="exportCSV()">↓ CSV</button>` : ''}
@@ -844,7 +907,7 @@ function renderDetail(c) {
     </div>
     <div class="section"><div class="section-title">Dati anagrafici</div>
       <div class="fields-grid">
-        <div class="field"><div class="field-label">Data nascita</div>${val(c.data_nascita)}</div>
+        <div class="field"><div class="field-label">Data nascita</div>${valDate(c.data_nascita)}</div>
         <div class="field"><div class="field-label">Luogo nascita</div>${val(c.luogo_nascita)}</div>
         <div class="field"><div class="field-label">Città residenza</div>${val(c.citta_residenza)}</div>
         <div class="field"><div class="field-label">Indirizzo</div>${val(c.indirizzo)}</div>
