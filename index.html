@@ -346,8 +346,8 @@ async function downloadCU(codiceFiscale) {
   showToast('Ricerca CU in corso…', 'info');
   try {
     // Cerca il file nella cartella Drive con nome = CODICEFISCALE.pdf
-    const query = encodeURIComponent(`name = '${codiceFiscale.toUpperCase()}.pdf' and trashed = false`);
-    const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,parents)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`;
+    const query = encodeURIComponent(`'${DRIVE_CU_FOLDER}' in parents and name = '${codiceFiscale.toUpperCase()}.pdf' and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`;
     console.log('Drive query:', decodeURIComponent(query));
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
     console.log('Drive status:', r.status);
