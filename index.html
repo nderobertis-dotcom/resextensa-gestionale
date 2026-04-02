@@ -568,6 +568,10 @@ async function loadFromSheets() {
       sheetRowMap[c.id] = i + 5;
     });
 
+    // Debug date nascita
+    const dateCheck = contacts.filter(c=>c.data_nascita).map(c=>c.cognome+': '+c.data_nascita);
+    console.log('Date nascita trovate:', dateCheck.length, dateCheck.slice(0,5));
+
     // Se è un membro (non admin), controlla che la sua email sia nel foglio
     if (userRole === 'member') {
       const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
