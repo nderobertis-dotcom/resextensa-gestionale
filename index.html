@@ -621,6 +621,47 @@ function contactToRow(c) {
   return row;
 }
 
+async function sortAndSaveToSheets() {
+  if (!confirm('Ordinare tutti i contatti per cognome e salvare su Google Sheets?')) return;
+  setSyncStatus('loading', 'Ordinamento in corso…');
+  try {
+    // Ordina localmente per cognome, poi per nome
+    contacts.sort((a, b) => {
+      const ca = (a.cognome || '').trim().toUpperCase();
+      const cb = (b.cognome || '').trim().toUpperCase();
+      if (ca !== cb) return ca.localeCompare(cb, 'it');
+      return (a.nome || '').trim().toUpperCase().localeCompare((b.nome || '').trim().toUpperCase(), 'it');
+    });
+
+    // Costruisce tutte le righe nell'ordine nuovo
+    const allRows = contacts.map(c => contactToRow(c));
+
+    // Pulisce l'area dati sul foglio
+    const clearRange = `${SHEET_NAME}!B5:W${5 + contacts.length + 10}`;
+    await sheetsClear(clearRange);
+
+    // Riscrive tutte le righe in ordine
+    const writeRange = `${SHEET_NAME}!B5:W${5 + contacts.length - 1}`;
+    await sheetsUpdate(writeRange, allRows);
+
+    // Aggiorna sheetRowMap con le nuove posizioni
+    contacts.forEach((c, i) => { sheetRowMap[c.id] = i + 5; });
+
+    populateFilters(); renderList(); updateStats();
+    setSyncStatus('ok', 'Ordinato ✓');
+    showToast('Contatti ordinati per cognome e salvati su Sheets', 'success');
+
+    // Rimostra il contatto selezionato
+    if (selectedId) {
+      const found = contacts.find(c => c.id === selectedId);
+      if (found) renderDetail(found);
+    }
+  } catch(e) {
+    setSyncStatus('error', 'Errore ordinamento');
+    showToast('Errore: ' + e.message, 'error');
+  }
+}
+
 async function saveContactToSheets(c) {
   setSyncStatus('loading', 'Salvataggio…');
   const row = contactToRow(c);
@@ -776,6 +817,7 @@ function renderDetail(c) {
     </div>
     <div class="topbar-right">
       ${isAdmin ? `<button class="btn-export" onclick="exportCSV()">↓ CSV</button>` : ''}
+      ${isAdmin ? `<button class="btn-export" onclick="sortAndSaveToSheets()" title="Ordina per cognome e salva su Sheets">⇅ Ordina</button>` : ''}
       ${editable ? `<button class="btn-secondary" onclick="startEdit()">✎ Modifica</button>` : ''}
       ${isAdmin ? `<button class="btn-danger" onclick="deleteContact(${c.id})">✕ Rimuovi</button>` : ''}
       ${isAdmin ? `<button class="btn-new" onclick="openNewModal()">+ Nuovo</button>` : ''}
