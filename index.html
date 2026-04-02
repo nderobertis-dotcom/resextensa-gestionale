@@ -849,20 +849,6 @@ function renderEdit(c) {
           <label for="cb_${f.key}_${o.replace(/\s+/g,'_')}">${o}</label>
         </div>`).join('')}</div>`;
     }
-    if (f.type==='photo') {
-      const hasPhoto = c[f.key] && c[f.key].startsWith('data:');
-      return `<div class="photo-upload-wrap">
-        ${hasPhoto
-          ? `<img id="photo_preview" class="photo-preview" src="${c[f.key]}">`
-          : `<div class="photo-placeholder" id="photo_preview">👤</div>`}
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <label class="photo-btn" for="photo_file_input">📷 Scegli foto</label>
-          <input type="file" id="photo_file_input" accept="image/*" style="display:none" onchange="handlePhotoUpload(this)">
-          ${hasPhoto ? `<button class="photo-remove" onclick="removePhoto()">✕ Rimuovi foto</button>` : ''}
-        </div>
-      </div>
-      <input type="hidden" id="edit_foto_url" value="${c[f.key]||''}">`;
-    }
     return `<input type="${f.type||'text'}" class="edit-input" id="edit_${f.key}" value="${v}">`;
   };
   document.getElementById('mainPanel').innerHTML = `
