@@ -499,16 +499,25 @@ function handleAuthClick() {
     ? 'http://localhost'
     : 'https://nderobertis-dotcom.github.io/resextensa-gestionale';
 
+  // Revoca eventuali token precedenti salvati
+  const oldToken = sessionStorage.getItem('gtoken');
+  if (oldToken) {
+    fetch(`https://oauth2.googleapis.com/revoke?token=${oldToken}`, { method: 'POST' }).catch(()=>{});
+    sessionStorage.removeItem('gtoken');
+  }
+
+  const scope = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/drive.readonly'
+  ].join(' ');
+
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'token',
-    scope: [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/drive.readonly'
-    ].join(' '),
-    prompt: 'consent',
+    scope: scope,
+    prompt: 'consent select_account',
     access_type: 'online'
   });
   window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
