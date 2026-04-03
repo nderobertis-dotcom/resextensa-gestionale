@@ -448,7 +448,7 @@ const ADMINS = [
 ];
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─── AUTH (GAPI implicit flow — funziona su http://localhost) ─────────────────
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
 window.onload = () => {
   const hash = window.location.hash;
   if (hash && hash.includes('access_token')) {
@@ -456,8 +456,8 @@ window.onload = () => {
     const token = params.get('access_token');
     if (token) {
       accessToken = token;
+      sessionStorage.setItem('gtoken', token);
       history.replaceState(null, '', window.location.pathname);
-      // Recupera email utente prima di mostrare l'app
       fetchUserEmail().then(() => {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('appScreen').style.display = 'block';
@@ -465,6 +465,16 @@ window.onload = () => {
       });
       return;
     }
+  }
+  // Controlla se c'è un token salvato in sessionStorage
+  const saved = sessionStorage.getItem('gtoken');
+  if (saved) {
+    accessToken = saved;
+    fetchUserEmail().then(() => {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'block';
+      loadFromSheets();
+    });
   }
 };
 
