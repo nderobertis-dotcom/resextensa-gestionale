@@ -280,6 +280,10 @@
         <div class="stat"><div class="stat-n" id="stat-tot">—</div><div class="stat-l">Componenti</div></div>
         <div class="stat"><div class="stat-n" id="stat-attivi" style="color:var(--attivo)">—</div><div class="stat-l">Attivi</div></div>
         <div class="stat"><div class="stat-n" id="stat-spett" style="color:var(--accent)">—</div><div class="stat-l">Spettacoli</div></div>
+        <div class="stat"><div class="stat-n" id="stat-m" style="color:#4a7ab5">—</div><div class="stat-l">M</div></div>
+        <div class="stat"><div class="stat-n" id="stat-f" style="color:#b54a7a">—</div><div class="stat-l">F</div></div>
+        <div class="stat"><div class="stat-n" id="stat-u25" style="color:#5a9a6a">—</div><div class="stat-l">Under 25</div></div>
+        <div class="stat"><div class="stat-n" id="stat-o35" style="color:#9a6a3a">—</div><div class="stat-l">Over 35</div></div>
       </div>
       <div class="sync-status" id="syncStatus" onclick="loadFromSheets()" title="Clicca per aggiornare">
         <div class="sync-dot loading" id="syncDot"></div>
@@ -791,10 +795,61 @@ function allIncarichi() {
   contacts.forEach(c => { if (c.incarico) s.add(c.incarico.trim()); });
   return [...s].sort();
 }
+// ─── CODICE FISCALE UTILITIES ─────────────────────────────────────────────────
+function sessoFromCF(cf) {
+  if (!cf || cf.length < 11) return '';
+  const giorno = parseInt(cf.substring(9, 11));
+  return giorno > 40 ? 'F' : 'M';
+}
+
+function annoNascitaFromCF(cf) {
+  if (!cf || cf.length < 8) return null;
+  const meseMap = { A:1,B:2,C:3,D:4,E:5,H:6,L:7,M:8,P:9,R:10,S:11,T:12 };
+  const annoStr = cf.substring(6, 8);
+  const meseChar = cf.substring(8, 9).toUpperCase();
+  const giornoStr = parseInt(cf.substring(9, 11));
+  const anno2 = parseInt(annoStr);
+  const mese = meseMap[meseChar];
+  if (!mese) return null;
+  const giorno = giornoStr > 40 ? giornoStr - 40 : giornoStr;
+  // Se anno a 2 cifre >= 25 → 1900, altrimenti 2000
+  const annoFull = anno2 >= 25 ? 1900 + anno2 : 2000 + anno2;
+  return { anno: annoFull, mese, giorno };
+}
+
+function etaFromCF(cf) {
+  const n = annoNascitaFromCF(cf);
+  if (!n) return null;
+  const oggi = new Date();
+  let eta = oggi.getFullYear() - n.anno;
+  if (oggi.getMonth()+1 < n.mese || (oggi.getMonth()+1 === n.mese && oggi.getDate() < n.giorno)) eta--;
+  return eta;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function updateStats() {
   document.getElementById('stat-tot').textContent = contacts.length;
   document.getElementById('stat-attivi').textContent = contacts.filter(c=>c.stato==='ATTIVO').length;
   document.getElementById('stat-spett').textContent = allSpettacoli().length;
+
+  // Statistiche sesso ed età
+  const today = new Date();
+  const anno = today.getFullYear();
+  let m=0, f=0, u25=0, o35=0;
+  contacts.forEach(c => {
+    const sesso = sessoFromCF(c.codice_fiscale);
+    if (sesso === 'M') m++;
+    if (sesso === 'F') f++;
+    const eta = etaFromCF(c.codice_fiscale);
+    if (eta !== null) {
+      if (eta < 25) u25++;
+      if (eta > 35) o35++;
+    }
+  });
+  document.getElementById('stat-m').textContent = m || '—';
+  document.getElementById('stat-f').textContent = f || '—';
+  document.getElementById('stat-u25').textContent = u25 || '—';
+  document.getElementById('stat-o35').textContent = o35 || '—';
 
   // Aggiorna box compleanno nell'header
   const bday = getNextBirthdays();
@@ -943,6 +998,8 @@ function renderDetail(c) {
       <div class="fields-grid">
         <div class="field"><div class="field-label">Data nascita</div>${valDate(c.data_nascita)}</div>
         <div class="field"><div class="field-label">Luogo nascita</div>${val(c.luogo_nascita)}</div>
+        <div class="field"><div class="field-label">Sesso</div>${c.codice_fiscale ? `<span class="field-value">${sessoFromCF(c.codice_fiscale)||'—'}</span>` : `<span class="field-value empty">—</span>`}</div>
+        <div class="field"><div class="field-label">Età</div>${c.codice_fiscale && etaFromCF(c.codice_fiscale) !== null ? `<span class="field-value">${etaFromCF(c.codice_fiscale)} anni</span>` : `<span class="field-value empty">—</span>`}</div>
         <div class="field"><div class="field-label">Città residenza</div>${val(c.citta_residenza)}</div>
         <div class="field"><div class="field-label">Indirizzo</div>${val(c.indirizzo)}</div>
         <div class="field"><div class="field-label">Codice Fiscale</div>${val(c.codice_fiscale)}</div>
