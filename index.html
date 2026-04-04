@@ -425,9 +425,6 @@
   </div>
 </div>
 
-<!-- MODAL NUOVO -->
-<div class="modal-overlay" id="newModal">
-
 <!-- MODAL RAPPRESENTAZIONE -->
 <div class="modal-overlay" id="rappModal">
   <div class="modal modal-spett">
@@ -439,6 +436,9 @@
     </div>
   </div>
 </div>
+
+<!-- MODAL NUOVO -->
+<div class="modal-overlay" id="newModal">
   <div class="modal">
     <div class="modal-title">Nuovo componente</div>
     <div class="modal-grid" id="newForm"></div>
@@ -1520,12 +1520,17 @@ function renderSpettacoli() {
       ${SPETTACOLI_LIST.map(s => {
         const membri = spettData[s] || [];
         const rappCount = rappList.filter(r => r.spettacolo === s).length;
+        const prossimaData = rappList.filter(r => r.spettacolo === s && new Date(r.data) >= oggi).sort((a,b)=>new Date(a.data)-new Date(b.data))[0];
         return `<div class="spett-card">
           <div class="spett-card-header">
             <div class="spett-name">${s}</div>
-            <div class="spett-count">${membri.length} componenti · ${rappCount} date</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="spett-count">${membri.length} componenti · ${rappCount} date</div>
+              ${isAdmin ? `<button class="btn-new" style="font-size:10px;padding:3px 8px" onclick="openRappModalWithSpett('${s}')">+ Data</button>` : ''}
+            </div>
           </div>
           <div class="spett-card-body">
+            ${prossimaData ? `<div style="font-size:11px;color:var(--accent);margin-bottom:6px">▶ Prossima: ${new Date(prossimaData.data).toLocaleDateString('it-IT')} — ${prossimaData.citta||prossimaData.luogo}</div>` : ''}
             <div class="spett-members">${membri.length ? membri.join(', ') : '<span style="color:var(--text3);font-style:italic">Nessun componente assegnato</span>'}</div>
           </div>
         </div>`;
@@ -1619,15 +1624,20 @@ function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderSp
 function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderSpettacoli(); }
 
 function openRappModal(id=null) {
+  openRappModalWithSpett(null, id);
+}
+
+function openRappModalWithSpett(spettacolo=null, id=null) {
   editRappId = id;
   const r = id ? rappList.find(x=>x.id===id) : {};
+  const preSpett = spettacolo || r.spettacolo || SPETTACOLI_LIST[0];
   const title = id ? 'Modifica rappresentazione' : 'Nuova rappresentazione';
   document.getElementById('rappModalTitle').textContent = title;
   document.getElementById('rappForm').innerHTML = `
     <div class="modal-field full">
       <div class="modal-label">Spettacolo *</div>
       <select class="edit-input" id="rapp_spettacolo">
-        ${SPETTACOLI_LIST.map(s=>`<option value="${s}"${r.spettacolo===s?' selected':''}>${s}</option>`).join('')}
+        ${SPETTACOLI_LIST.map(s=>`<option value="${s}"${preSpett===s?' selected':''}>${s}</option>`).join('')}
       </select>
     </div>
     <div class="modal-field">
