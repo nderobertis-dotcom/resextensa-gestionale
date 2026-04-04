@@ -926,19 +926,6 @@ function verificaCF(cf, cognome, nome, dataNascita, luogoNascita) {
     avvisi.push(`ℹ Codice comune "${codComune}" non presente nel database locale — verifica manuale necessaria`);
   }
 
-  // Verifica carattere di controllo
-  const valOdd = [1,0,5,7,9,13,15,17,19,21,2,4,18,20,11,3,6,8,12,14,16,10,22,25,24,23];
-  const valEven = Array.from({length:26},(_,i)=>i);
-  let sum = 0;
-  for (let i = 0; i < 15; i++) {
-    const ch = cf.charCodeAt(i) - (cf[i] >= '0' && cf[i] <= '9' ? 48 - 10 : 65);
-    const val = i % 2 === 0 ? valOdd[ch] : valEven[ch];
-    sum += val;
-  }
-  const ctrlCalc = String.fromCharCode(65 + (sum % 26));
-  if (cf[15] !== ctrlCalc) errori.push(`Carattere di controllo non valido: il CF termina con "${cf[15]}" ma dovrebbe essere "${ctrlCalc}"`);
-  else avvisi.push('✓ Carattere di controllo corretto');
-
   return { ok: errori.length === 0, errori, avvisi };
 }
 
