@@ -827,6 +827,160 @@ function etaFromCF(cf) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── VERIFICA CODICE FISCALE ──────────────────────────────────────────────────
+const MESE_MAP = {A:1,B:2,C:3,D:4,E:5,H:6,L:7,M:8,P:9,R:10,S:11,T:12};
+const MESE_NOMI = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+// Codici catastali principali (subset Italia + estero)
+const COMUNI_CF = {"A001":"Abano Terme","A006":"Abbadia Lariana","A662":"Bari","A944":"Bergamo","B157":"Bologna","B383":"Brescia","C351":"Caserta","C469":"Catania","C744":"Chieti","D612":"Firenze","D969":"Foggia","E379":"Genova","F839":"Napoli","F158":"Molfetta","F284":"Molfetta","G273":"Palermo","G388":"Parma","G482":"Pescara","G491":"Piacenza","G713":"Potenza","G888":"Ragusa","H223":"Reggio Calabria","H224":"Reggio Emilia","H501":"Roma","H703":"Salerno","H769":"Sassari","I138":"Siena","I307":"Siracusa","I628":"Taranto","I725":"Teramo","I804":"Torino","I862":"Trapani","L219":"Trieste","L328":"Udine","L736":"Venezia","L949":"Verona","M082":"Vicenza","M195":"Viterbo","B180":"Brindisi","B519":"Cagliari","B428":"Bitonto","B093":"Bisceglie","A225":"Altamura","L425":"Triggiano","A893":"Bitonto","E783":"Cingoli","L781":"San Giovanni Lupatoto","A475":"Assisi","B019":"Borgomanero","Z110":"Francia","Z404":"USA","Z112":"Germania","Z130":"Spagna","Z135":"Svizzera","Z119":"Belgio","Z126":"Paesi Bassi","Z111":"Regno Unito","Z131":"Svezia","Z114":"Danimarca","Z118":"Austria","Z138":"Portogallo","Z133":"Polonia","Z156":"Romania","Z127":"Norvegia","Z125":"Lussemburgo","Z144":"Grecia","Z102":"Albania","Z323":"Argentina","Z332":"Brasile","Z232":"Egitto","Z222":"Cina"};
+
+function normalizzaNome(s) {
+  return s.toUpperCase()
+    .replace(/[ÀÁÂÃÄÅ]/g,'A').replace(/[ÈÉÊË]/g,'E').replace(/[ÌÍÎÏ]/g,'I')
+    .replace(/[ÒÓÔÕÖ]/g,'O').replace(/[ÙÚÛÜ]/g,'U').replace(/[^A-Z]/g,'');
+}
+
+function consonanti(s) { return s.replace(/[AEIOU]/g,''); }
+function vocali(s) { return s.replace(/[^AEIOU]/g,''); }
+
+function cfCognome(cognome) {
+  const n = normalizzaNome(cognome);
+  const c = consonanti(n), v = vocali(n);
+  return (c + v + 'XXX').substring(0, 3);
+}
+
+function cfNome(nome) {
+  const n = normalizzaNome(nome);
+  const c = consonanti(n), v = vocali(n);
+  if (c.length >= 4) return c[0] + c[2] + c[3];
+  return (c + v + 'XXX').substring(0, 3);
+}
+
+function verificaCF(cf, cognome, nome, dataNascita, luogoNascita) {
+  if (!cf || cf.length !== 16) return { ok: false, errori: ['Codice fiscale non valido (deve essere di 16 caratteri)'] };
+  cf = cf.toUpperCase().trim();
+  const errori = [];
+  const avvisi = [];
+
+  // Verifica cognome
+  if (cognome) {
+    const atteso = cfCognome(cognome);
+    const cfCog = cf.substring(0, 3);
+    if (cfCog !== atteso) errori.push(`Cognome: il CF contiene "${cfCog}" ma da "${cognome}" ci si aspetta "${atteso}"`);
+    else avvisi.push('✓ Cognome corrispondente');
+  }
+
+  // Verifica nome
+  if (nome) {
+    const atteso = cfNome(nome);
+    const cfNom = cf.substring(3, 6);
+    if (cfNom !== atteso) errori.push(`Nome: il CF contiene "${cfNom}" ma da "${nome}" ci si aspetta "${atteso}"`);
+    else avvisi.push('✓ Nome corrispondente');
+  }
+
+  // Verifica anno nascita
+  const annoStr = cf.substring(6, 8);
+  const annoNum = parseInt(annoStr);
+  const annoFull = annoNum >= 25 ? 1900 + annoNum : 2000 + annoNum;
+
+  // Verifica mese nascita
+  const meseChar = cf.substring(8, 9);
+  const mese = MESE_MAP[meseChar];
+  if (!mese) errori.push(`Mese di nascita non valido: "${meseChar}"`);
+
+  // Verifica giorno e sesso
+  const giornoNum = parseInt(cf.substring(9, 11));
+  const sesso = giornoNum > 40 ? 'F' : 'M';
+  const giorno = sesso === 'F' ? giornoNum - 40 : giornoNum;
+
+  avvisi.push(`✓ Data di nascita dal CF: ${giorno.toString().padStart(2,'0')}/${mese ? mese.toString().padStart(2,'0') : '?'}/${annoFull}`);
+  avvisi.push(`✓ Sesso dal CF: ${sesso}`);
+
+  // Verifica con data nascita inserita
+  if (dataNascita && mese) {
+    const m1 = dataNascita.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    const m2 = dataNascita.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
+    let gNasc, mNasc, aNasc;
+    if (m1) { gNasc=parseInt(m1[1]); mNasc=parseInt(m1[2]); aNasc=parseInt(m1[3]); }
+    else if (m2) { gNasc=parseInt(m2[3]); mNasc=parseInt(m2[2]); aNasc=parseInt(m2[1]); }
+    if (gNasc) {
+      if (gNasc !== giorno || mNasc !== mese || aNasc !== annoFull)
+        errori.push(`Data di nascita: il CF indica ${giorno.toString().padStart(2,'0')}/${mese.toString().padStart(2,'0')}/${annoFull} ma nel campo è inserito ${dataNascita}`);
+      else avvisi.push('✓ Data di nascita corrispondente');
+    }
+  }
+
+  // Verifica codice comune
+  const codComune = cf.substring(11, 15);
+  const comune = COMUNI_CF[codComune];
+  if (comune) {
+    avvisi.push(`✓ Luogo di nascita dal CF: ${comune} (${codComune})`);
+    if (luogoNascita) {
+      const luogoUp = luogoNascita.toUpperCase();
+      const comuneUp = comune.toUpperCase();
+      if (!luogoUp.includes(comuneUp) && !comuneUp.includes(luogoUp.split('(')[0].trim()))
+        avvisi.push(`⚠ Luogo di nascita: il CF indica "${comune}" ma nel campo è inserito "${luogoNascita}" — verificare`);
+      else avvisi.push('✓ Luogo di nascita corrispondente');
+    }
+  } else {
+    avvisi.push(`ℹ Codice comune "${codComune}" non presente nel database locale — verifica manuale necessaria`);
+  }
+
+  // Verifica carattere di controllo
+  const valOdd = [1,0,5,7,9,13,15,17,19,21,2,4,18,20,11,3,6,8,12,14,16,10,22,25,24,23];
+  const valEven = Array.from({length:26},(_,i)=>i);
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    const ch = cf.charCodeAt(i) - (cf[i] >= '0' && cf[i] <= '9' ? 48 - 10 : 65);
+    const val = i % 2 === 0 ? valOdd[ch] : valEven[ch];
+    sum += val;
+  }
+  const ctrlCalc = String.fromCharCode(65 + (sum % 26));
+  if (cf[15] !== ctrlCalc) errori.push(`Carattere di controllo non valido: il CF termina con "${cf[15]}" ma dovrebbe essere "${ctrlCalc}"`);
+  else avvisi.push('✓ Carattere di controllo corretto');
+
+  return { ok: errori.length === 0, errori, avvisi };
+}
+
+function mostraVerificaCF(contactId) {
+  const c = contacts.find(x => x.id === contactId);
+  if (!c || !c.codice_fiscale) { showToast('Codice fiscale non presente', 'error'); return; }
+
+  const ris = verificaCF(c.codice_fiscale, c.cognome, c.nome, c.data_nascita, c.luogo_nascita);
+
+  const righe = [
+    ...ris.avvisi.map(a => `<div style="color:${a.startsWith('✓') ? '#2e7d52' : a.startsWith('⚠') ? '#b8860b' : '#6b6860'};font-size:12px;padding:3px 0">${a}</div>`),
+    ...ris.errori.map(e => `<div style="color:#c0392b;font-size:12px;padding:3px 0">✗ ${e}</div>`)
+  ].join('');
+
+  const box = document.getElementById('cf-verify-result');
+  if (box) {
+    box.innerHTML = `
+      <div style="margin-top:12px;padding:12px;border-radius:6px;border:1px solid ${ris.ok ? '#2e7d52' : '#c0392b'};background:${ris.ok ? 'rgba(46,125,82,0.08)' : 'rgba(192,57,43,0.08)'}">
+        <div style="font-weight:600;font-size:12px;margin-bottom:8px;color:${ris.ok ? '#2e7d52' : '#c0392b'}">${ris.ok ? '✓ Codice fiscale VALIDO' : '✗ Anomalie rilevate'}</div>
+        ${righe}
+      </div>`;
+  }
+}
+
+function mostraVerificaCFEdit(cf, cognome, nome, dataNascita, luogoNascita) {
+  if (!cf) { showToast('Inserisci prima il codice fiscale', 'error'); return; }
+  const ris = verificaCF(cf, cognome, nome, dataNascita, luogoNascita);
+  const righe = [
+    ...ris.avvisi.map(a => `<div style="color:${a.startsWith('✓') ? '#2e7d52' : a.startsWith('⚠') ? '#b8860b' : '#6b6860'};font-size:12px;padding:3px 0">${a}</div>`),
+    ...ris.errori.map(e => `<div style="color:#c0392b;font-size:12px;padding:3px 0">✗ ${e}</div>`)
+  ].join('');
+  const box = document.getElementById('cf-verify-edit');
+  if (box) {
+    box.innerHTML = `
+      <div style="padding:12px;border-radius:6px;border:1px solid ${ris.ok ? '#2e7d52' : '#c0392b'};background:${ris.ok ? 'rgba(46,125,82,0.08)' : 'rgba(192,57,43,0.08)'}">
+        <div style="font-weight:600;font-size:12px;margin-bottom:8px;color:${ris.ok ? '#2e7d52' : '#c0392b'}">${ris.ok ? '✓ Codice fiscale VALIDO' : '✗ Anomalie rilevate'}</div>
+        ${righe}
+      </div>`;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function updateStats() {
   document.getElementById('stat-tot').textContent = contacts.length;
   document.getElementById('stat-attivi').textContent = contacts.filter(c=>c.stato==='ATTIVO').length;
@@ -855,8 +1009,9 @@ function updateStats() {
   const bday = getNextBirthdays();
   const bdayEl = document.getElementById('bdayHeader');
   if (bdayEl && bday) {
+    const bdayClass = bday.isToday ? ' today' : '';
     bdayEl.innerHTML = `
-      <div class="bday-box${bday.isToday?' today':''}">
+      <div class="bday-box${bdayClass}">
         <span>🎂</span>
         <div>
           <span class="bday-label">Prossimo compleanno</span>
@@ -1002,7 +1157,13 @@ function renderDetail(c) {
         <div class="field"><div class="field-label">Età</div>${c.codice_fiscale && etaFromCF(c.codice_fiscale) !== null ? `<span class="field-value">${etaFromCF(c.codice_fiscale)} anni</span>` : `<span class="field-value empty">—</span>`}</div>
         <div class="field"><div class="field-label">Città residenza</div>${val(c.citta_residenza)}</div>
         <div class="field"><div class="field-label">Indirizzo</div>${val(c.indirizzo)}</div>
-        <div class="field"><div class="field-label">Codice Fiscale</div>${val(c.codice_fiscale)}</div>
+        <div class="field"><div class="field-label">Codice Fiscale</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            ${val(c.codice_fiscale)}
+            ${c.codice_fiscale ? `<button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="mostraVerificaCF(${c.id})">🔍 Verifica CF</button>` : ''}
+          </div>
+          <div id="cf-verify-result"></div>
+        </div>
       </div>
     </div>
     <div class="section"><div class="section-title">Documento d'identità</div>
@@ -1064,6 +1225,16 @@ function renderEdit(c) {
         <div class="modal-field${f.full?' full':''}">
           <div class="modal-label">${f.label}</div>${fieldHtml(f)}
         </div>`).join('')}
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn-export" style="font-size:12px;padding:8px 16px" onclick="mostraVerificaCFEdit(
+        document.getElementById('edit_codice_fiscale').value,
+        document.getElementById('edit_cognome').value,
+        document.getElementById('edit_nome').value,
+        document.getElementById('edit_data_nascita').value,
+        document.getElementById('edit_luogo_nascita').value
+      )">🔍 Verifica Codice Fiscale</button>
+      <div id="cf-verify-edit" style="margin-top:8px"></div>
     </div>
   </div>`;
 }
