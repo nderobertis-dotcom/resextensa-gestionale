@@ -1494,11 +1494,21 @@ async function loadCalendario() {
 
 async function saveCalendarioToSheets() {
   try {
-    await sheetsClear(CAL_RANGE);
+    // Svuota dalla riga 2 in poi (preserva intestazioni)
+    const clearRange = `${CAL_SHEET}!A2:H1000`;
+    await sheetsClear(clearRange);
     if (rappList.length === 0) return;
-    const rows = rappList.map(r => [r.id, r.spettacolo, r.data, r.orario, r.citta, r.luogo, r.teatro, r.note]);
-    await sheetsUpdate(`${CAL_SHEET}!A2:H${1 + rappList.length}`, rows);
+    // Riscrive tutte le righe
+    const rows = rappList.map(r => [
+      r.id, r.spettacolo, r.data, r.orario,
+      r.citta, r.luogo, r.teatro, r.note
+    ]);
+    const writeRange = `${CAL_SHEET}!A2:H${1 + rappList.length}`;
+    console.log('Salvo calendario:', rows.length, 'righe nel range', writeRange);
+    await sheetsUpdate(writeRange, rows);
+    console.log('Calendario salvato con successo');
   } catch(e) {
+    console.error('Errore saveCalendario:', e);
     showToast('Errore salvataggio calendario: ' + e.message, 'error');
     throw e;
   }
