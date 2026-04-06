@@ -460,6 +460,8 @@ const API_KEY     = 'AIzaSyCq6KY5scQOw1YCndFF_HS6VIl5PWtcUv8';
 const SHEET_ID    = '1G57PEEHP8WuMMEdrwmPI7BfcOQiuonp5xIrzkjpW3ac';
 const SHEET_NAME  = 'Componenti';
 const DATA_RANGE  = 'Componenti!B5:W';
+const CAL_SHEET   = 'Calendario';
+const CAL_RANGE   = 'Calendario!A2:H';
 const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets';
 const DRIVE_CU_FOLDER = '1-Pyjd-tKJyNPxaveTAQkvJvcXP0R6dE1';
 
@@ -1466,18 +1468,50 @@ const SPETTACOLI_LIST = ['WOLF SPIDER','MORS','LU BACIU SANTU','PINO','ACQUA MAD
 const MESI_NOMI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 const GIORNI_IT = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
 
-let calView = 'lista'; // 'lista' | 'griglia'
+let calView = 'lista';
 let calMonth = new Date().getMonth();
 let calYear = new Date().getFullYear();
-let rappList = JSON.parse(localStorage.getItem('resextensa_rapp') || '[]');
+let rappList = [];
 let editRappId = null;
+
+// ─── CALENDARIO SU SHEETS ─────────────────────────────────────────────────────
+async function loadCalendario() {
+  try {
+    const data = await sheetsGet(CAL_RANGE);
+    const rows = data.values || [];
+    rappList = rows
+      .filter(r => r[0] && r[1])
+      .map(r => ({
+        id: r[0]||'', spettacolo: r[1]||'', data: r[2]||'',
+        orario: r[3]||'', citta: r[4]||'', luogo: r[5]||'',
+        teatro: r[6]||'', note: r[7]||''
+      }));
+  } catch(e) {
+    console.error('Errore caricamento calendario:', e);
+    rappList = [];
+  }
+}
+
+async function saveCalendarioToSheets() {
+  try {
+    await sheetsClear(CAL_RANGE);
+    if (rappList.length === 0) return;
+    const rows = rappList.map(r => [r.id, r.spettacolo, r.data, r.orario, r.citta, r.luogo, r.teatro, r.note]);
+    await sheetsUpdate(`${CAL_SHEET}!A2:H${1 + rappList.length}`, rows);
+  } catch(e) {
+    showToast('Errore salvataggio calendario: ' + e.message, 'error');
+    throw e;
+  }
+}
 
 function switchTab(tab) {
   document.getElementById('tab-rubrica').classList.toggle('active', tab === 'rubrica');
   document.getElementById('tab-spettacoli').classList.toggle('active', tab === 'spettacoli');
   document.getElementById('panel-rubrica').style.display = tab === 'rubrica' ? 'flex' : 'none';
   document.getElementById('panel-spettacoli').style.display = tab === 'spettacoli' ? 'block' : 'none';
-  if (tab === 'spettacoli') renderSpettacoli();
+  if (tab === 'spettacoli') {
+    loadCalendario().then(() => renderSpettacoli());
+  }
 }
 
 function renderSpettacoli() {
@@ -1669,7 +1703,7 @@ function openRappModalWithSpett(spettacolo=null, id=null) {
 
 function closeRappModal() { document.getElementById('rappModal').classList.remove('open'); editRappId=null; }
 
-function saveRapp() {
+async function saveRapp() {
   const spettacolo = document.getElementById('rapp_spettacolo').value;
   const data = document.getElementById('rapp_data').value;
   const luogo = document.getElementById('rapp_luogo').value.trim();
@@ -1687,20 +1721,30 @@ function saveRapp() {
   } else {
     rappList.push(obj);
   }
-  localStorage.setItem('resextensa_rapp', JSON.stringify(rappList));
   closeRappModal();
-  renderSpettacoli();
-  showToast(editRappId ? 'Rappresentazione aggiornata' : 'Rappresentazione aggiunta', 'success');
+  showToast('Salvataggio in corso…', 'info');
+  try {
+    await saveCalendarioToSheets();
+    renderSpettacoli();
+    showToast(editRappId ? 'Rappresentazione aggiornata' : 'Rappresentazione aggiunta', 'success');
+  } catch(e) {
+    showToast('Errore salvataggio: ' + e.message, 'error');
+  }
 }
 
 function editRapp(id) { openRappModal(id); }
 
-function deleteRapp(id) {
+async function deleteRapp(id) {
   if (!confirm('Eliminare questa rappresentazione?')) return;
   rappList = rappList.filter(r=>r.id!==id);
-  localStorage.setItem('resextensa_rapp', JSON.stringify(rappList));
-  renderSpettacoli();
-  showToast('Rappresentazione eliminata', 'success');
+  showToast('Eliminazione in corso…', 'info');
+  try {
+    await saveCalendarioToSheets();
+    renderSpettacoli();
+    showToast('Rappresentazione eliminata', 'success');
+  } catch(e) {
+    showToast('Errore: ' + e.message, 'error');
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
