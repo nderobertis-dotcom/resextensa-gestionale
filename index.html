@@ -281,6 +281,11 @@
     .detail-name { font-size: 24px; }
     .topbar { padding: 10px 16px; }
     .modal { width: 90vw; }
+
+    /* Compagnie tablet */
+    #compagnie-sidebar { width: 200px !important; min-width: 200px !important; }
+    .comp-detail-sedi { grid-template-columns: 1fr !important; }
+    .comp-detail-tre { grid-template-columns: 1fr !important; }
   }
 
   /* ── MOBILE (max 600px) ── */
@@ -324,6 +329,13 @@
     .login-screen { padding: 20px; gap: 16px; }
     .login-logo { font-size: 28px; }
     .login-card { padding: 20px; }
+
+    /* Compagnie mobile: sidebar nascosta, dettaglio fullscreen */
+    #panel-compagnie > div { flex-direction: column; }
+    #compagnie-sidebar { width: 100% !important; min-width: 100% !important; height: 50%; border-right: none !important; border-bottom: 1px solid var(--border); }
+    #compagnieDetail { height: 50%; }
+    .comp-detail-sedi { grid-template-columns: 1fr !important; }
+    .comp-detail-tre { grid-template-columns: 1fr !important; }
   }
 </style>
 </head>
@@ -1911,7 +1923,7 @@ function renderCompDetail(c) {
       ${isAdmin ? `<button class="btn-new" onclick="openCompModal()">+ Nuova</button>` : ''}
     </div>
   </div>
-  <div style="padding:20px;min-width:800px">
+  <div style="padding:20px">
 
     <!-- Intestazione -->
     <div class="detail-header" style="margin-bottom:24px">
@@ -1926,7 +1938,7 @@ function renderCompDetail(c) {
     </div>
 
     <!-- Sedi affiancate -->
-    <div style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);gap:16px;margin-bottom:20px">
+    <div class="comp-detail-sedi" style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);gap:16px;margin-bottom:20px">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
         <div class="section-title" style="margin-bottom:10px">Sede Legale</div>
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -1952,7 +1964,7 @@ function renderCompDetail(c) {
     </div>
 
     <!-- Tre colonne: Dati fiscali | Legale Rappresentante | Referente -->
-    <div style="display:grid;grid-template-columns:minmax(200px,1fr) minmax(200px,1fr) minmax(200px,1fr);gap:16px">
+    <div class="comp-detail-tre" style="display:grid;grid-template-columns:minmax(200px,1fr) minmax(200px,1fr) minmax(200px,1fr);gap:16px">
 
       <!-- Dati fiscali -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
