@@ -428,7 +428,7 @@
   </div>
 
   <!-- TAB COMPAGNIE -->
-  <div id="panel-compagnie" style="display:none;height:calc(100vh - 128px);overflow:hidden;display:none">
+  <div id="panel-compagnie" style="display:none;height:calc(100vh - 128px);overflow:hidden">
     <div style="display:flex;height:100%">
       <div id="compagnie-sidebar" style="width:300px;min-width:300px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column">
         <div style="padding:16px;border-bottom:1px solid var(--border)">
@@ -1898,6 +1898,7 @@ function renderCompDetail(c) {
   if (editCompMode) return renderCompEdit(c);
   const isAdmin = userRole === 'admin';
   const [bg,fg] = getColor(c.ragione_sociale);
+
   document.getElementById('compagnieDetail').innerHTML = `
   <div class="topbar">
     <div class="topbar-left">
@@ -1910,52 +1911,81 @@ function renderCompDetail(c) {
       ${isAdmin ? `<button class="btn-new" onclick="openCompModal()">+ Nuova</button>` : ''}
     </div>
   </div>
-  <div class="detail">
-    <div class="detail-header">
+  <div style="padding:24px;max-width:1200px">
+
+    <!-- Intestazione -->
+    <div class="detail-header" style="margin-bottom:24px">
       <div class="avatar-lg" style="background:${bg};color:${fg};font-size:18px">${c.ragione_sociale.substring(0,2).toUpperCase()}</div>
       <div class="detail-name-wrap">
-        <div class="detail-name" style="font-size:22px">${c.ragione_sociale}</div>
-        <div class="detail-sub">${c.sl_citta ? `<span style="color:var(--text2)">📍 ${c.sl_citta}${c.sl_pr?' ('+c.sl_pr+')':''}</span>` : ''}</div>
+        <div class="detail-name" style="font-size:24px">${c.ragione_sociale}</div>
+        <div class="detail-sub">
+          ${c.sl_citta ? `<span style="color:var(--text2)">📍 ${c.sl_citta}${c.sl_pr?' ('+c.sl_pr+')':''}</span>` : ''}
+          ${c.partita_iva ? `<span style="color:var(--text3);font-family:'DM Mono',monospace;font-size:12px">P.IVA ${c.partita_iva}</span>` : ''}
+        </div>
       </div>
     </div>
-    <div class="section"><div class="section-title">Sede Legale</div>
-      <div class="fields-grid">
-        <div class="field"><div class="field-label">Indirizzo</div>${valC(c.sl_indirizzo)}</div>
-        <div class="field"><div class="field-label">CAP</div>${valC(c.sl_cap)}</div>
-        <div class="field"><div class="field-label">Città</div>${valC(c.sl_citta)}</div>
-        <div class="field"><div class="field-label">Provincia</div>${valC(c.sl_pr)}</div>
+
+    <!-- Sedi affiancate -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div class="section-title" style="margin-bottom:10px">Sede Legale</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="field"><div class="field-label">Indirizzo</div>${valC(c.sl_indirizzo)}</div>
+          <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:8px">
+            <div class="field"><div class="field-label">CAP</div>${valC(c.sl_cap)}</div>
+            <div class="field"><div class="field-label">Città</div>${valC(c.sl_citta)}</div>
+            <div class="field"><div class="field-label">PR</div>${valC(c.sl_pr)}</div>
+          </div>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div class="section-title" style="margin-bottom:10px">Sede Organizzativa</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="field"><div class="field-label">Indirizzo</div>${valC(c.so_indirizzo)}</div>
+          <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:8px">
+            <div class="field"><div class="field-label">CAP</div>${valC(c.so_cap)}</div>
+            <div class="field"><div class="field-label">Città</div>${valC(c.so_citta)}</div>
+            <div class="field"><div class="field-label">PR</div>${valC(c.so_pr)}</div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="section"><div class="section-title">Sede Organizzativa</div>
-      <div class="fields-grid">
-        <div class="field"><div class="field-label">Indirizzo</div>${valC(c.so_indirizzo)}</div>
-        <div class="field"><div class="field-label">CAP</div>${valC(c.so_cap)}</div>
-        <div class="field"><div class="field-label">Città</div>${valC(c.so_citta)}</div>
-        <div class="field"><div class="field-label">Provincia</div>${valC(c.so_pr)}</div>
+
+    <!-- Tre colonne: Dati fiscali | Legale Rappresentante | Referente -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+
+      <!-- Dati fiscali -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div class="section-title" style="margin-bottom:10px">Dati fiscali</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="field"><div class="field-label">Codice Fiscale</div>${valC(c.codice_fiscale)}</div>
+          <div class="field"><div class="field-label">Partita IVA</div>${valC(c.partita_iva)}</div>
+          <div class="field"><div class="field-label">Codice Univoco</div>${valC(c.codice_univoco)}</div>
+          <div class="field"><div class="field-label">PEC</div>${valCLink(c.pec,'email')}</div>
+        </div>
       </div>
-    </div>
-    <div class="section"><div class="section-title">Dati fiscali</div>
-      <div class="fields-grid">
-        <div class="field"><div class="field-label">Codice Fiscale</div>${valC(c.codice_fiscale)}</div>
-        <div class="field"><div class="field-label">Partita IVA</div>${valC(c.partita_iva)}</div>
-        <div class="field"><div class="field-label">Codice Univoco</div>${valC(c.codice_univoco)}</div>
-        <div class="field"><div class="field-label">PEC</div>${valCLink(c.pec,'email')}</div>
+
+      <!-- Legale Rappresentante -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div class="section-title" style="margin-bottom:10px">Legale Rappresentante</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="field"><div class="field-label">Nome</div>${valC(c.legale_rappr)}</div>
+          <div class="field"><div class="field-label">Codice Fiscale</div>${valC(c.cf_legale_rappr)}</div>
+          <div class="field"><div class="field-label">Email</div>${valCLink(c.email,'email')}</div>
+          <div class="field"><div class="field-label">Telefono</div>${valCLink(c.telefono,'tel')}</div>
+        </div>
       </div>
-    </div>
-    <div class="section"><div class="section-title">Legale Rappresentante</div>
-      <div class="fields-grid">
-        <div class="field"><div class="field-label">Nome</div>${valC(c.legale_rappr)}</div>
-        <div class="field"><div class="field-label">Codice Fiscale</div>${valC(c.cf_legale_rappr)}</div>
-        <div class="field"><div class="field-label">Email</div>${valCLink(c.email,'email')}</div>
-        <div class="field"><div class="field-label">Telefono</div>${valCLink(c.telefono,'tel')}</div>
+
+      <!-- Referente -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div class="section-title" style="margin-bottom:10px">Referente</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="field"><div class="field-label">Nome</div>${valC(c.referente)}</div>
+          <div class="field"><div class="field-label">Email</div>${valCLink(c.email_referente,'email')}</div>
+          <div class="field"><div class="field-label">Telefono</div>${valCLink(c.tel_referente,'tel')}</div>
+        </div>
       </div>
-    </div>
-    <div class="section"><div class="section-title">Referente</div>
-      <div class="fields-grid">
-        <div class="field"><div class="field-label">Nome</div>${valC(c.referente)}</div>
-        <div class="field"><div class="field-label">Email</div>${valCLink(c.email_referente,'email')}</div>
-        <div class="field"><div class="field-label">Telefono</div>${valCLink(c.tel_referente,'tel')}</div>
-      </div>
+
     </div>
   </div>`;
 }
