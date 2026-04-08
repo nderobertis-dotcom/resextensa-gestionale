@@ -378,6 +378,9 @@
     <button class="tab-btn" id="tab-spettacoli" onclick="switchTab('spettacoli')">
       <img src="resextensa_logo.png" style="height:18px;width:auto;vertical-align:middle;margin-right:4px" alt=""> Spettacoli & Calendario
     </button>
+    <button class="tab-btn" id="tab-compagnie" onclick="switchTab('compagnie')">
+      🏢 Compagnie
+    </button>
   </div>
 
   <!-- TAB RUBRICA -->
@@ -422,6 +425,39 @@
   <!-- TAB SPETTACOLI -->
   <div id="panel-spettacoli" style="display:none;height:calc(100vh - 128px);overflow-y:auto">
     <div id="spettacoliPanel"></div>
+  </div>
+
+  <!-- TAB COMPAGNIE -->
+  <div id="panel-compagnie" style="display:none;height:calc(100vh - 128px);overflow:hidden;display:none">
+    <div style="display:flex;height:100%">
+      <div id="compagnie-sidebar" style="width:300px;min-width:300px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column">
+        <div style="padding:16px;border-bottom:1px solid var(--border)">
+          <div class="search-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="search" class="search-input" id="compSearchInput" placeholder="Cerca compagnia…" oninput="renderCompagnieList()">
+          </div>
+        </div>
+        <div class="contact-list" id="compagnieList"></div>
+      </div>
+      <div id="compagnieDetail" style="flex:1;overflow-y:auto;background:var(--bg)">
+        <div class="empty-state">
+          <div class="empty-icon">🏢</div>
+          <div class="empty-title">Seleziona una compagnia</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COMPAGNIA -->
+<div class="modal-overlay" id="compModal">
+  <div class="modal" style="width:680px;max-width:95vw">
+    <div class="modal-title" id="compModalTitle">Nuova compagnia</div>
+    <div id="compForm" style="display:grid;grid-template-columns:1fr 1fr;gap:14px"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeCompModal()">Annulla</button>
+      <button class="btn-primary" onclick="saveCompagnia()">Salva su Sheets</button>
+    </div>
   </div>
 </div>
 
@@ -1515,13 +1551,14 @@ async function saveCalendarioToSheets() {
 }
 
 function switchTab(tab) {
-  document.getElementById('tab-rubrica').classList.toggle('active', tab === 'rubrica');
-  document.getElementById('tab-spettacoli').classList.toggle('active', tab === 'spettacoli');
-  document.getElementById('panel-rubrica').style.display = tab === 'rubrica' ? 'flex' : 'none';
-  document.getElementById('panel-spettacoli').style.display = tab === 'spettacoli' ? 'block' : 'none';
-  if (tab === 'spettacoli') {
-    loadCalendario().then(() => renderSpettacoli());
-  }
+  ['rubrica','spettacoli','compagnie'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+  document.getElementById('panel-rubrica').style.display = tab==='rubrica' ? 'flex' : 'none';
+  document.getElementById('panel-spettacoli').style.display = tab==='spettacoli' ? 'block' : 'none';
+  document.getElementById('panel-compagnie').style.display = tab==='compagnie' ? 'flex' : 'none';
+  if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
+  if (tab==='compagnie') loadCompagnie();
 }
 
 function renderSpettacoli() {
@@ -1756,6 +1793,249 @@ async function deleteRapp(id) {
     showToast('Errore: ' + e.message, 'error');
   }
 }
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── COMPAGNIE ────────────────────────────────────────────────────────────────
+const COMP_SHEET  = 'Compagnie';
+const COMP_RANGE  = 'Compagnie!A3:T';
+
+const COMP_FIELDS = [
+  { key:'ragione_sociale',  label:'Ragione Sociale', full:true },
+  { key:'sl_indirizzo',     label:'Sede Legale — Indirizzo' },
+  { key:'sl_cap',           label:'CAP Sede Legale' },
+  { key:'sl_citta',         label:'Città Sede Legale' },
+  { key:'sl_pr',            label:'PR Sede Legale' },
+  { key:'so_indirizzo',     label:'Sede Org. — Indirizzo' },
+  { key:'so_cap',           label:'CAP Sede Org.' },
+  { key:'so_citta',         label:'Città Sede Org.' },
+  { key:'so_pr',            label:'PR Sede Org.' },
+  { key:'codice_fiscale',   label:'Codice Fiscale' },
+  { key:'partita_iva',      label:'Partita IVA' },
+  { key:'codice_univoco',   label:'Codice Univoco' },
+  { key:'pec',              label:'PEC' },
+  { key:'legale_rappr',     label:'Legale Rappresentante' },
+  { key:'cf_legale_rappr',  label:'CF Legale Rappr.' },
+  { key:'email',            label:'Email' },
+  { key:'telefono',         label:'Telefono' },
+  { key:'referente',        label:'Referente' },
+  { key:'email_referente',  label:'Email Referente' },
+  { key:'tel_referente',    label:'Tel. Referente' },
+];
+
+const COMP_COL = {
+  ragione_sociale:0, sl_indirizzo:1, sl_cap:2, sl_citta:3, sl_pr:4,
+  so_indirizzo:5, so_cap:6, so_citta:7, so_pr:8,
+  codice_fiscale:9, partita_iva:10, codice_univoco:11, pec:12,
+  legale_rappr:13, cf_legale_rappr:14, email:15, telefono:16,
+  referente:17, email_referente:18, tel_referente:19
+};
+
+let compagnie = [];
+let selectedCompId = null;
+let editCompMode = false;
+let nextCompId = 1;
+let compSheetRowMap = {};
+
+async function loadCompagnie() {
+  try {
+    const data = await sheetsGet(COMP_RANGE);
+    const rows = data.values || [];
+    compagnie = []; compSheetRowMap = {}; nextCompId = 1;
+    rows.forEach((row, i) => {
+      const g = k => (row[COMP_COL[k]] || '').trim();
+      if (!g('ragione_sociale')) return;
+      const c = { id: nextCompId++ };
+      Object.keys(COMP_COL).forEach(k => { c[k] = g(k); });
+      compagnie.push(c);
+      compSheetRowMap[c.id] = i + 3;
+    });
+    renderCompagnieList();
+  } catch(e) { showToast('Errore caricamento compagnie: ' + e.message, 'error'); }
+}
+
+function filteredCompagnie() {
+  const q = (document.getElementById('compSearchInput')?.value || '').toLowerCase();
+  if (!q) return compagnie;
+  return compagnie.filter(c =>
+    `${c.ragione_sociale} ${c.codice_fiscale} ${c.partita_iva} ${c.referente} ${c.legale_rappr}`.toLowerCase().includes(q)
+  );
+}
+
+function renderCompagnieList() {
+  const list = filteredCompagnie();
+  const el = document.getElementById('compagnieList');
+  if (!el) return;
+  el.innerHTML = list.map(c => {
+    const active = c.id === selectedCompId ? ' active' : '';
+    const [bg,fg] = getColor(c.ragione_sociale);
+    const initials = c.ragione_sociale.substring(0,2).toUpperCase();
+    return `<div class="contact-item${active}" onclick="selectCompagnia(${c.id})">
+      <div class="avatar" style="background:${bg};color:${fg};font-size:10px">${initials}</div>
+      <div class="contact-info">
+        <div class="contact-name">${c.ragione_sociale}</div>
+        <div class="contact-meta" style="font-size:10px">${c.sl_citta||c.so_citta||'—'}</div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Nessuna compagnia</div>';
+}
+
+function selectCompagnia(id) {
+  selectedCompId = id; editCompMode = false;
+  const c = compagnie.find(x => x.id === id);
+  renderCompagnieList();
+  if (c) renderCompDetail(c);
+}
+
+function valC(v) { return v ? `<span class="field-value">${v}</span>` : `<span class="field-value empty">—</span>`; }
+function valCLink(v, type) {
+  if (!v) return `<span class="field-value empty">—</span>`;
+  if (type==='email') return `<span class="field-value"><a href="mailto:${v}">${v}</a></span>`;
+  if (type==='tel') return `<span class="field-value"><a href="tel:${v}">${v}</a></span>`;
+  return `<span class="field-value">${v}</span>`;
+}
+
+function renderCompDetail(c) {
+  if (editCompMode) return renderCompEdit(c);
+  const isAdmin = userRole === 'admin';
+  const [bg,fg] = getColor(c.ragione_sociale);
+  document.getElementById('compagnieDetail').innerHTML = `
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="btn-back" onclick="">← Lista</button>
+      <span style="color:var(--text3);font-size:12px">${filteredCompagnie().indexOf(c)+1} di ${filteredCompagnie().length}</span>
+    </div>
+    <div class="topbar-right">
+      ${isAdmin ? `<button class="btn-secondary" onclick="startEditComp()">✎ Modifica</button>` : ''}
+      ${isAdmin ? `<button class="btn-danger" onclick="deleteCompagnia(${c.id})">✕ Rimuovi</button>` : ''}
+      ${isAdmin ? `<button class="btn-new" onclick="openCompModal()">+ Nuova</button>` : ''}
+    </div>
+  </div>
+  <div class="detail">
+    <div class="detail-header">
+      <div class="avatar-lg" style="background:${bg};color:${fg};font-size:18px">${c.ragione_sociale.substring(0,2).toUpperCase()}</div>
+      <div class="detail-name-wrap">
+        <div class="detail-name" style="font-size:22px">${c.ragione_sociale}</div>
+        <div class="detail-sub">${c.sl_citta ? `<span style="color:var(--text2)">📍 ${c.sl_citta}${c.sl_pr?' ('+c.sl_pr+')':''}</span>` : ''}</div>
+      </div>
+    </div>
+    <div class="section"><div class="section-title">Sede Legale</div>
+      <div class="fields-grid">
+        <div class="field"><div class="field-label">Indirizzo</div>${valC(c.sl_indirizzo)}</div>
+        <div class="field"><div class="field-label">CAP</div>${valC(c.sl_cap)}</div>
+        <div class="field"><div class="field-label">Città</div>${valC(c.sl_citta)}</div>
+        <div class="field"><div class="field-label">Provincia</div>${valC(c.sl_pr)}</div>
+      </div>
+    </div>
+    <div class="section"><div class="section-title">Sede Organizzativa</div>
+      <div class="fields-grid">
+        <div class="field"><div class="field-label">Indirizzo</div>${valC(c.so_indirizzo)}</div>
+        <div class="field"><div class="field-label">CAP</div>${valC(c.so_cap)}</div>
+        <div class="field"><div class="field-label">Città</div>${valC(c.so_citta)}</div>
+        <div class="field"><div class="field-label">Provincia</div>${valC(c.so_pr)}</div>
+      </div>
+    </div>
+    <div class="section"><div class="section-title">Dati fiscali</div>
+      <div class="fields-grid">
+        <div class="field"><div class="field-label">Codice Fiscale</div>${valC(c.codice_fiscale)}</div>
+        <div class="field"><div class="field-label">Partita IVA</div>${valC(c.partita_iva)}</div>
+        <div class="field"><div class="field-label">Codice Univoco</div>${valC(c.codice_univoco)}</div>
+        <div class="field"><div class="field-label">PEC</div>${valCLink(c.pec,'email')}</div>
+      </div>
+    </div>
+    <div class="section"><div class="section-title">Legale Rappresentante</div>
+      <div class="fields-grid">
+        <div class="field"><div class="field-label">Nome</div>${valC(c.legale_rappr)}</div>
+        <div class="field"><div class="field-label">Codice Fiscale</div>${valC(c.cf_legale_rappr)}</div>
+        <div class="field"><div class="field-label">Email</div>${valCLink(c.email,'email')}</div>
+        <div class="field"><div class="field-label">Telefono</div>${valCLink(c.telefono,'tel')}</div>
+      </div>
+    </div>
+    <div class="section"><div class="section-title">Referente</div>
+      <div class="fields-grid">
+        <div class="field"><div class="field-label">Nome</div>${valC(c.referente)}</div>
+        <div class="field"><div class="field-label">Email</div>${valCLink(c.email_referente,'email')}</div>
+        <div class="field"><div class="field-label">Telefono</div>${valCLink(c.tel_referente,'tel')}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCompEdit(c) {
+  document.getElementById('compagnieDetail').innerHTML = `
+  <div class="topbar">
+    <div class="topbar-left"><span style="color:var(--accent);font-size:13px;font-weight:500">✎ Modifica compagnia</span></div>
+    <div class="topbar-right">
+      <button class="btn-secondary" onclick="cancelEditComp()">Annulla</button>
+      <button class="btn-primary" onclick="saveEditComp(${c.id})">Salva su Sheets</button>
+    </div>
+  </div>
+  <div class="detail">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      ${COMP_FIELDS.map(f=>`
+        <div class="modal-field${f.full?' full':''}">
+          <div class="modal-label">${f.label}</div>
+          <input type="text" class="edit-input" id="cedit_${f.key}" value="${(c[f.key]||'').replace(/"/g,'&quot;')}">
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function startEditComp() { editCompMode=true; renderCompDetail(compagnie.find(x=>x.id===selectedCompId)); }
+function cancelEditComp() { editCompMode=false; renderCompDetail(compagnie.find(x=>x.id===selectedCompId)); }
+
+async function saveEditComp(id) {
+  const c = compagnie.find(x=>x.id===id);
+  COMP_FIELDS.forEach(f => { const el=document.getElementById('cedit_'+f.key); if(el) c[f.key]=el.value; });
+  editCompMode=false; renderCompagnieList(); renderCompDetail(c);
+  const row = Object.keys(COMP_COL).map(k => c[k]||'');
+  const sheetRow = compSheetRowMap[id];
+  try {
+    await sheetsUpdate(`${COMP_SHEET}!A${sheetRow}:T${sheetRow}`, [row]);
+    showToast('Compagnia salvata', 'success');
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+async function deleteCompagnia(id) {
+  if (!confirm('Rimuovere questa compagnia?')) return;
+  const sheetRow = compSheetRowMap[id];
+  compagnie = compagnie.filter(x=>x.id!==id);
+  selectedCompId=null;
+  document.getElementById('compagnieDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">🏢</div><div class="empty-title">Compagnia rimossa</div></div>`;
+  renderCompagnieList();
+  try { await sheetsClear(`${COMP_SHEET}!A${sheetRow}:T${sheetRow}`); showToast('Rimossa', 'success'); }
+  catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+function openCompModal() {
+  document.getElementById('compModalTitle').textContent = 'Nuova compagnia';
+  document.getElementById('compForm').innerHTML = COMP_FIELDS.map(f=>`
+    <div class="modal-field${f.full?' full':''}">
+      <div class="modal-label">${f.label}</div>
+      <input type="text" class="edit-input" id="cnew_${f.key}" placeholder="${f.label}">
+    </div>`).join('');
+  document.getElementById('compModal').classList.add('open');
+}
+function closeCompModal() { document.getElementById('compModal').classList.remove('open'); }
+
+async function saveCompagnia() {
+  const ragione = document.getElementById('cnew_ragione_sociale').value.trim();
+  if (!ragione) { showToast('Ragione sociale obbligatoria', 'error'); return; }
+  const c = { id: nextCompId++ };
+  COMP_FIELDS.forEach(f => { const el=document.getElementById('cnew_'+f.key); c[f.key]=el?el.value:''; });
+  compagnie.push(c);
+  closeCompModal(); renderCompagnieList(); selectCompagnia(c.id);
+  const row = Object.keys(COMP_COL).map(k => c[k]||'');
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(COMP_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+    const r = await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:COMP_RANGE, majorDimension:'ROWS', values:[row] }) });
+    const result = await r.json();
+    const match = (result.updates?.updatedRange||'').match(/(\d+)$/);
+    if (match) compSheetRowMap[c.id] = parseInt(match[1]);
+    showToast(`${ragione} aggiunta`, 'success');
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+document.getElementById('compModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeCompModal(); });
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
 </body>
