@@ -594,13 +594,29 @@ async function cercaContrattiContatto(cognome, nome, contactId) {
       return;
     }
 
+    function statoFirma(nome) {
+      const n = nome.toLowerCase();
+      const hasFr = n.includes('_fr.') || n.includes('_fr_') || n.endsWith('_fr');
+      const hasFs = n.includes('_fs.') || n.includes('_fs_') || n.endsWith('_fs');
+      const hasFirmato = n.includes('_firmato') || n.includes('firmato_');
+      if (hasFirmato) return { label: 'DEFINITIVO', color: '#2e7d52', bg: '#eaf4ef', icon: '✅' };
+      if (hasFr && hasFs) return { label: 'DEFINITIVO', color: '#2e7d52', bg: '#eaf4ef', icon: '✅' };
+      if (hasFr) return { label: 'FIRMA RESEXTENSA', color: '#b8860b', bg: '#fff8ec', icon: '🟠' };
+      if (hasFs) return { label: 'FIRMA SCRITTURATO/A', color: '#4a7ab5', bg: '#eef4ff', icon: '🟡' };
+      return { label: 'REDATTO', color: '#6b6860', bg: 'var(--surface2)', icon: '🔵' };
+    }
+
     box.innerHTML = files.map(f => {
       const data = new Date(f.modifiedTime).toLocaleDateString('it-IT');
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      const stato = statoFirma(f.name);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
-          <div style="font-size:10px;color:var(--text3)">Modificato: ${data}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:3px">
+            <span style="font-size:10px;color:var(--text3)">Modificato: ${data}</span>
+            <span style="font-size:10px;font-weight:600;color:${stato.color};background:${stato.bg};padding:2px 7px;border-radius:10px;border:1px solid ${stato.color}40">${stato.icon} ${stato.label}</span>
+          </div>
         </div>
         <button class="btn-export" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
       </div>`;
