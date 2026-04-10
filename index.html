@@ -253,6 +253,22 @@
   /* Modal spettacoli */
   .modal-spett { width: 620px; }
 
+  /* ── VERIFICA CONTRATTI KANBAN ── */
+  .kanban-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+  .kanban-title { font-family:'DM Serif Display',serif; font-size:26px; color:var(--text); }
+  .kanban-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; align-items:start; }
+  .kanban-col { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .kanban-col-head { padding:12px 14px; font-size:12px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; display:flex; align-items:center; gap:8px; }
+  .kanban-col-head .badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; }
+  .kanban-col-body { padding:10px; display:flex; flex-direction:column; gap:8px; min-height:80px; }
+  .kanban-card { background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:10px 12px; }
+  .kanban-card-name { font-size:11px; font-weight:500; color:var(--text); line-height:1.4; margin-bottom:4px; }
+  .kanban-card-folder { font-size:10px; color:var(--text3); margin-bottom:6px; }
+  .kanban-card-dl { font-size:10px; padding:3px 8px; }
+  .kanban-empty { font-size:11px; color:var(--text3); font-style:italic; text-align:center; padding:12px 0; }
+  @media(max-width:900px) { .kanban-grid { grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:600px) { .kanban-grid { grid-template-columns:1fr; } }
+
 
   /* Bottone torna alla lista (solo mobile) */
   .btn-back { display: none; background: none; border: none; color: var(--accent); font-size: 13px; padding: 0; cursor: pointer; }
@@ -393,6 +409,9 @@
     <button class="tab-btn" id="tab-compagnie" onclick="switchTab('compagnie')">
       🏢 Compagnie
     </button>
+    <button class="tab-btn" id="tab-contratti" onclick="switchTab('contratti')">
+      📋 Verifica Contratti
+    </button>
   </div>
 
   <!-- TAB RUBRICA -->
@@ -458,6 +477,11 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- TAB VERIFICA CONTRATTI -->
+  <div id="panel-contratti" style="display:none;height:calc(100vh - 128px);overflow-y:auto;background:var(--bg)">
+    <div id="contrattiPanel" style="padding:24px;max-width:1400px;margin:0 auto"></div>
   </div>
 </div>
 
@@ -1666,14 +1690,17 @@ async function saveCalendarioToSheets() {
 }
 
 function switchTab(tab) {
-  ['rubrica','spettacoli','compagnie'].forEach(t => {
-    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  ['rubrica','spettacoli','compagnie','contratti'].forEach(t => {
+    const el = document.getElementById('tab-'+t);
+    if (el) el.classList.toggle('active', t===tab);
   });
   document.getElementById('panel-rubrica').style.display = tab==='rubrica' ? 'flex' : 'none';
   document.getElementById('panel-spettacoli').style.display = tab==='spettacoli' ? 'block' : 'none';
   document.getElementById('panel-compagnie').style.display = tab==='compagnie' ? 'flex' : 'none';
+  document.getElementById('panel-contratti').style.display = tab==='contratti' ? 'block' : 'none';
   if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
   if (tab==='compagnie') loadCompagnie();
+  if (tab==='contratti') loadVerificaContratti();
 }
 
 function renderSpettacoli() {
@@ -2181,6 +2208,102 @@ async function saveCompagnia() {
 }
 
 document.getElementById('compModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeCompModal(); });
+
+// ─── VERIFICA CONTRATTI ───────────────────────────────────────────────────────
+async function loadVerificaContratti() {
+  const panel = document.getElementById('contrattiPanel');
+  panel.innerHTML = `
+    <div class="kanban-header">
+      <div class="kanban-title">📋 Verifica Contratti</div>
+      <button class="btn-export" onclick="loadVerificaContratti()">↺ Aggiorna</button>
+    </div>
+    <div style="color:var(--text3);font-size:13px;margin-bottom:20px">🔍 Scansione cartelle in corso…</div>`;
+
+  try {
+    // 1. Carica tutte le sottocartelle
+    const q1 = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    const r1 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q1}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const d1 = await r1.json();
+    const cartelle = d1.files || [];
+
+    if (!cartelle.length) {
+      panel.innerHTML += '<div style="color:var(--text3)">Nessuna cartella trovata.</div>';
+      return;
+    }
+
+    // 2. Per ogni cartella carica i PDF
+    const colonne = { redatto: [], fs: [], fr: [], definitivo: [] };
+
+    for (const cartella of cartelle) {
+      const q2 = encodeURIComponent(`'${cartella.id}' in parents and trashed=false`);
+      const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,mimeType,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
+        headers: { Authorization: 'Bearer ' + accessToken }
+      });
+      const d2 = await r2.json();
+      const files = (d2.files || []).filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+
+      files.forEach(f => {
+        const n = f.name.toLowerCase();
+        const hasFr = n.includes('_fr.') || n.includes('_fr_') || n.replace('.pdf','').endsWith('_fr');
+        const hasFs = n.includes('_fs.') || n.includes('_fs_') || n.replace('.pdf','').endsWith('_fs');
+        const hasFirmato = n.includes('_firmato') || n.includes('firmato_');
+        const item = { id: f.id, name: f.name, folder: cartella.name, date: new Date(f.modifiedTime).toLocaleDateString('it-IT') };
+        if (hasFirmato || (hasFr && hasFs)) colonne.definitivo.push(item);
+        else if (hasFr) colonne.fr.push(item);
+        else if (hasFs) colonne.fs.push(item);
+        else colonne.redatto.push(item);
+      });
+    }
+
+    // 3. Render colonne
+    const cols = [
+      { key:'redatto',    label:'REDATTO',             icon:'🔵', color:'#6b6860', bg:'var(--surface2)', border:'var(--border2)' },
+      { key:'fs',         label:'FIRMA SCRITTURATO/A', icon:'🟡', color:'#4a7ab5', bg:'#eef4ff',         border:'#4a7ab580' },
+      { key:'fr',         label:'FIRMA RESEXTENSA',    icon:'🟠', color:'#b8860b', bg:'#fff8ec',         border:'#b8860b80' },
+      { key:'definitivo', label:'DEFINITIVO',          icon:'✅', color:'#2e7d52', bg:'#eaf4ef',         border:'#2e7d5280' },
+    ];
+
+    const renderCard = item => `
+      <div class="kanban-card">
+        <div class="kanban-card-folder">📁 ${item.folder}</div>
+        <div class="kanban-card-name">${item.name}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+          <span style="font-size:10px;color:var(--text3)">${item.date}</span>
+          <button class="btn-export kanban-card-dl" onclick="downloadDriveFile('${item.id}','${item.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+        </div>
+      </div>`;
+
+    panel.innerHTML = `
+      <div class="kanban-header">
+        <div class="kanban-title">📋 Verifica Contratti</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;color:var(--text3)">${cartelle.length} nominativi · ${Object.values(colonne).flat().length} contratti totali</span>
+          <button class="btn-export" onclick="loadVerificaContratti()">↺ Aggiorna</button>
+        </div>
+      </div>
+      <div class="kanban-grid">
+        ${cols.map(col => `
+          <div class="kanban-col">
+            <div class="kanban-col-head" style="background:${col.bg};border-bottom:2px solid ${col.border}">
+              <span>${col.icon}</span>
+              <span style="color:${col.color}">${col.label}</span>
+              <span class="badge" style="background:${col.border};color:${col.color};margin-left:auto">${colonne[col.key].length}</span>
+            </div>
+            <div class="kanban-col-body">
+              ${colonne[col.key].length
+                ? colonne[col.key].map(renderCard).join('')
+                : `<div class="kanban-empty">Nessun contratto</div>`}
+            </div>
+          </div>`).join('')}
+      </div>`;
+
+  } catch(e) {
+    panel.innerHTML = `<div style="color:var(--text3)">Errore: ${e.message}</div>`;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
 </body>
