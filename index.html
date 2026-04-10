@@ -512,6 +512,7 @@ const CAL_SHEET   = 'Calendario';
 const CAL_RANGE   = 'Calendario!A2:H';
 const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets';
 const DRIVE_CU_FOLDER = '1-Pyjd-tKJyNPxaveTAQkvJvcXP0R6dE1';
+const DRIVE_CONTRATTI_FOLDER = '1DhLR-WBprZaUoeBRYTT69ALywbaND74e';
 
 // ─── GOOGLE DRIVE ─────────────────────────────────────────────────────────────
 async function downloadCU(codiceFiscale) {
@@ -547,6 +548,83 @@ async function downloadCU(codiceFiscale) {
     a.click();
     URL.revokeObjectURL(a.href);
     showToast('CU 2025 scaricata!', 'success');
+  } catch(e) {
+    showToast('Errore: ' + e.message, 'error');
+  }
+}
+
+async function cercaContrattiContatto(cognome, nome, contactId) {
+  const boxId = `contratti-box-${contactId}`;
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.innerHTML = '<span style="color:var(--text3);font-size:12px">🔍 Ricerca in corso…</span>';
+
+  try {
+    // Cerca la cartella con nome "COGNOME NOME" o "NOME COGNOME" dentro la cartella contratti
+    const nomeCercato = `${cognome.trim()} ${nome.trim()}`.toUpperCase();
+    const nomeCercato2 = `${nome.trim()} ${cognome.trim()}`.toUpperCase();
+    const query = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`;
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    const data = await r.json();
+    const cartelle = data.files || [];
+
+    // Trova la cartella del nominativo (confronto flessibile)
+    const cartella = cartelle.find(f => {
+      const fn = f.name.toUpperCase().trim();
+      return fn === nomeCercato || fn === nomeCercato2 ||
+             fn.includes(cognome.trim().toUpperCase()) ||
+             nomeCercato.includes(fn);
+    });
+
+    if (!cartella) {
+      box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessuna cartella contratti trovata per questo nominativo</span>';
+      return;
+    }
+
+    // Cerca i PDF dentro la cartella trovata
+    const q2 = encodeURIComponent(`'${cartella.id}' in parents and trashed = false`);
+    const url2 = `https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,mimeType,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`;
+    const r2 = await fetch(url2, { headers: { Authorization: 'Bearer ' + accessToken } });
+    const data2 = await r2.json();
+    const files = (data2.files || []).filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+
+    if (!files.length) {
+      box.innerHTML = `<span style="color:var(--text3);font-size:12px;font-style:italic">Cartella trovata (${cartella.name}) ma nessun PDF presente</span>`;
+      return;
+    }
+
+    box.innerHTML = files.map(f => {
+      const data = new Date(f.modifiedTime).toLocaleDateString('it-IT');
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
+          <div style="font-size:10px;color:var(--text3)">Modificato: ${data}</div>
+        </div>
+        <button class="btn-export" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    box.innerHTML = `<span style="color:var(--text3);font-size:12px">Errore: ${e.message}</span>`;
+  }
+}
+
+async function downloadDriveFile(fileId, fileName) {
+  showToast('Download in corso…', 'info');
+  try {
+    const dlR = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    if (!dlR.ok) throw new Error('Errore download ' + dlR.status);
+    const blob = await dlR.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('File scaricato!', 'success');
   } catch(e) {
     showToast('Errore: ' + e.message, 'error');
   }
@@ -1336,6 +1414,15 @@ function renderDetail(c) {
           CU 2025
         </button>
       </div>
+    </div>` : ''}
+    ${isAdmin ? `
+    <div class="section"><div class="section-title">Contratti</div>
+      <div style="margin-bottom:10px">
+        <button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="cercaContrattiContatto('${c.cognome}','${c.nome}',${c.id})">
+          📄 Cerca contratti su Drive
+        </button>
+      </div>
+      <div id="contratti-box-${c.id}"></div>
     </div>` : ''}
   </div>`;
 }
