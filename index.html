@@ -863,7 +863,10 @@ async function loadFromSheets() {
     nextId = 1;
 
     rows.forEach((row, i) => {
-      const g = (k) => (row[COL[k]] || '').trim();
+      const g = (k) => {
+        let v = (row[COL[k]] || '').trim().replace(/^'/, '');
+        return toUpperField(k, v);
+      };
       const cognome = g('cognome');
       if (!cognome) return;
       const c = { id: nextId++ };
@@ -930,10 +933,25 @@ function updateHeaderForRole() {
 }
 
 // ─── SAVE ROW ──────────────────────────────────────────────────────────────────
+// Campi che NON devono essere convertiti in maiuscolo
+const LOWERCASE_FIELDS = new Set(['email','pec','email_referente','cv']);
+// Campi numerici che devono preservare gli zeri iniziali
+const NUMERIC_TEXT_FIELDS = new Set(['codice_fiscale','cf_legale_rappr','partita_iva','codice_univoco','iban','cap','sl_cap','so_cap']);
+
+function toUpperField(key, value) {
+  if (!value) return value;
+  if (LOWERCASE_FIELDS.has(key)) return value;
+  return value.toUpperCase();
+}
+
 function contactToRow(c) {
   const maxCol = Math.max(...Object.values(COL));
   const row = new Array(maxCol + 1).fill('');
-  Object.keys(COL).forEach(k => { row[COL[k]] = c[k] || ''; });
+  Object.keys(COL).forEach(k => {
+    let v = c[k] || '';
+    v = toUpperField(k, v);
+    row[COL[k]] = v;
+  });
   return row;
 }
 
@@ -1543,7 +1561,7 @@ async function saveEdit(id) {
       }
     } else {
       const el = document.getElementById('edit_'+f.key);
-      if (el) c[f.key] = el.value;
+      if (el) c[f.key] = toUpperField(f.key, el.value);
     }
   });
   editMode = false;
@@ -1604,7 +1622,7 @@ async function saveNew() {
       } else { c[f.key] = ''; }
     } else {
       const el = document.getElementById('new_'+f.key);
-      c[f.key] = el ? el.value : '';
+      c[f.key] = el ? toUpperField(f.key, el.value) : '';
     }
   });
   contacts.push(c);
@@ -1984,7 +2002,10 @@ async function loadCompagnie() {
     const rows = data.values || [];
     compagnie = []; compSheetRowMap = {}; nextCompId = 1;
     rows.forEach((row, i) => {
-      const g = k => (row[COMP_COL[k]] || '').trim();
+      const g = k => {
+        let v = (row[COMP_COL[k]] || '').trim().replace(/^'/, '');
+        return toUpperField(k, v);
+      };
       if (!g('ragione_sociale')) return;
       const c = { id: nextCompId++ };
       Object.keys(COMP_COL).forEach(k => { c[k] = g(k); });
@@ -2049,6 +2070,7 @@ function renderCompDetail(c) {
     </div>
     <div class="topbar-right">
       ${isAdmin ? `<button class="btn-secondary" onclick="startEditComp()">✎ Modifica</button>` : ''}
+      ${isAdmin ? `<button class="btn-export" onclick="sortAndSaveCompagnie()" title="Ordina per ragione sociale e salva su Sheets">⇅ Ordina</button>` : ''}
       ${isAdmin ? `<button class="btn-danger" onclick="deleteCompagnia(${c.id})">✕ Rimuovi</button>` : ''}
       ${isAdmin ? `<button class="btn-new" onclick="openCompModal()">+ Nuova</button>` : ''}
     </div>
@@ -2155,9 +2177,31 @@ function renderCompEdit(c) {
 function startEditComp() { editCompMode=true; renderCompDetail(compagnie.find(x=>x.id===selectedCompId)); }
 function cancelEditComp() { editCompMode=false; renderCompDetail(compagnie.find(x=>x.id===selectedCompId)); }
 
+async function sortAndSaveCompagnie() {
+  if (!confirm('Ordinare tutte le compagnie per ragione sociale e salvare su Google Sheets?')) return;
+  setSyncStatus('loading', 'Ordinamento in corso…');
+  try {
+    compagnie.sort((a,b) => (a.ragione_sociale||'').localeCompare(b.ragione_sociale||'', 'it'));
+    const allRows = compagnie.map(c => Object.keys(COMP_COL).map(k => c[k]||''));
+    await sheetsClear(`${COMP_SHEET}!A3:T${3 + compagnie.length + 10}`);
+    await sheetsUpdate(`${COMP_SHEET}!A3:T${3 + compagnie.length - 1}`, allRows);
+    compagnie.forEach((c,i) => { compSheetRowMap[c.id] = i + 3; });
+    renderCompagnieList();
+    if (selectedCompId) { const found = compagnie.find(x=>x.id===selectedCompId); if(found) renderCompDetail(found); }
+    setSyncStatus('ok', 'Ordinato ✓');
+    showToast('Compagnie ordinate e salvate su Sheets', 'success');
+  } catch(e) {
+    setSyncStatus('error', 'Errore');
+    showToast('Errore: ' + e.message, 'error');
+  }
+}
+
 async function saveEditComp(id) {
   const c = compagnie.find(x=>x.id===id);
-  COMP_FIELDS.forEach(f => { const el=document.getElementById('cedit_'+f.key); if(el) c[f.key]=el.value; });
+  COMP_FIELDS.forEach(f => {
+    const el = document.getElementById('cedit_'+f.key);
+    if (el) c[f.key] = toUpperField(f.key, el.value);
+  });
   editCompMode=false; renderCompagnieList(); renderCompDetail(c);
   const row = Object.keys(COMP_COL).map(k => c[k]||'');
   const sheetRow = compSheetRowMap[id];
@@ -2193,7 +2237,7 @@ async function saveCompagnia() {
   const ragione = document.getElementById('cnew_ragione_sociale').value.trim();
   if (!ragione) { showToast('Ragione sociale obbligatoria', 'error'); return; }
   const c = { id: nextCompId++ };
-  COMP_FIELDS.forEach(f => { const el=document.getElementById('cnew_'+f.key); c[f.key]=el?el.value:''; });
+  COMP_FIELDS.forEach(f => { const el=document.getElementById('cnew_'+f.key); c[f.key]=el ? toUpperField(f.key, el.value) : ''; });
   compagnie.push(c);
   closeCompModal(); renderCompagnieList(); selectCompagnia(c.id);
   const row = Object.keys(COMP_COL).map(k => c[k]||'');
