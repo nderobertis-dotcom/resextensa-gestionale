@@ -1610,16 +1610,16 @@ function renderDetail(c) {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           CU 2025
         </button>
-        ${isAdmin ? `<button class="btn-new" style="font-size:12px;padding:8px 16px" onclick="openUploadModal('contatto','${c.cognome}','${c.nome}',${c.id})">↑ Carica documento</button>` : ''}
+        ${isAdmin ? `<button class="btn-new" style="font-size:12px;padding:8px 16px" onclick="openUploadModalById(${c.id})">↑ Carica documento</button>` : ''}
       </div>
       <div id="docs-box-${c.id}">
-        <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="caricaDocumentiContatto('${c.cognome}','${c.nome}',${c.id})">📂 Mostra documenti caricati</button>
+        <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="caricaDocumentiContattoById(${c.id})">📂 Mostra documenti caricati</button>
       </div>
     </div>` : ''}
     ${isAdmin ? `
     <div class="section"><div class="section-title">Contratti</div>
       <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="cercaContrattiContatto('${c.cognome}','${c.nome}',${c.id})">
+        <button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="cercaContrattiContattoById(${c.id})">
           📄 Cerca contratti su Drive
         </button>
       </div>
@@ -2362,8 +2362,8 @@ function renderCompDetail(c) {
     <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
       <div class="section-title" style="margin-bottom:12px">Contratti</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button class="btn-new" style="font-size:12px;padding:8px 14px" onclick="openUploadModalComp('${c.ragione_sociale}',${c.id})">↑ Carica contratto</button>
-        <button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="caricaContrattiComp('${c.ragione_sociale}',${c.id})">📄 Mostra contratti</button>
+        <button class="btn-new" style="font-size:12px;padding:8px 14px" onclick="openUploadModalCompById(${c.id})">↑ Carica contratto</button>
+        <button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="caricaContrattiCompById(${c.id})">📄 Mostra contratti</button>
       </div>
       <div id="comp-contratti-box-${c.id}"></div>
     </div>` : ''}
@@ -2474,6 +2474,36 @@ document.getElementById('uploadModal').addEventListener('click', e=>{ if(e.targe
 const DRIVE_DOCS_FOLDER = '1RvnDZ3sTr5Z7Mi6wrzXWA9DfexvBVv7g'; // Documenti d'identità
 
 let uploadContext = {}; // { tipo, cognome, nome, contactId, tipoDoc }
+
+function openUploadModalById(contactId) {
+  const c = contacts.find(x => x.id === contactId);
+  if (!c) return;
+  openUploadModal('contatto', c.cognome, c.nome, contactId);
+}
+
+function openUploadModalCompById(compId) {
+  const c = compagnie.find(x => x.id === compId);
+  if (!c) return;
+  openUploadModalComp(c.ragione_sociale, compId);
+}
+
+function cercaContrattiContattoById(contactId) {
+  const c = contacts.find(x => x.id === contactId);
+  if (!c) return;
+  cercaContrattiContatto(c.cognome, c.nome, contactId);
+}
+
+function caricaDocumentiContattoById(contactId) {
+  const c = contacts.find(x => x.id === contactId);
+  if (!c) return;
+  caricaDocumentiContatto(c.cognome, c.nome, contactId);
+}
+
+function caricaContrattiCompById(compId) {
+  const c = compagnie.find(x => x.id === compId);
+  if (!c) return;
+  caricaContrattiComp(c.ragione_sociale, compId);
+}
 
 function openUploadModal(source, cognome, nome, contactId) {
   uploadContext = { source, cognome, nome, contactId };
