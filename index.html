@@ -2643,7 +2643,7 @@ function onFileSelected(input) {
 async function confirmUpload() {
   const file = document.getElementById('uploadFileInput').files[0];
   if (!file) return;
-  const { tipo, tipoDoc, cognome, nome, contactId } = uploadContext;
+  const { source, tipo, tipoDoc, cognome, nome, contactId } = uploadContext;
   document.getElementById('uploadConfirmBtn').disabled = true;
   document.getElementById('uploadConfirmBtn').textContent = 'Caricamento…';
 
