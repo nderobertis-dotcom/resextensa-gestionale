@@ -250,6 +250,15 @@
   .cal-grid-day.today .cal-grid-day-num { color: var(--accent); font-weight: 700; }
   .cal-event-pill { background: var(--accent); color: #1a1200; border-radius: 3px; padding: 2px 5px; font-size: 9px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 
+  /* ── SECTION STATS BAR ── */
+  .section-stats-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 24px; background: var(--surface);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .section-stats-bar .header-stats { gap: 24px; }
+
   /* Modal spettacoli */
   .modal-spett { width: 620px; }
 
@@ -410,16 +419,6 @@
   <header>
     <div class="logo" style="display:flex;align-items:center;gap:10px;height:100%"><img src="resextensa_logo.png" style="height:44px;width:auto;object-fit:contain" alt="RESEXTENSA"><span style="font-family:'DM Serif Display',serif;font-size:20px;color:var(--accent)">RESEXTENSA <span style="font-style:italic;color:var(--text2);font-size:13px;font-family:Inter,sans-serif;font-weight:300;margin-left:4px">Ass. Culturale — Bari</span></span></div>
     <div class="header-right">
-      <div id="bdayHeader"></div>
-      <div class="header-stats">
-        <div class="stat"><div class="stat-n" id="stat-tot">—</div><div class="stat-l">Componenti</div></div>
-        <div class="stat"><div class="stat-n" id="stat-attivi" style="color:var(--attivo)">—</div><div class="stat-l">Attivi</div></div>
-        <div class="stat"><div class="stat-n" id="stat-spett" style="color:var(--accent)">—</div><div class="stat-l">Spettacoli</div></div>
-        <div class="stat"><div class="stat-n" id="stat-m" style="color:#4a7ab5">—</div><div class="stat-l">M</div></div>
-        <div class="stat"><div class="stat-n" id="stat-f" style="color:#b54a7a">—</div><div class="stat-l">F</div></div>
-        <div class="stat"><div class="stat-n" id="stat-u25" style="color:#5a9a6a">—</div><div class="stat-l">Under 25</div></div>
-        <div class="stat"><div class="stat-n" id="stat-o35" style="color:#9a6a3a">—</div><div class="stat-l">Over 35</div></div>
-      </div>
       <div class="sync-status" id="syncStatus" onclick="loadFromSheets()" title="Clicca per aggiornare">
         <div class="sync-dot loading" id="syncDot"></div>
         <span id="syncText">Connessione…</span>
@@ -468,17 +467,6 @@
         <span class="home-nav-icon">📋</span>
         <div><div class="home-nav-label">Verifica Contratti</div><div class="home-nav-sub">Stato firme per nominativo</div></div>
       </button>
-
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-top:12px;margin-bottom:4px">Statistiche</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div class="home-stat-row"><span>👥 Componenti</span><span class="home-stat-val" id="hs-tot">—</span></div>
-        <div class="home-stat-row"><span>✅ Attivi</span><span class="home-stat-val" id="hs-attivi">—</span></div>
-        <div class="home-stat-row"><span>🎭 Spettacoli</span><span class="home-stat-val" id="hs-spett">—</span></div>
-        <div class="home-stat-row"><span>♂ Maschi</span><span class="home-stat-val" id="hs-m">—</span></div>
-        <div class="home-stat-row"><span>♀ Femmine</span><span class="home-stat-val" id="hs-f">—</span></div>
-        <div class="home-stat-row"><span>🟢 Under 25</span><span class="home-stat-val" id="hs-u25">—</span></div>
-        <div class="home-stat-row"><span>🔵 Over 35</span><span class="home-stat-val" id="hs-o35">—</span></div>
-      </div>
     </div>
 
     <!-- Main home content -->
@@ -525,7 +513,21 @@
   </div>
 
   <!-- TAB RUBRICA -->
-  <div id="panel-rubrica" class="app">
+  <div id="panel-rubrica" class="app" style="flex-direction:column">
+    <!-- Topbar statistiche rubrica -->
+    <div class="section-stats-bar" id="rubrica-stats-bar">
+      <div id="bdayHeader"></div>
+      <div class="header-stats">
+        <div class="stat"><div class="stat-n" id="stat-tot">—</div><div class="stat-l">Componenti</div></div>
+        <div class="stat"><div class="stat-n" id="stat-attivi" style="color:var(--attivo)">—</div><div class="stat-l">Attivi</div></div>
+        <div class="stat"><div class="stat-n" id="stat-spett" style="color:var(--accent)">—</div><div class="stat-l">Spettacoli</div></div>
+        <div class="stat"><div class="stat-n" id="stat-m" style="color:#4a7ab5">—</div><div class="stat-l">M</div></div>
+        <div class="stat"><div class="stat-n" id="stat-f" style="color:#b54a7a">—</div><div class="stat-l">F</div></div>
+        <div class="stat"><div class="stat-n" id="stat-u25" style="color:#5a9a6a">—</div><div class="stat-l">Under 25</div></div>
+        <div class="stat"><div class="stat-n" id="stat-o35" style="color:#9a6a3a">—</div><div class="stat-l">Over 35</div></div>
+      </div>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
     <aside>
       <div class="sidebar-top">
         <div class="search-wrap">
@@ -561,6 +563,7 @@
         <div class="empty-sub">Connessione a Google Sheets in corso</div>
       </div>
     </main>
+    </div>
   </div>
 
   <!-- TAB SPETTACOLI -->
@@ -569,8 +572,17 @@
   </div>
 
   <!-- TAB COMPAGNIE -->
-  <div id="panel-compagnie" style="display:none;height:calc(100vh - 128px);overflow:hidden">
-    <div style="display:flex;height:100%">
+  <div id="panel-compagnie" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
+    <!-- Topbar statistiche compagnie -->
+    <div class="section-stats-bar">
+      <div class="header-stats">
+        <div class="stat"><div class="stat-n" id="stat-comp-tot">—</div><div class="stat-l">Compagnie</div></div>
+        <div class="stat"><div class="stat-n" id="stat-comp-citta">—</div><div class="stat-l">Città diverse</div></div>
+        <div class="stat"><div class="stat-n" id="stat-comp-piva">—</div><div class="stat-l">Con P.IVA</div></div>
+        <div class="stat"><div class="stat-n" id="stat-comp-ref">—</div><div class="stat-l">Con Referente</div></div>
+      </div>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
       <div id="compagnie-sidebar" style="width:240px;min-width:240px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0">
         <div style="padding:12px;border-bottom:1px solid var(--border)">
           <div class="search-wrap">
@@ -2164,6 +2176,15 @@ let editCompMode = false;
 let nextCompId = 1;
 let compSheetRowMap = {};
 
+function updateCompStats() {
+  const tot = compagnie.length;
+  const citta = new Set(compagnie.map(c => c.sl_citta).filter(Boolean)).size;
+  const piva = compagnie.filter(c => c.partita_iva).length;
+  const ref = compagnie.filter(c => c.referente).length;
+  const els = { 'stat-comp-tot': tot, 'stat-comp-citta': citta, 'stat-comp-piva': piva, 'stat-comp-ref': ref };
+  Object.entries(els).forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.textContent = val || '—'; });
+}
+
 async function loadCompagnie() {
   try {
     const data = await sheetsGet(COMP_RANGE);
@@ -2181,6 +2202,7 @@ async function loadCompagnie() {
       compSheetRowMap[c.id] = i + 3;
     });
     renderCompagnieList();
+    updateCompStats();
   } catch(e) { showToast('Errore caricamento compagnie: ' + e.message, 'error'); }
 }
 
