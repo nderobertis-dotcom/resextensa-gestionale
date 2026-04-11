@@ -776,7 +776,10 @@ async function cercaContrattiContatto(cognome, nome, contactId) {
             <span style="font-size:10px;font-weight:600;color:${stato.color};background:${stato.bg};padding:2px 7px;border-radius:10px;border:1px solid ${stato.color}40">${stato.icon} ${stato.label}</span>
           </div>
         </div>
-        <button class="btn-export" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <a href="https://drive.google.com/file/d/${f.id}/view" target="_blank" class="btn-export" style="font-size:11px;padding:4px 10px;text-decoration:none">👁 Visualizza</a>
+          <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+        </div>
       </div>`;
     }).join('');
 
@@ -2608,12 +2611,10 @@ function validaNomeFile(fileName) {
     return { ok: true, msg: '✓ Nome file corretto' };
   }
 
+  // Documento d'identità: nessun vincolo sul nome
   if (tipo === 'documento') {
-    const prefissi = { Cie: 'cie_', Pas: 'pas_', Pat: 'pat_' };
-    const prefisso = prefissi[tipoDoc];
-    if (!n.startsWith(prefisso)) return { ok: false, msg: `Il file deve iniziare con "${prefisso.toUpperCase()}"` };
-    if (!n.includes(cogLow) && !n.includes(nomLow)) return { ok: false, msg: `Il nome file deve contenere il cognome "${cognome}" o il nome "${nome}"` };
-    return { ok: true, msg: '✓ Nome file corretto' };
+    if (!fileName.toLowerCase().endsWith('.pdf')) return { ok: false, msg: 'Il file deve essere in formato PDF' };
+    return { ok: true, msg: '✓ File accettato' };
   }
 
   return { ok: false, msg: 'Seleziona prima il tipo di documento' };
@@ -2654,7 +2655,8 @@ async function confirmUpload() {
     } else if (tipo === 'contratto') {
       folderId = await trovaCreaCartellaContatto(cognome, nome);
     } else {
-      folderId = await trovaCreaCartellaDocumento(cognome, nome);
+      // Documenti d'identità: sempre nella cartella principale, nessuna sottocartella
+      folderId = DRIVE_DOCS_FOLDER;
     }
 
     // Upload file su Drive
@@ -2712,9 +2714,8 @@ async function trovaCreaCartellaContatto(cognome, nome) {
     f.name.toUpperCase().includes(nome.toUpperCase())
   );
   if (cartella) { console.log('Cartella trovata:', cartella.name, cartella.id); return cartella.id; }
-  // Cartella non trovata — carica direttamente nella cartella principale
-  showToast(`Cartella "${cognome} ${nome}" non trovata — upload nella cartella principale`, 'info');
-  return DRIVE_CONTRATTI_FOLDER;
+  // Crea cartella automaticamente
+  return await creaCartellaDrive(`${cognome} ${nome}`, DRIVE_CONTRATTI_FOLDER);
 }
 
 async function trovaCreaCartellaDocumento(cognome, nome) {
@@ -2729,8 +2730,7 @@ async function trovaCreaCartellaDocumento(cognome, nome) {
     f.name.toUpperCase().includes(nome.toUpperCase())
   );
   if (cartella) return cartella.id;
-  showToast(`Cartella "${cognome} ${nome}" non trovata — upload nella cartella principale`, 'info');
-  return DRIVE_DOCS_FOLDER;
+  return await creaCartellaDrive(`${cognome} ${nome}`, DRIVE_DOCS_FOLDER);
 }
 
 async function creaCartellaDrive(nome, parentId) {
@@ -2834,7 +2834,10 @@ async function caricaContrattiComp(ragioneSociale, compId) {
             <span style="font-size:10px;font-weight:600;color:${stato.color};background:${stato.bg};padding:2px 7px;border-radius:10px">${stato.icon} ${stato.label}</span>
           </div>
         </div>
-        <button class="btn-export" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <a href="https://drive.google.com/file/d/${f.id}/view" target="_blank" class="btn-export" style="font-size:11px;padding:4px 10px;text-decoration:none">👁 Visualizza</a>
+          <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+        </div>
       </div>`;
     }).join('');
   } catch(e) { box.innerHTML = `<span style="color:var(--text3);font-size:12px">Errore: ${e.message}</span>`; }
@@ -2846,32 +2849,42 @@ async function caricaDocumentiContatto(cognome, nome, contactId) {
   if (!box) return;
   box.innerHTML = '<span style="color:var(--text3);font-size:12px">🔍 Ricerca documenti in corso…</span>';
   try {
-    const folderId = await trovaCreaCartellaDocumento(cognome, nome).catch(() => null);
-    if (!folderId) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessuna cartella documenti trovata</span>'; return; }
-    const q2 = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-    const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
+    // Cerca nella cartella principale documenti filtrando per nome del contatto
+    const q = encodeURIComponent(`'${DRIVE_DOCS_FOLDER}' in parents and trashed=false`);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
       headers: { Authorization: 'Bearer ' + accessToken }
     });
-    const d2 = await r2.json();
-    const files = (d2.files||[]).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-    if (!files.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun documento caricato</span>'; return; }
+    const d = await r.json();
+    // Filtra solo i file che contengono il cognome o il nome
+    const files = (d.files||[]).filter(f =>
+      f.name.toLowerCase().endsWith('.pdf') &&
+      (f.name.toUpperCase().includes(cognome.toUpperCase()) || f.name.toUpperCase().includes(nome.toUpperCase()))
+    );
+
+    if (!files.length) {
+      box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun documento d\'identità trovato</span>';
+      return;
+    }
 
     function tipoDocLabel(name) {
       const n = name.toLowerCase();
-      if (n.startsWith('cie_')) return '🪪 Carta d\'identità';
-      if (n.startsWith('pas_')) return '📘 Passaporto';
-      if (n.startsWith('pat_')) return '🚗 Patente';
-      return '📄 Documento';
+      if (n.startsWith('cie') || n.includes('carta') || n.includes('identit')) return { label: "🪪 Carta d'identità", color: '#4a7ab5', bg: '#eef4ff' };
+      if (n.startsWith('pas') || n.includes('passport')) return { label: '📘 Passaporto', color: '#5a9a6a', bg: '#eaf4ef' };
+      if (n.startsWith('pat') || n.includes('patente')) return { label: '🚗 Patente di guida', color: '#b8860b', bg: '#fff8ec' };
+      return { label: '📄 Documento', color: '#6b6860', bg: 'var(--surface2)' };
     }
 
-    box.innerHTML = files.map(f => `
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:500;color:var(--text)">${tipoDocLabel(f.name)} — ${f.name}</div>
-          <div style="font-size:10px;color:var(--text3)">${new Date(f.modifiedTime).toLocaleDateString('it-IT')}</div>
+    box.innerHTML = files.map(f => {
+      const tipo = tipoDocLabel(f.name);
+      const viewUrl = `https://drive.google.com/file/d/${f.id}/view`;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:${tipo.bg};border:1px solid ${tipo.color}40;border-radius:6px;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:600;color:${tipo.color};flex:1">${tipo.label}</span>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <a href="${viewUrl}" target="_blank" class="btn-export" style="font-size:11px;padding:4px 10px;text-decoration:none">👁 Visualizza</a>
+          <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
         </div>
-        <button class="btn-export" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } catch(e) {
     box.innerHTML = `<span style="color:var(--text3);font-size:12px">Errore: ${e.message}</span>`;
   }
@@ -2938,9 +2951,12 @@ async function loadVerificaContratti() {
       <div class="kanban-card">
         <div class="kanban-card-folder">📁 ${item.folder}</div>
         <div class="kanban-card-name">${item.name}</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:4px;flex-wrap:wrap">
           <span style="font-size:10px;color:var(--text3)">${item.date}</span>
-          <button class="btn-export kanban-card-dl" onclick="downloadDriveFile('${item.id}','${item.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+          <div style="display:flex;gap:4px">
+            <a href="https://drive.google.com/file/d/${item.id}/view" target="_blank" class="btn-export kanban-card-dl" style="text-decoration:none">👁 Visualizza</a>
+            <button class="btn-export kanban-card-dl" onclick="downloadDriveFile('${item.id}','${item.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+          </div>
         </div>
       </div>`;
 
