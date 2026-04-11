@@ -607,6 +607,18 @@
   </div>
 </div>
 
+<!-- MODAL UPLOAD DOCUMENTO -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal" style="width:560px;max-width:95vw">
+    <div class="modal-title">↑ Carica documento</div>
+    <div id="uploadModalBody" style="display:flex;flex-direction:column;gap:16px"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeUploadModal()">Annulla</button>
+      <button class="btn-primary" id="uploadConfirmBtn" onclick="confirmUpload()">Carica su Drive</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL COMPAGNIA -->
 <div class="modal-overlay" id="compModal">
   <div class="modal" style="width:680px;max-width:95vw">
@@ -1593,16 +1605,20 @@ function renderDetail(c) {
     </div>
     ${c.codice_fiscale ? `
     <div class="section"><div class="section-title">Documenti</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn-secondary" style="display:flex;align-items:center;gap:8px;padding:10px 18px" onclick="downloadCU('${c.codice_fiscale}')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           CU 2025
         </button>
+        ${isAdmin ? `<button class="btn-new" style="font-size:12px;padding:8px 16px" onclick="openUploadModal('contatto','${c.cognome}','${c.nome}',${c.id})">↑ Carica documento</button>` : ''}
+      </div>
+      <div id="docs-box-${c.id}">
+        <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="caricaDocumentiContatto('${c.cognome}','${c.nome}',${c.id})">📂 Mostra documenti caricati</button>
       </div>
     </div>` : ''}
     ${isAdmin ? `
     <div class="section"><div class="section-title">Contratti</div>
-      <div style="margin-bottom:10px">
+      <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="cercaContrattiContatto('${c.cognome}','${c.nome}',${c.id})">
           📄 Cerca contratti su Drive
         </button>
@@ -2341,6 +2357,16 @@ function renderCompDetail(c) {
       </div>
 
     </div>
+
+    ${isAdmin ? `
+    <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
+      <div class="section-title" style="margin-bottom:12px">Contratti</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn-new" style="font-size:12px;padding:8px 14px" onclick="openUploadModalComp('${c.ragione_sociale}',${c.id})">↑ Carica contratto</button>
+        <button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="caricaContrattiComp('${c.ragione_sociale}',${c.id})">📄 Mostra contratti</button>
+      </div>
+      <div id="comp-contratti-box-${c.id}"></div>
+    </div>` : ''}
   </div>`;
 }
 
@@ -2442,6 +2468,371 @@ async function saveCompagnia() {
 }
 
 document.getElementById('compModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeCompModal(); });
+document.getElementById('uploadModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeUploadModal(); });
+
+// ─── UPLOAD DOCUMENTI SU DRIVE ────────────────────────────────────────────────
+const DRIVE_DOCS_FOLDER = '1RvnDZ3sTr5Z7Mi6wrzXWA9DfexvBVv7g'; // Documenti d'identità
+
+let uploadContext = {}; // { tipo, cognome, nome, contactId, tipoDoc }
+
+function openUploadModal(source, cognome, nome, contactId) {
+  uploadContext = { source, cognome, nome, contactId };
+  const body = document.getElementById('uploadModalBody');
+  body.innerHTML = `
+    <div>
+      <div class="modal-label" style="margin-bottom:8px">Tipo documento da caricare</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.15s" id="upload-opt-contratto">
+          <input type="radio" name="uploadTipo" value="contratto" onchange="onUploadTipoChange(this)">
+          <div>
+            <div style="font-weight:600;font-size:13px">📋 Contratto</div>
+            <div style="font-size:11px;color:var(--text3)">Nome atteso: Contratto_${cognome} ${nome}_[suffisso].pdf</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.15s" id="upload-opt-documento">
+          <input type="radio" name="uploadTipo" value="documento" onchange="onUploadTipoChange(this)">
+          <div>
+            <div style="font-weight:600;font-size:13px">🪪 Documento d'identità</div>
+            <div style="font-size:11px;color:var(--text3)">Carta d'identità, Passaporto o Patente</div>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div id="upload-doc-tipo-wrap" style="display:none">
+      <div class="modal-label" style="margin-bottom:8px">Tipo documento d'identità</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px">
+          <input type="radio" name="tipoDoc" value="Cie" onchange="onTipoDocChange(this)"> 🪪 Carta d'identità
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px">
+          <input type="radio" name="tipoDoc" value="Pas" onchange="onTipoDocChange(this)"> 📘 Passaporto
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px">
+          <input type="radio" name="tipoDoc" value="Pat" onchange="onTipoDocChange(this)"> 🚗 Patente di guida
+        </label>
+      </div>
+    </div>
+    <div id="upload-file-wrap" style="display:none">
+      <div class="modal-label" style="margin-bottom:6px">Seleziona file PDF</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px" id="upload-nome-atteso"></div>
+      <input type="file" id="uploadFileInput" accept=".pdf,application/pdf" style="display:none" onchange="onFileSelected(this)">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn-export" onclick="document.getElementById('uploadFileInput').click()">📂 Scegli file PDF</button>
+        <span id="upload-file-name" style="font-size:12px;color:var(--text2)">Nessun file selezionato</span>
+      </div>
+      <div id="upload-file-error" style="margin-top:8px;font-size:12px;color:var(--cessato);display:none"></div>
+      <div id="upload-file-ok" style="margin-top:8px;font-size:12px;color:var(--attivo);display:none"></div>
+    </div>`;
+  document.getElementById('uploadConfirmBtn').disabled = true;
+  document.getElementById('uploadModal').classList.add('open');
+}
+
+function closeUploadModal() {
+  document.getElementById('uploadModal').classList.remove('open');
+  uploadContext = {};
+}
+
+function onUploadTipoChange(el) {
+  const tipo = el.value;
+  uploadContext.tipo = tipo;
+  uploadContext.tipoDoc = null;
+  const docWrap = document.getElementById('upload-doc-tipo-wrap');
+  const fileWrap = document.getElementById('upload-file-wrap');
+  docWrap.style.display = tipo === 'documento' ? 'block' : 'none';
+  fileWrap.style.display = tipo === 'contratto' ? 'block' : 'none';
+  if (tipo === 'contratto') aggiornaUploadNomeAtteso();
+  document.getElementById('uploadConfirmBtn').disabled = true;
+}
+
+function onTipoDocChange(el) {
+  uploadContext.tipoDoc = el.value;
+  document.getElementById('upload-file-wrap').style.display = 'block';
+  aggiornaUploadNomeAtteso();
+  document.getElementById('uploadConfirmBtn').disabled = true;
+}
+
+function nomeAttesoFile() {
+  const { tipo, tipoDoc, cognome, nome } = uploadContext;
+  if (tipo === 'contratto') return `Contratto_${cognome} ${nome}_[redatto|_fs|_fr|_firmato].pdf`;
+  if (tipo === 'documento' && tipoDoc) return `${tipoDoc}_${cognome} ${nome}.pdf`;
+  return '';
+}
+
+function aggiornaUploadNomeAtteso() {
+  const el = document.getElementById('upload-nome-atteso');
+  if (el) el.innerHTML = `<b>Nome atteso:</b> ${nomeAttesoFile()}`;
+}
+
+function validaNomeFile(fileName) {
+  const { tipo, tipoDoc, cognome, nome } = uploadContext;
+  const n = fileName.toLowerCase().replace('.pdf','');
+  const cogLow = cognome.toLowerCase();
+  const nomLow = nome.toLowerCase();
+
+  if (tipo === 'contratto') {
+    if (!n.startsWith('contratto_')) return { ok: false, msg: 'Il file deve iniziare con "Contratto_"' };
+    if (!n.includes(cogLow) && !n.includes(nomLow)) return { ok: false, msg: `Il nome file deve contenere il cognome "${cognome}" o il nome "${nome}"` };
+    const suffissiValidi = ['_redatto','_fs','_fr','_firmato'];
+    const hasSuffisso = suffissiValidi.some(s => n.endsWith(s));
+    if (!hasSuffisso) return { ok: false, msg: 'Suffisso mancante. Aggiungere: _redatto, _fs, _fr o _firmato prima di .pdf' };
+    return { ok: true, msg: '✓ Nome file corretto' };
+  }
+
+  if (tipo === 'documento') {
+    const prefissi = { Cie: 'cie_', Pas: 'pas_', Pat: 'pat_' };
+    const prefisso = prefissi[tipoDoc];
+    if (!n.startsWith(prefisso)) return { ok: false, msg: `Il file deve iniziare con "${prefisso.toUpperCase()}"` };
+    if (!n.includes(cogLow) && !n.includes(nomLow)) return { ok: false, msg: `Il nome file deve contenere il cognome "${cognome}" o il nome "${nome}"` };
+    return { ok: true, msg: '✓ Nome file corretto' };
+  }
+
+  return { ok: false, msg: 'Seleziona prima il tipo di documento' };
+}
+
+function onFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const nameEl = document.getElementById('upload-file-name');
+  const errEl = document.getElementById('upload-file-error');
+  const okEl = document.getElementById('upload-file-ok');
+  nameEl.textContent = file.name;
+  const validazione = validaNomeFile(file.name);
+  if (validazione.ok) {
+    errEl.style.display = 'none';
+    okEl.style.display = 'block';
+    okEl.textContent = validazione.msg;
+    document.getElementById('uploadConfirmBtn').disabled = false;
+  } else {
+    okEl.style.display = 'none';
+    errEl.style.display = 'block';
+    errEl.textContent = '⚠ ' + validazione.msg;
+    document.getElementById('uploadConfirmBtn').disabled = true;
+  }
+}
+
+async function confirmUpload() {
+  const file = document.getElementById('uploadFileInput').files[0];
+  if (!file) return;
+  const { tipo, tipoDoc, cognome, nome, contactId } = uploadContext;
+  document.getElementById('uploadConfirmBtn').disabled = true;
+  document.getElementById('uploadConfirmBtn').textContent = 'Caricamento…';
+
+  try {
+    let folderId;
+    if (source === 'compagnia') {
+      folderId = await trovaCreaCartellaNome(uploadContext.ragioneSociale, DRIVE_CONTRATTI_FOLDER);
+    } else if (tipo === 'contratto') {
+      folderId = await trovaCreaCartellaContatto(cognome, nome);
+    } else {
+      folderId = await trovaCreaCartellaDocumento(cognome, nome);
+    }
+
+    // Upload file su Drive
+    const metadata = { name: file.name, parents: [folderId] };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', file);
+
+    const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken },
+      body: form
+    });
+    if (!r.ok) throw new Error('Errore upload: ' + r.status);
+
+    closeUploadModal();
+    showToast('Documento caricato su Drive!', 'success');
+
+    // Aggiorna la lista documenti/contratti
+    if (source === 'compagnia') caricaContrattiComp(uploadContext.ragioneSociale, uploadContext.compId);
+    else if (tipo === 'contratto') cercaContrattiContatto(cognome, nome, contactId);
+    else caricaDocumentiContatto(cognome, nome, contactId);
+
+  } catch(e) {
+    showToast('Errore: ' + e.message, 'error');
+    document.getElementById('uploadConfirmBtn').disabled = false;
+    document.getElementById('uploadConfirmBtn').textContent = 'Carica su Drive';
+  }
+}
+
+async function trovaCreaCartellaNome(nome, parentId) {
+  const q = encodeURIComponent(`'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  const d = await r.json();
+  const cartella = (d.files||[]).find(f => f.name.toUpperCase().includes(nome.toUpperCase().substring(0,8)));
+  if (cartella) return cartella.id;
+  return await creaCartellaDrive(nome, parentId);
+}
+
+async function trovaCreaCartellaContatto(cognome, nome) {
+  // Cerca cartella nominativo in cartella contratti
+  const nomiCercati = [`${cognome} ${nome}`, `${nome} ${cognome}`].map(s => s.toUpperCase());
+  const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  const d = await r.json();
+  const cartella = (d.files||[]).find(f => nomiCercati.some(n => f.name.toUpperCase().includes(cognome.toUpperCase())));
+  if (cartella) return cartella.id;
+  // Crea cartella
+  return await creaCartellaDrive(`${cognome} ${nome}`, DRIVE_CONTRATTI_FOLDER);
+}
+
+async function trovaCreaCartellaDocumento(cognome, nome) {
+  const nomiCercati = [`${cognome} ${nome}`, `${nome} ${cognome}`].map(s => s.toUpperCase());
+  const q = encodeURIComponent(`'${DRIVE_DOCS_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  const d = await r.json();
+  const cartella = (d.files||[]).find(f => nomiCercati.some(n => f.name.toUpperCase().includes(cognome.toUpperCase())));
+  if (cartella) return cartella.id;
+  return await creaCartellaDrive(`${cognome} ${nome}`, DRIVE_DOCS_FOLDER);
+}
+
+async function creaCartellaDrive(nome, parentId) {
+  const r = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nome.toUpperCase(), mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
+  });
+  if (!r.ok) throw new Error('Errore creazione cartella: ' + r.status);
+  const d = await r.json();
+  showToast(`Cartella "${nome}" creata su Drive`, 'info');
+  return d.id;
+}
+
+function openUploadModalComp(ragioneSociale, compId) {
+  uploadContext = { source: 'compagnia', ragioneSociale, compId, tipo: 'contratto' };
+  const body = document.getElementById('uploadModalBody');
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
+      📋 Caricamento contratto per: <b>${ragioneSociale}</b>
+    </div>
+    <div>
+      <div class="modal-label" style="margin-bottom:6px">Seleziona file PDF</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px"><b>Nome atteso:</b> Contratto_${ragioneSociale}_[redatto|_fs|_fr|_firmato].pdf</div>
+      <input type="file" id="uploadFileInput" accept=".pdf,application/pdf" style="display:none" onchange="onFileSelectedComp(this)">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn-export" onclick="document.getElementById('uploadFileInput').click()">📂 Scegli file PDF</button>
+        <span id="upload-file-name" style="font-size:12px;color:var(--text2)">Nessun file selezionato</span>
+      </div>
+      <div id="upload-file-error" style="margin-top:8px;font-size:12px;color:var(--cessato);display:none"></div>
+      <div id="upload-file-ok" style="margin-top:8px;font-size:12px;color:var(--attivo);display:none"></div>
+    </div>`;
+  document.getElementById('uploadConfirmBtn').disabled = true;
+  document.getElementById('uploadModal').classList.add('open');
+}
+
+function onFileSelectedComp(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const nameEl = document.getElementById('upload-file-name');
+  const errEl = document.getElementById('upload-file-error');
+  const okEl = document.getElementById('upload-file-ok');
+  const { ragioneSociale } = uploadContext;
+  nameEl.textContent = file.name;
+  const n = file.name.toLowerCase().replace('.pdf','');
+  const suffissiValidi = ['_redatto','_fs','_fr','_firmato'];
+  const hasSuffisso = suffissiValidi.some(s => n.endsWith(s));
+  const hasNome = n.includes(ragioneSociale.toLowerCase().substring(0,6));
+  if (!n.startsWith('contratto_')) {
+    errEl.textContent = '⚠ Il file deve iniziare con "Contratto_"'; errEl.style.display='block'; okEl.style.display='none';
+    document.getElementById('uploadConfirmBtn').disabled = true;
+  } else if (!hasSuffisso) {
+    errEl.textContent = '⚠ Suffisso mancante: aggiungere _redatto, _fs, _fr o _firmato'; errEl.style.display='block'; okEl.style.display='none';
+    document.getElementById('uploadConfirmBtn').disabled = true;
+  } else {
+    errEl.style.display='none'; okEl.textContent='✓ Nome file corretto'; okEl.style.display='block';
+    document.getElementById('uploadConfirmBtn').disabled = false;
+  }
+}
+
+async function caricaContrattiComp(ragioneSociale, compId) {
+  const boxId = `comp-contratti-box-${compId}`;
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.innerHTML = '<span style="color:var(--text3);font-size:12px">🔍 Ricerca in corso…</span>';
+  try {
+    // Cerca cartella nella cartella contratti
+    const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const d = await r.json();
+    const cartella = (d.files||[]).find(f => f.name.toUpperCase().includes(ragioneSociale.toUpperCase().substring(0,8)));
+    if (!cartella) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessuna cartella trovata per questa compagnia</span>'; return; }
+    const q2 = encodeURIComponent(`'${cartella.id}' in parents and trashed=false`);
+    const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,mimeType,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const d2 = await r2.json();
+    const files = (d2.files||[]).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (!files.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun contratto trovato</span>'; return; }
+
+    function statoFirma(nome) {
+      const n = nome.toLowerCase();
+      if (n.includes('_firmato') || (n.includes('_fr') && n.includes('_fs'))) return { label:'DEFINITIVO', color:'#2e7d52', bg:'#eaf4ef', icon:'✅' };
+      if (n.includes('_fr')) return { label:'FIRMA RESEXTENSA', color:'#b8860b', bg:'#fff8ec', icon:'🟠' };
+      if (n.includes('_fs')) return { label:'FIRMA SCRITTURATO/A', color:'#4a7ab5', bg:'#eef4ff', icon:'🟡' };
+      return { label:'REDATTO', color:'#6b6860', bg:'var(--surface2)', icon:'🔵' };
+    }
+
+    box.innerHTML = files.map(f => {
+      const stato = statoFirma(f.name);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:500;color:var(--text)">${f.name}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:3px">
+            <span style="font-size:10px;color:var(--text3)">${new Date(f.modifiedTime).toLocaleDateString('it-IT')}</span>
+            <span style="font-size:10px;font-weight:600;color:${stato.color};background:${stato.bg};padding:2px 7px;border-radius:10px">${stato.icon} ${stato.label}</span>
+          </div>
+        </div>
+        <button class="btn-export" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+      </div>`;
+    }).join('');
+  } catch(e) { box.innerHTML = `<span style="color:var(--text3);font-size:12px">Errore: ${e.message}</span>`; }
+}
+
+async function caricaDocumentiContatto(cognome, nome, contactId) {
+  const boxId = `docs-box-${contactId}`;
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.innerHTML = '<span style="color:var(--text3);font-size:12px">🔍 Ricerca documenti in corso…</span>';
+  try {
+    const folderId = await trovaCreaCartellaDocumento(cognome, nome).catch(() => null);
+    if (!folderId) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessuna cartella documenti trovata</span>'; return; }
+    const q2 = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+    const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const d2 = await r2.json();
+    const files = (d2.files||[]).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (!files.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun documento caricato</span>'; return; }
+
+    function tipoDocLabel(name) {
+      const n = name.toLowerCase();
+      if (n.startsWith('cie_')) return '🪪 Carta d\'identità';
+      if (n.startsWith('pas_')) return '📘 Passaporto';
+      if (n.startsWith('pat_')) return '🚗 Patente';
+      return '📄 Documento';
+    }
+
+    box.innerHTML = files.map(f => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:500;color:var(--text)">${tipoDocLabel(f.name)} — ${f.name}</div>
+          <div style="font-size:10px;color:var(--text3)">${new Date(f.modifiedTime).toLocaleDateString('it-IT')}</div>
+        </div>
+        <button class="btn-export" style="font-size:11px;padding:4px 10px;flex-shrink:0" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+      </div>`).join('');
+  } catch(e) {
+    box.innerHTML = `<span style="color:var(--text3);font-size:12px">Errore: ${e.message}</span>`;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─── VERIFICA CONTRATTI ───────────────────────────────────────────────────────
 async function loadVerificaContratti() {
