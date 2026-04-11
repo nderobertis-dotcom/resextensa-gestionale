@@ -253,6 +253,35 @@
   /* Modal spettacoli */
   .modal-spett { width: 620px; }
 
+  /* ── HOME PAGE ── */
+  .home-nav-btn {
+    display:flex; align-items:center; gap:12px; width:100%;
+    background:none; border:1px solid transparent; border-radius:8px;
+    padding:10px 12px; cursor:pointer; text-align:left; transition:all 0.15s;
+  }
+  .home-nav-btn:hover { background:var(--surface2); border-color:var(--border2); }
+  .home-nav-icon { font-size:20px; flex-shrink:0; }
+  .home-nav-label { font-size:13px; font-weight:600; color:var(--text); }
+  .home-nav-sub { font-size:10px; color:var(--text3); margin-top:1px; }
+  .home-stat-row { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text2); padding:4px 0; border-bottom:1px solid var(--border); }
+  .home-stat-val { font-weight:700; color:var(--accent); font-family:'DM Mono',monospace; font-size:13px; }
+  .home-cards-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:20px; max-width:900px; }
+  .home-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:24px; cursor:pointer; transition:all 0.2s;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .home-card:hover { border-color:var(--accent); box-shadow:0 4px 16px rgba(138,109,59,0.12); transform:translateY(-2px); }
+  .home-card-icon { font-size:36px; line-height:1; }
+  .home-card-title { font-family:'DM Serif Display',serif; font-size:20px; color:var(--accent); }
+  .home-card-desc { font-size:12px; color:var(--text2); line-height:1.6; flex:1; }
+  .home-card-footer { font-size:11px; color:var(--text3); font-family:'DM Mono',monospace; padding-top:8px; border-top:1px solid var(--border); }
+  .home-bday-banner { margin-top:16px; padding:10px 16px; border-radius:8px; background:var(--surface); border:1px solid var(--border); font-size:13px; color:var(--text2); display:none; }
+  .home-bday-banner.today { background:var(--attivo-bg); border-color:var(--attivo); color:var(--attivo); }
+  .home-bday-banner.show { display:block; }
+  @media(max-width:900px) { .home-cards-grid { grid-template-columns:1fr; } #home-sidebar { width:200px !important; min-width:200px !important; } }
+  @media(max-width:600px) { #panel-home { flex-direction:column !important; } #home-sidebar { width:100% !important; min-width:100% !important; border-right:none !important; border-bottom:1px solid var(--border) !important; padding:12px !important; } .home-cards-grid { grid-template-columns:1fr; } }
+
   /* ── VERIFICA CONTRATTI KANBAN ── */
   .kanban-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
   .kanban-title { font-family:'DM Serif Display',serif; font-size:26px; color:var(--text); }
@@ -412,6 +441,103 @@
     <button class="tab-btn" id="tab-contratti" onclick="switchTab('contratti')">
       📋 Verifica Contratti
     </button>
+  </div>
+
+  <!-- TAB NAVIGATION -->
+  <div class="tab-nav">
+    <button class="tab-btn active" id="tab-home" onclick="switchTab('home')">
+      🏠 Home
+    </button>
+    <button class="tab-btn" id="tab-rubrica" onclick="switchTab('rubrica')">
+      👥 Rubrica
+    </button>
+    <button class="tab-btn" id="tab-spettacoli" onclick="switchTab('spettacoli')">
+      <img src="resextensa_logo.png" style="height:18px;width:auto;vertical-align:middle;margin-right:4px" alt=""> Spettacoli & Calendario
+    </button>
+    <button class="tab-btn" id="tab-compagnie" onclick="switchTab('compagnie')">
+      🏢 Compagnie
+    </button>
+    <button class="tab-btn" id="tab-contratti" onclick="switchTab('contratti')">
+      📋 Verifica Contratti
+    </button>
+  </div>
+
+  <!-- TAB HOME -->
+  <div id="panel-home" style="display:flex;height:calc(100vh - 128px);overflow:hidden">
+
+    <!-- Sidebar home -->
+    <div id="home-sidebar" style="width:260px;min-width:260px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;padding:24px 16px;gap:12px;overflow-y:auto">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:4px">Navigazione</div>
+      <button class="home-nav-btn" onclick="switchTab('rubrica')">
+        <span class="home-nav-icon">👥</span>
+        <div><div class="home-nav-label">Rubrica</div><div class="home-nav-sub">Componenti del team</div></div>
+      </button>
+      <button class="home-nav-btn" onclick="switchTab('spettacoli')">
+        <span class="home-nav-icon">🎭</span>
+        <div><div class="home-nav-label">Spettacoli</div><div class="home-nav-sub">Calendario e rappresentazioni</div></div>
+      </button>
+      <button class="home-nav-btn" onclick="switchTab('compagnie')">
+        <span class="home-nav-icon">🏢</span>
+        <div><div class="home-nav-label">Compagnie</div><div class="home-nav-sub">Partner e produzioni</div></div>
+      </button>
+      <button class="home-nav-btn" onclick="switchTab('contratti')">
+        <span class="home-nav-icon">📋</span>
+        <div><div class="home-nav-label">Verifica Contratti</div><div class="home-nav-sub">Stato firme per nominativo</div></div>
+      </button>
+
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-top:12px;margin-bottom:4px">Statistiche</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="home-stat-row"><span>👥 Componenti</span><span class="home-stat-val" id="hs-tot">—</span></div>
+        <div class="home-stat-row"><span>✅ Attivi</span><span class="home-stat-val" id="hs-attivi">—</span></div>
+        <div class="home-stat-row"><span>🎭 Spettacoli</span><span class="home-stat-val" id="hs-spett">—</span></div>
+        <div class="home-stat-row"><span>♂ Maschi</span><span class="home-stat-val" id="hs-m">—</span></div>
+        <div class="home-stat-row"><span>♀ Femmine</span><span class="home-stat-val" id="hs-f">—</span></div>
+        <div class="home-stat-row"><span>🟢 Under 25</span><span class="home-stat-val" id="hs-u25">—</span></div>
+        <div class="home-stat-row"><span>🔵 Over 35</span><span class="home-stat-val" id="hs-o35">—</span></div>
+      </div>
+    </div>
+
+    <!-- Main home content -->
+    <div style="flex:1;overflow-y:auto;background:var(--bg);padding:40px 48px">
+      <div id="home-welcome" style="margin-bottom:40px">
+        <div style="font-family:'DM Serif Display',serif;font-size:36px;color:var(--accent);line-height:1.2">Benvenuto/a,<br><span id="home-username" style="color:var(--text)">…</span></div>
+        <div style="color:var(--text2);font-size:14px;margin-top:8px" id="home-datetime"></div>
+        <div id="home-bday-banner"></div>
+      </div>
+
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:16px">Accesso rapido</div>
+      <div class="home-cards-grid">
+
+        <div class="home-card" onclick="switchTab('rubrica')">
+          <div class="home-card-icon">👥</div>
+          <div class="home-card-title">Rubrica</div>
+          <div class="home-card-desc">Gestisci i componenti del team: anagrafica, dati bancari, codice fiscale, documenti e contratti. Ricerca avanzata con filtri per spettacolo, stato e incarico.</div>
+          <div class="home-card-footer" id="hc-rubrica">— componenti</div>
+        </div>
+
+        <div class="home-card" onclick="switchTab('spettacoli')">
+          <div class="home-card-icon"><img src="resextensa_logo.png" style="height:36px;width:auto" alt=""></div>
+          <div class="home-card-title">Spettacoli & Calendario</div>
+          <div class="home-card-desc">Tutti gli spettacoli in produzione con i componenti assegnati. Calendario rappresentazioni in vista lista o griglia mensile, con data, luogo e teatro.</div>
+          <div class="home-card-footer" id="hc-spettacoli">— spettacoli</div>
+        </div>
+
+        <div class="home-card" onclick="switchTab('compagnie')">
+          <div class="home-card-icon">🏢</div>
+          <div class="home-card-title">Compagnie</div>
+          <div class="home-card-desc">Rubrica delle compagnie teatrali partner. Dati fiscali, sedi legale e organizzativa, legale rappresentante e referente operativo.</div>
+          <div class="home-card-footer" id="hc-compagnie">— compagnie</div>
+        </div>
+
+        <div class="home-card" onclick="switchTab('contratti')">
+          <div class="home-card-icon">📋</div>
+          <div class="home-card-title">Verifica Contratti</div>
+          <div class="home-card-desc">Vista Kanban di tutti i contratti su Google Drive, distribuiti per stato: Redatto, Firma Scritturato/a, Firma Resextensa, Definitivo.</div>
+          <div class="home-card-footer" id="hc-contratti">Visualizza →</div>
+        </div>
+
+      </div>
+    </div>
   </div>
 
   <!-- TAB RUBRICA -->
@@ -742,6 +868,7 @@ window.onload = () => {
       fetchUserEmail().then(() => {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('appScreen').style.display = 'block';
+        switchTab('home');
         loadFromSheets();
       });
       return;
@@ -754,6 +881,7 @@ window.onload = () => {
     fetchUserEmail().then(() => {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appScreen').style.display = 'block';
+      switchTab('home');
       loadFromSheets();
     });
   }
@@ -893,6 +1021,9 @@ async function loadFromSheets() {
     // Aggiorna UI in base al ruolo
     updateHeaderForRole();
     populateFilters(); renderList(); updateStats();
+    // Aggiorna home con dati aggiornati
+    const hp = document.getElementById('panel-home');
+    if (hp && hp.style.display !== 'none') renderHome();
 
     if (userRole === 'member') {
       // I membri vedono subito la propria scheda
@@ -1708,10 +1839,11 @@ async function saveCalendarioToSheets() {
 }
 
 function switchTab(tab) {
-  ['rubrica','spettacoli','compagnie','contratti'].forEach(t => {
+  ['home','rubrica','spettacoli','compagnie','contratti'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.classList.toggle('active', t===tab);
   });
+  document.getElementById('panel-home').style.display = tab==='home' ? 'flex' : 'none';
   document.getElementById('panel-rubrica').style.display = tab==='rubrica' ? 'flex' : 'none';
   document.getElementById('panel-spettacoli').style.display = tab==='spettacoli' ? 'block' : 'none';
   document.getElementById('panel-compagnie').style.display = tab==='compagnie' ? 'flex' : 'none';
@@ -1719,6 +1851,58 @@ function switchTab(tab) {
   if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
   if (tab==='compagnie') loadCompagnie();
   if (tab==='contratti') loadVerificaContratti();
+  if (tab==='home') renderHome();
+}
+
+function renderHome() {
+  // Nome utente
+  const nameEl = document.getElementById('home-username');
+  if (nameEl) {
+    if (userRole === 'admin') {
+      const adminContact = contacts.find(c => c.email && c.email.toLowerCase() === userEmail);
+      nameEl.textContent = adminContact ? `${adminContact.nome} ${adminContact.cognome}` : userEmail;
+    } else {
+      const me = contacts.find(c => c.email && c.email.toLowerCase() === userEmail);
+      nameEl.textContent = me ? `${me.nome} ${me.cognome}` : userEmail;
+    }
+  }
+
+  // Data e ora
+  const dtEl = document.getElementById('home-datetime');
+  if (dtEl) {
+    const now = new Date();
+    const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+    const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+    dtEl.textContent = `${giorni[now.getDay()]} ${now.getDate()} ${mesi[now.getMonth()]} ${now.getFullYear()}`;
+  }
+
+  // Banner compleanno
+  const bday = getNextBirthdays();
+  const bdayBanner = document.getElementById('home-bday-banner');
+  if (bdayBanner && bday) {
+    bdayBanner.className = 'home-bday-banner show' + (bday.isToday ? ' today' : '');
+    bdayBanner.innerHTML = `🎂 <b>Prossimo compleanno${bday.isToday ? ' — OGGI!' : ':'}</b> ${bday.dayStr} — ${bday.names}`;
+  }
+
+  // Stats sidebar
+  const tot = contacts.length;
+  const attivi = contacts.filter(c=>c.stato==='ATTIVO').length;
+  const spett = allSpettacoli().length;
+  let m=0,f=0,u25=0,o35=0;
+  contacts.forEach(c => {
+    const s=sessoFromCF(c.codice_fiscale); if(s==='M')m++; if(s==='F')f++;
+    const e=etaFromCF(c.codice_fiscale); if(e!==null){if(e<25)u25++; if(e>35)o35++;}
+  });
+  ['tot','attivi','spett','m','f','u25','o35'].forEach((k,i) => {
+    const el = document.getElementById('hs-'+k);
+    if (el) el.textContent = [tot,attivi,spett,m,f,u25,o35][i];
+  });
+
+  // Cards footer
+  const hcR = document.getElementById('hc-rubrica');
+  if (hcR) hcR.textContent = `${tot} componenti · ${attivi} attivi`;
+  const hcS = document.getElementById('hc-spettacoli');
+  if (hcS) hcS.textContent = `${spett} spettacoli in produzione`;
 }
 
 function renderSpettacoli() {
