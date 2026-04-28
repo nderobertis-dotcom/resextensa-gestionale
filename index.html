@@ -847,13 +847,58 @@ const FIELDS = [
 ];
 
 let accessToken = null;
+let tokenExpiry = null; // timestamp ms scadenza token
 let userEmail = null;
-let userRole = null; // 'admin' | 'member' | null
+let userRole = null;
 let contacts = [];
 let selectedId = null;
 let editMode = false;
 let nextId = 1;
 let sheetRowMap = {};
+
+// Controlla se il token è scaduto o sta per scadere (entro 5 minuti)
+function isTokenExpired() {
+  if (!tokenExpiry) return true;
+  return Date.now() > tokenExpiry - 5 * 60 * 1000;
+}
+
+// Avvia timer che avvisa quando mancano 5 minuti alla scadenza
+function startTokenTimer() {
+  if (!tokenExpiry) return;
+  const msToWarning = tokenExpiry - 5 * 60 * 1000 - Date.now();
+  const msToExpiry = tokenExpiry - Date.now();
+  if (msToWarning > 0) {
+    setTimeout(() => {
+      showToast('⚠️ Sessione in scadenza tra 5 minuti — salva il lavoro e riaccedi', 'error');
+    }, msToWarning);
+  }
+  if (msToExpiry > 0) {
+    setTimeout(() => {
+      sessionStorage.removeItem('gtoken');
+      sessionStorage.removeItem('gtokenExpiry');
+      showToast('Sessione scaduta — effettua di nuovo il login', 'error');
+      setTimeout(() => {
+        document.getElementById('appScreen').style.display = 'none';
+        document.getElementById('loginScreen').style.display = 'flex';
+      }, 2000);
+    }, msToExpiry);
+  }
+}
+
+// Mostra avviso e forza nuovo login se il token è scaduto
+function checkTokenAndRefresh() {
+  if (isTokenExpired()) {
+    sessionStorage.removeItem('gtoken');
+    sessionStorage.removeItem('gtokenExpiry');
+    showToast('Sessione scaduta — effettua di nuovo il login', 'error');
+    setTimeout(() => {
+      document.getElementById('appScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+    }, 2000);
+    return false;
+  }
+  return true;
+}
 
 // ─── AMMINISTRATORI ───────────────────────────────────────────────────────────
 // Aggiungi qui le email degli amministratori che possono vedere e modificare tutto
@@ -872,10 +917,14 @@ window.onload = () => {
   if (hash && hash.includes('access_token')) {
     const params = new URLSearchParams(hash.substring(1));
     const token = params.get('access_token');
+    const expiresIn = parseInt(params.get('expires_in') || '3600');
     if (token) {
       accessToken = token;
+      tokenExpiry = Date.now() + expiresIn * 1000;
       sessionStorage.setItem('gtoken', token);
+      sessionStorage.setItem('gtokenExpiry', tokenExpiry.toString());
       history.replaceState(null, '', window.location.pathname);
+      startTokenTimer();
       fetchUserEmail().then(() => {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('appScreen').style.display = 'block';
@@ -887,8 +936,16 @@ window.onload = () => {
   }
   // Controlla se c'è un token salvato in sessionStorage
   const saved = sessionStorage.getItem('gtoken');
+  const savedExpiry = sessionStorage.getItem('gtokenExpiry');
   if (saved) {
     accessToken = saved;
+    tokenExpiry = savedExpiry ? parseInt(savedExpiry) : Date.now() + 3600000;
+    if (isTokenExpired()) {
+      sessionStorage.removeItem('gtoken');
+      sessionStorage.removeItem('gtokenExpiry');
+      return;
+    }
+    startTokenTimer();
     fetchUserEmail().then(() => {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appScreen').style.display = 'block';
@@ -945,11 +1002,13 @@ function handleAuthClick() {
 
 // ─── SHEETS API ───────────────────────────────────────────────────────────────
 async function sheetsGet(range) {
+  if (!checkTokenAndRefresh()) throw new Error('Token scaduto');
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?key=${API_KEY}`;
   console.log('Fetching:', url);
   console.log('Token:', accessToken ? accessToken.substring(0,20)+'...' : 'NESSUN TOKEN');
   const r = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
   console.log('Response status:', r.status);
+  if (r.status === 401) { checkTokenAndRefresh(); throw new Error('Token scaduto — rieffettua il login'); }
   if (!r.ok) {
     const body = await r.text();
     console.error('Sheets error body:', body);
@@ -959,6 +1018,7 @@ async function sheetsGet(range) {
 }
 
 async function sheetsUpdate(range, values) {
+  if (!checkTokenAndRefresh()) throw new Error('Token scaduto');
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
   const r = await fetch(url, {
     method: 'PUT',
