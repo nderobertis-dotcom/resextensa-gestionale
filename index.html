@@ -3388,7 +3388,7 @@ const AGIB_RANGE = 'Agibilita!A2:O';
 const AGIB_COL = {
   id_pratica:0, data_invio:1, cognome_nome:2, data_dal:3, data_al:4,
   teatro:5, indirizzo_teatro:6, prima_assunzione:7,
-  codice_fiscale:8, residenza:9, tipo_doc:10, num_doc:11, stato:12
+  codice_fiscale:8, residenza:9, tipo_doc:10, num_doc:11, stato:12, destinatari:13
 };
 
 // EmailJS
@@ -3441,7 +3441,8 @@ async function loadAgibilita() {
         prima_assunzione: g('prima_assunzione'),
         codice_fiscale: g('codice_fiscale'), residenza: g('residenza'),
         tipo_doc: g('tipo_doc'), num_doc: g('num_doc'),
-        stato: g('stato') || 'BOZZA'
+        stato: g('stato') || 'BOZZA',
+        destinatari: g('destinatari')
       };
     });
 
@@ -3569,6 +3570,7 @@ function renderAgibDetail(p) {
       <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--accent)">${p.id}</span>
       <span style="color:var(--text3);font-size:12px">· ${fmtDataInvio(p.data_invio)} · ${p.righe.length} componenti</span>
       <span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:10px;background:${statoBg};color:${statoColor}">${stato}</span>
+      ${p.righe[0]?.destinatari ? `<span style="font-size:11px;color:var(--text3)">→ ${p.righe[0].destinatari}</span>` : ''}
     </div>
     <div class="topbar-right">
       ${isAdmin && isBozza ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
@@ -3818,13 +3820,17 @@ in allegato trovi la Comunicazione di Agibilità ${id} relativa ai componenti di
 Cordiali saluti,
 RESEXTENSA Ass. Culturale — Bari</textarea>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:4px">⚠️ Il PDF verrà allegato automaticamente. Dopo l'invio la pratica non sarà più modificabile.</div>`;
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">
+      ⚠️ Il client email si aprirà con i campi precompilati.<br>
+      <b>Ricorda di allegare il PDF</b> generato con il pulsante 📄 Genera PDF.<br>
+      La pratica verrà segnata automaticamente come INVIATA.
+    </div>`;
   document.getElementById('agibInvioModal').classList.add('open');
 }
 
 const DRIVE_AGIB_PDF_FOLDER = '1rLqk20UOaWNaJhIOo1A-5LAhbNidNqRL';
 
-const AGIB_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyF98naZGdVtCmEPhO-ygXyKqUIcY3BOb021yuv8c7R7KQzGMFv0SKXabc79KeArd6HhQ/exec';
+const AGIB_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzmPHJa2QjnYU7l2unk-FIcEdNQSuPbzCl0Jy-K7wSkVKnu3DJd_RbI957JTm6KRCpizA/exec';
 
 async function inviaAgibilita() {
   const id = document.getElementById('invio_pratica_id').value;
@@ -3833,31 +3839,27 @@ async function inviaAgibilita() {
   const message = document.getElementById('invio_message').value.trim();
 
   if (!toRaw) { showToast('Inserisci almeno un destinatario', 'error'); return; }
-  if (!subject) { showToast("Inserisci l'oggetto", 'error'); return; }
 
   const destinatari = toRaw.split(',').map(e=>e.trim()).filter(e=>e.includes('@'));
   if (!destinatari.length) { showToast('Nessun indirizzo email valido', 'error'); return; }
 
   document.getElementById('agibInvioModal').classList.remove('open');
-  showToast('Generazione PDF e invio in corso…', 'info');
 
+  // Apre client email con campi precompilati
+  const mailto = `mailto:${destinatari.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message + '\n\nIn allegato la Comunicazione di Agibilità ' + id + '.')}`;
+  window.open(mailto, '_blank');
+
+  // Segna come INVIATA e salva destinatari nel foglio
   try {
-    console.log('Chiamata script:', AGIB_SCRIPT_URL);
-    const params = new URLSearchParams({
-      idPratica: id,
-      destinatari: destinatari.join(','),
-      oggetto: subject,
-      messaggio: message
-    });
-    const url = AGIB_SCRIPT_URL + '?' + params.toString();
-    console.log('URL:', url);
-    const r = await fetch(url, { method: 'GET', mode: 'no-cors' });
-    console.log('Risposta script:', r.type, r.status);
-    // no-cors returns opaque response — assume success
     await aggiornaStatoPratica(id, 'INVIATA');
-    showToast('✅ PDF inviato — pratica segnata come INVIATA', 'success');
+    // Salva anche i destinatari nella colonna N (indice 13)
+    const righe = agibData.filter(r=>r.id_pratica===id);
+    for (const r of righe) {
+      await sheetsUpdate(`${AGIB_SHEET}!N${r.rowIdx}`, [[destinatari.join(', ')]]);
+    }
+    showToast(`✅ Client email aperto — allega il PDF e invia. Pratica segnata come INVIATA`, 'success');
   } catch(e) {
-    showToast('Errore invio: ' + e.message, 'error');
+    showToast('Errore salvataggio stato: ' + e.message, 'error');
   }
 }
 
