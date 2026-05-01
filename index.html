@@ -3824,7 +3824,7 @@ RESEXTENSA Ass. Culturale — Bari</textarea>
 
 const DRIVE_AGIB_PDF_FOLDER = '1rLqk20UOaWNaJhIOo1A-5LAhbNidNqRL';
 
-const AGIB_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwGZcV5674eSfvLWRxNqqVth5-EAgctzU6H5kAqoxEq1okkAsR-_3zuOVEI-0Pqna3RXQ/exec';
+const AGIB_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyF98naZGdVtCmEPhO-ygXyKqUIcY3BOb021yuv8c7R7KQzGMFv0SKXabc79KeArd6HhQ/exec';
 
 async function inviaAgibilita() {
   const id = document.getElementById('invio_pratica_id').value;
@@ -3842,17 +3842,17 @@ async function inviaAgibilita() {
   showToast('Generazione PDF e invio in corso…', 'info');
 
   try {
-    const r = await fetch(AGIB_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        idPratica: id,
-        destinatari: destinatari.join(','),
-        oggetto: subject,
-        messaggio: message
-      })
+    console.log('Chiamata script:', AGIB_SCRIPT_URL);
+    const params = new URLSearchParams({
+      idPratica: id,
+      destinatari: destinatari.join(','),
+      oggetto: subject,
+      messaggio: message
     });
+    const url = AGIB_SCRIPT_URL + '?' + params.toString();
+    console.log('URL:', url);
+    const r = await fetch(url, { method: 'GET', mode: 'no-cors' });
+    console.log('Risposta script:', r.type, r.status);
     // no-cors returns opaque response — assume success
     await aggiornaStatoPratica(id, 'INVIATA');
     showToast('✅ PDF inviato — pratica segnata come INVIATA', 'success');
