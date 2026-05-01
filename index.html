@@ -3539,12 +3539,6 @@ function renderAgibDetail(p) {
 function openAgibModal() {
   const idPratica = 'AG-' + String(nextAgibPratica).padStart(4,'0');
   const oggi = new Date().toLocaleDateString('it-IT');
-  const componentiOptions = contacts
-    .filter(c => c.cognome && c.stato === 'ATTIVO')
-    .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
-    .map(c => `<option value="${c.id}">${c.cognome} ${c.nome}</option>`)
-    .join('');
-  const teatriOptions = teatri.map(t => `<option value="${t.nome_struttura}" data-indirizzo="${t.indirizzo}, ${t.cap} ${t.citta} ${t.pr}">${t.nome_struttura} — ${t.citta}</option>`).join('');
 
   document.getElementById('agibModalTitle').textContent = `Nuova Pratica — ${idPratica}`;
   document.getElementById('agibModalBody').innerHTML = `
@@ -3558,11 +3552,8 @@ function openAgibModal() {
     <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
     <div id="agib_righe_wrap"></div>
     <button class="btn-export" style="margin-top:10px;font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:6px">I dati di prima assunzione (CF, residenza, documento) vengono rilevati automaticamente dalla rubrica.</div>
-    <script>
-      window._agibComponentiOpts = ${JSON.stringify(componentiOptions)};
-      window._agibTeatriOpts = ${JSON.stringify(teatriOptions)};
-    </sc` + `ript>`;
+    <div style="font-size:11px;color:var(--text3);margin-top:6px">I dati di prima assunzione (CF, residenza, documento) vengono rilevati automaticamente dalla rubrica.</div>`;
+  agibRigaCount = 0;
   aggiungiRigaAgib();
   document.getElementById('agibModal').classList.add('open');
 }
@@ -3577,10 +3568,12 @@ function aggiungiRigaAgib() {
   div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;position:relative';
   div.innerHTML = `
     <button onclick="document.getElementById('agib_riga_${idx}').remove()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>
+    <input type="hidden" id="agib_comp_id_${idx}" value="">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-      <div class="modal-field full" style="grid-column:1/-1">
-        <div class="modal-label">Componente</div>
-        <select class="edit-input" id="agib_comp_${idx}">${window._agibComponentiOpts||''}</select>
+      <div class="modal-field full" style="grid-column:1/-1;position:relative">
+        <div class="modal-label">Componente (digita almeno 3 lettere)</div>
+        <input type="text" class="edit-input" id="agib_comp_${idx}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
+        <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
       </div>
       <div class="modal-field">
         <div class="modal-label">Data dal</div>
@@ -3590,28 +3583,64 @@ function aggiungiRigaAgib() {
         <div class="modal-label">Data al</div>
         <input type="text" class="edit-input" id="agib_al_${idx}" placeholder="GG/MM/AAAA">
       </div>
-      <div class="modal-field">
-        <div class="modal-label">Teatro</div>
-        <select class="edit-input" id="agib_teatro_${idx}" onchange="onTeatroChange(${idx})">${window._agibTeatriOpts||''}<option value="_altro">Altro (inserisci manualmente)</option></select>
+      <div class="modal-field" style="position:relative">
+        <div class="modal-label">Teatro (digita almeno 3 lettere)</div>
+        <input type="text" class="edit-input" id="agib_teatro_${idx}" placeholder="Cerca teatro…" oninput="cercaTeatroAgib(${idx})" autocomplete="off">
+        <div id="agib_teatro_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
       </div>
-      <div class="modal-field full" id="agib_indirizzo_wrap_${idx}" style="grid-column:1/-1">
+      <div class="modal-field full" style="grid-column:2/-1">
         <div class="modal-label">Indirizzo teatro</div>
-        <input type="text" class="edit-input" id="agib_indirizzo_${idx}" placeholder="Compilato automaticamente dal teatro selezionato">
+        <input type="text" class="edit-input" id="agib_indirizzo_${idx}" placeholder="Compilato automaticamente">
       </div>
     </div>`;
   wrap.appendChild(div);
-  // Imposta indirizzo automatico al primo teatro
-  setTimeout(() => onTeatroChange(idx), 50);
 }
 
-function onTeatroChange(idx) {
-  const sel = document.getElementById(`agib_teatro_${idx}`);
-  const indir = document.getElementById(`agib_indirizzo_${idx}`);
-  if (!sel || !indir) return;
-  const opt = sel.options[sel.selectedIndex];
-  const indirizzo = opt?.getAttribute('data-indirizzo') || '';
-  if (sel.value !== '_altro') indir.value = indirizzo;
-  else indir.value = '';
+function cercaComponenteAgib(idx) {
+  const input = document.getElementById(`agib_comp_${idx}`);
+  const drop = document.getElementById(`agib_comp_drop_${idx}`);
+  const q = input.value.trim().toLowerCase();
+  if (q.length < 3) { drop.style.display='none'; return; }
+  const risultati = contacts
+    .filter(c => c.cognome && (`${c.cognome} ${c.nome}`.toLowerCase().includes(q) || `${c.nome} ${c.cognome}`.toLowerCase().includes(q)))
+    .slice(0, 12);
+  if (!risultati.length) { drop.style.display='none'; return; }
+  drop.innerHTML = risultati.map(c =>
+    `<div style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)" onmousedown="selezionaComponenteAgib(${idx},${c.id},'${(c.cognome+' '+c.nome).replace(/'/g,"\\'")}')">
+      ${c.cognome} ${c.nome} <span style="color:var(--text3);font-size:10px">${c.stato||''}</span>
+    </div>`
+  ).join('');
+  drop.style.display = 'block';
+}
+
+function selezionaComponenteAgib(idx, contactId, label) {
+  document.getElementById(`agib_comp_${idx}`).value = label;
+  document.getElementById(`agib_comp_id_${idx}`).value = contactId;
+  document.getElementById(`agib_comp_drop_${idx}`).style.display = 'none';
+}
+
+function cercaTeatroAgib(idx) {
+  const input = document.getElementById(`agib_teatro_${idx}`);
+  const drop = document.getElementById(`agib_teatro_drop_${idx}`);
+  const q = input.value.trim().toLowerCase();
+  if (q.length < 3) { drop.style.display='none'; return; }
+  const risultati = teatri.filter(t =>
+    t.nome_struttura.toLowerCase().includes(q) ||
+    (t.citta||'').toLowerCase().includes(q)
+  ).slice(0, 10);
+  if (!risultati.length) { drop.style.display='none'; return; }
+  drop.innerHTML = risultati.map(t =>
+    `<div style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)" onmousedown="selezionaTeatroAgib(${idx},'${t.nome_struttura.replace(/'/g,"\\'")}','${(t.indirizzo+', '+t.cap+' '+t.citta+' '+t.pr).replace(/'/g,"\\'")}')">
+      <b>${t.nome_struttura}</b> <span style="color:var(--text3);font-size:10px">${t.citta||''} ${t.pr||''}</span>
+    </div>`
+  ).join('');
+  drop.style.display = 'block';
+}
+
+function selezionaTeatroAgib(idx, nome, indirizzo) {
+  document.getElementById(`agib_teatro_${idx}`).value = nome;
+  document.getElementById(`agib_indirizzo_${idx}`).value = indirizzo;
+  document.getElementById(`agib_teatro_drop_${idx}`).style.display = 'none';
 }
 
 function closeAgibModal() {
@@ -3635,9 +3664,9 @@ async function saveAgib() {
 
   righeEls.forEach(div => {
     const idx = div.id.replace('agib_riga_','');
-    const compSel = document.getElementById(`agib_comp_${idx}`);
-    if (!compSel) return;
-    const contactId = parseInt(compSel.value);
+    const compIdEl = document.getElementById(`agib_comp_id_${idx}`);
+    if (!compIdEl || !compIdEl.value) return;
+    const contactId = parseInt(compIdEl.value);
     const c = contacts.find(x=>x.id===contactId);
     if (!c) return;
 
