@@ -446,6 +446,9 @@
     <button class="tab-btn" id="tab-teatri" onclick="switchTab('teatri')">
       🎭 Teatri
     </button>
+    <button class="tab-btn" id="tab-agibilita" onclick="switchTab('agibilita')">
+      📑 Agibilità
+    </button>
   </div>
 
   <!-- TAB HOME -->
@@ -469,6 +472,10 @@
       <button class="home-nav-btn" onclick="switchTab('teatri')">
         <span class="home-nav-icon">🎭</span>
         <div><div class="home-nav-label">Teatri</div><div class="home-nav-sub">Strutture e venue</div></div>
+      </button>
+      <button class="home-nav-btn" onclick="switchTab('agibilita')">
+        <span class="home-nav-icon">📑</span>
+        <div><div class="home-nav-label">Agibilità</div><div class="home-nav-sub">Comunicazioni INPS/ENPALS</div></div>
       </button>
       <button class="home-nav-btn" onclick="switchTab('contratti')">
         <span class="home-nav-icon">📋</span>
@@ -646,6 +653,47 @@
           <div class="empty-title">Seleziona un teatro</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- TAB AGIBILITÀ -->
+  <div id="panel-agibilita" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
+    <div class="section-stats-bar">
+      <div class="header-stats">
+        <div class="stat"><div class="stat-n" id="stat-agib-tot">—</div><div class="stat-l">Pratiche</div></div>
+        <div class="stat"><div class="stat-n" id="stat-agib-righe">—</div><div class="stat-l">Righe totali</div></div>
+        <div class="stat"><div class="stat-n" id="stat-agib-prima">—</div><div class="stat-l">Prime assunzioni</div></div>
+      </div>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
+      <div style="width:260px;min-width:260px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0">
+        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+          <div class="search-wrap" style="flex:1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="search" class="search-input" id="agibSearchInput" placeholder="Cerca pratica…" oninput="renderAgibList()">
+          </div>
+          <button class="btn-new" id="agib-add-btn" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="openAgibModal()">+ Nuova</button>
+        </div>
+        <div class="contact-list" id="agibList"></div>
+      </div>
+      <div id="agibDetail" style="flex:1;overflow-y:auto;background:var(--bg)">
+        <div class="empty-state">
+          <div class="empty-icon">📑</div>
+          <div class="empty-title">Seleziona una pratica</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUOVA PRATICA AGIBILITÀ -->
+<div class="modal-overlay" id="agibModal">
+  <div class="modal" style="width:700px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div class="modal-title" id="agibModalTitle">Nuova Comunicazione Agibilità</div>
+    <div id="agibModalBody"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeAgibModal()">Annulla</button>
+      <button class="btn-primary" onclick="saveAgib()">Salva su Sheets</button>
     </div>
   </div>
 </div>
@@ -1969,7 +2017,7 @@ async function saveCalendarioToSheets() {
 }
 
 function switchTab(tab) {
-  ['home','rubrica','spettacoli','compagnie','contratti','teatri'].forEach(t => {
+  ['home','rubrica','spettacoli','compagnie','contratti','teatri','agibilita'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.classList.toggle('active', t===tab);
   });
@@ -1979,10 +2027,12 @@ function switchTab(tab) {
   document.getElementById('panel-compagnie').style.display = tab==='compagnie' ? 'flex' : 'none';
   document.getElementById('panel-contratti').style.display = tab==='contratti' ? 'block' : 'none';
   document.getElementById('panel-teatri').style.display = tab==='teatri' ? 'flex' : 'none';
+  document.getElementById('panel-agibilita').style.display = tab==='agibilita' ? 'flex' : 'none';
   if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
   if (tab==='compagnie') loadCompagnie();
   if (tab==='contratti') loadVerificaContratti();
   if (tab==='teatri') loadTeatri();
+  if (tab==='agibilita') loadAgibilita();
   if (tab==='home') renderHome();
 }
 
@@ -3317,6 +3367,383 @@ async function sortAndSaveTeatri() {
     setSyncStatus('error', 'Errore');
     showToast('Errore: '+e.message, 'error');
   }
+}
+document.getElementById('agibModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeAgibModal(); });
+
+// ─── AGIBILITÀ ────────────────────────────────────────────────────────────────
+const AGIB_SHEET = 'Agibilita';
+const AGIB_RANGE = 'Agibilita!A2:N';
+const AGIB_COL = {
+  id_pratica:0, data_invio:1, cognome_nome:2, data_dal:3, data_al:4,
+  teatro:5, indirizzo_teatro:6, prima_assunzione:7,
+  codice_fiscale:8, residenza:9, tipo_doc:10, num_doc:11
+};
+
+// Colori per teatri (ciclo automatico)
+const TEATRO_COLORS = [
+  '#fff3e0','#e8f5e9','#e3f2fd','#fce4ec','#f3e5f5',
+  '#e0f7fa','#fff8e1','#f1f8e9','#fbe9e7','#e8eaf6'
+];
+const TEATRO_BORDER = [
+  '#ff9800','#4caf50','#2196f3','#e91e63','#9c27b0',
+  '#00bcd4','#ffc107','#8bc34a','#ff5722','#3f51b5'
+];
+
+let agibData = []; // righe raw dal foglio
+let agibPratiche = []; // pratiche raggruppate
+let selectedAgibId = null;
+let nextAgibPratica = 1;
+
+async function loadAgibilita() {
+  try {
+    const data = await sheetsGet(AGIB_RANGE);
+    const rows = data.values || [];
+    agibData = rows.filter(r => r[0]).map((r,i) => {
+      const g = k => (r[AGIB_COL[k]]||'').trim();
+      return {
+        rowIdx: i+2, id_pratica: g('id_pratica'), data_invio: g('data_invio'),
+        cognome_nome: g('cognome_nome'), data_dal: g('data_dal'), data_al: g('data_al'),
+        teatro: g('teatro'), indirizzo_teatro: g('indirizzo_teatro'),
+        prima_assunzione: g('prima_assunzione'),
+        codice_fiscale: g('codice_fiscale'), residenza: g('residenza'),
+        tipo_doc: g('tipo_doc'), num_doc: g('num_doc')
+      };
+    });
+
+    // Raggruppa per id_pratica
+    const map = {};
+    agibData.forEach(r => {
+      if (!map[r.id_pratica]) map[r.id_pratica] = { id: r.id_pratica, data_invio: r.data_invio, righe: [] };
+      map[r.id_pratica].righe.push(r);
+    });
+    agibPratiche = Object.values(map).sort((a,b) => b.id.localeCompare(a.id));
+
+    // Calcola prossimo ID pratica
+    if (agibPratiche.length) {
+      const lastNum = parseInt(agibPratiche[0].id.replace(/\D/g,'')) || 0;
+      nextAgibPratica = lastNum + 1;
+    }
+
+    renderAgibList();
+    updateAgibStats();
+  } catch(e) { showToast('Errore caricamento agibilità: ' + e.message, 'error'); }
+}
+
+function updateAgibStats() {
+  document.getElementById('stat-agib-tot').textContent = agibPratiche.length || '—';
+  document.getElementById('stat-agib-righe').textContent = agibData.length || '—';
+  document.getElementById('stat-agib-prima').textContent = agibData.filter(r=>r.prima_assunzione==='SI').length || '—';
+}
+
+function filteredAgib() {
+  const q = (document.getElementById('agibSearchInput')?.value||'').toLowerCase();
+  if (!q) return agibPratiche;
+  return agibPratiche.filter(p =>
+    p.id.toLowerCase().includes(q) ||
+    p.righe.some(r => r.cognome_nome.toLowerCase().includes(q) || r.teatro.toLowerCase().includes(q))
+  );
+}
+
+function renderAgibList() {
+  const list = filteredAgib();
+  const el = document.getElementById('agibList');
+  if (!el) return;
+  const isAdmin = userRole === 'admin';
+  const btn = document.getElementById('agib-add-btn');
+  if (btn) btn.style.display = isAdmin ? '' : 'none';
+
+  el.innerHTML = list.map(p => {
+    const active = p.id === selectedAgibId ? ' active' : '';
+    const teatri_unici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
+    return `<div class="contact-item${active}" onclick="selectAgib('${p.id}')">
+      <div class="avatar" style="background:var(--accent);color:#1a1200;font-size:10px;font-weight:700">${p.id.slice(-3)}</div>
+      <div class="contact-info">
+        <div class="contact-name">${p.id}</div>
+        <div class="contact-meta" style="font-size:10px">${p.data_invio||'—'} · ${p.righe.length} componenti</div>
+        <div class="contact-meta" style="font-size:9px;color:var(--text3)">${teatri_unici.slice(0,2).join(', ')}${teatri_unici.length>2?'…':''}</div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Nessuna pratica</div>';
+}
+
+function selectAgib(id) {
+  selectedAgibId = id;
+  const p = agibPratiche.find(x=>x.id===id);
+  renderAgibList();
+  if (p) renderAgibDetail(p);
+}
+
+function renderAgibDetail(p) {
+  const isAdmin = userRole === 'admin';
+
+  // Mappa colori per teatro
+  const teatriUnici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
+  const teatroColor = {};
+  const teatroBorder = {};
+  teatriUnici.forEach((t,i) => {
+    teatroColor[t] = TEATRO_COLORS[i % TEATRO_COLORS.length];
+    teatroBorder[t] = TEATRO_BORDER[i % TEATRO_BORDER.length];
+  });
+
+  const tableRows = p.righe.map(r => {
+    const bg = teatroColor[r.teatro] || 'var(--surface)';
+    const border = teatroBorder[r.teatro] || 'var(--border)';
+    const datiExtra = r.prima_assunzione === 'SI' ? `
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">
+        CF: ${r.codice_fiscale||'—'} · Res: ${r.residenza||'—'}<br>
+        Doc: ${r.tipo_doc||'—'} ${r.num_doc||'—'}
+      </div>` : '';
+    return `<tr style="background:${bg};border-left:3px solid ${border}">
+      <td style="padding:8px 10px;font-size:12px;font-weight:500">${r.cognome_nome}</td>
+      <td style="padding:8px 10px;font-size:11px">${r.data_dal||'—'} → ${r.data_al||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px">${r.teatro||'—'}<br><span style="font-size:10px;color:var(--text3)">${r.indirizzo_teatro||''}</span></td>
+      <td style="padding:8px 10px;text-align:center">
+        <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${r.prima_assunzione==='SI'?'#fce4ec':'#e8f5e9'};color:${r.prima_assunzione==='SI'?'#c62828':'#2e7d32'}">${r.prima_assunzione||'—'}</span>
+        ${datiExtra}
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Legenda teatri
+  const legenda = teatriUnici.map((t,i) =>
+    `<span style="font-size:11px;padding:3px 10px;border-radius:12px;background:${TEATRO_COLORS[i%10]};border:1px solid ${TEATRO_BORDER[i%10]};color:${TEATRO_BORDER[i%10]};font-weight:500">${t}</span>`
+  ).join(' ');
+
+  document.getElementById('agibDetail').innerHTML = `
+  <div class="topbar">
+    <div class="topbar-left">
+      <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--accent)">${p.id}</span>
+      <span style="color:var(--text3);font-size:12px">· ${p.data_invio||'—'} · ${p.righe.length} componenti</span>
+    </div>
+    <div class="topbar-right">
+      ${isAdmin ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
+      ${isAdmin ? `<button class="btn-danger" onclick="deletePratica('${p.id}')">✕ Elimina</button>` : ''}
+    </div>
+  </div>
+  <div style="padding:20px">
+    ${legenda ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${legenda}</div>` : ''}
+    <table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <thead>
+        <tr style="background:var(--surface);border-bottom:2px solid var(--border)">
+          <th style="padding:10px;text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Cognome Nome</th>
+          <th style="padding:10px;text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Periodo</th>
+          <th style="padding:10px;text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Teatro / Luogo</th>
+          <th style="padding:10px;text-align:center;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Prima assunzione</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </div>`;
+}
+
+function openAgibModal() {
+  const idPratica = 'AG-' + String(nextAgibPratica).padStart(4,'0');
+  const oggi = new Date().toLocaleDateString('it-IT');
+  const componentiOptions = contacts
+    .filter(c => c.cognome && c.stato === 'ATTIVO')
+    .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
+    .map(c => `<option value="${c.id}">${c.cognome} ${c.nome}</option>`)
+    .join('');
+  const teatriOptions = teatri.map(t => `<option value="${t.nome_struttura}" data-indirizzo="${t.indirizzo}, ${t.cap} ${t.citta} ${t.pr}">${t.nome_struttura} — ${t.citta}</option>`).join('');
+
+  document.getElementById('agibModalTitle').textContent = `Nuova Pratica — ${idPratica}`;
+  document.getElementById('agibModalBody').innerHTML = `
+    <input type="hidden" id="agib_id" value="${idPratica}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <div class="modal-field">
+        <div class="modal-label">Data invio</div>
+        <input type="text" class="edit-input" id="agib_data_invio" value="${oggi}" placeholder="GG/MM/AAAA">
+      </div>
+    </div>
+    <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
+    <div id="agib_righe_wrap"></div>
+    <button class="btn-export" style="margin-top:10px;font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px">I dati di prima assunzione (CF, residenza, documento) vengono rilevati automaticamente dalla rubrica.</div>
+    <script>
+      window._agibComponentiOpts = ${JSON.stringify(componentiOptions)};
+      window._agibTeatriOpts = ${JSON.stringify(teatriOptions)};
+    </sc` + `ript>`;
+  aggiungiRigaAgib();
+  document.getElementById('agibModal').classList.add('open');
+}
+
+let agibRigaCount = 0;
+function aggiungiRigaAgib() {
+  agibRigaCount++;
+  const idx = agibRigaCount;
+  const wrap = document.getElementById('agib_righe_wrap');
+  const div = document.createElement('div');
+  div.id = `agib_riga_${idx}`;
+  div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;position:relative';
+  div.innerHTML = `
+    <button onclick="document.getElementById('agib_riga_${idx}').remove()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div class="modal-field full" style="grid-column:1/-1">
+        <div class="modal-label">Componente</div>
+        <select class="edit-input" id="agib_comp_${idx}">${window._agibComponentiOpts||''}</select>
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Data dal</div>
+        <input type="text" class="edit-input" id="agib_dal_${idx}" placeholder="GG/MM/AAAA">
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Data al</div>
+        <input type="text" class="edit-input" id="agib_al_${idx}" placeholder="GG/MM/AAAA">
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Teatro</div>
+        <select class="edit-input" id="agib_teatro_${idx}" onchange="onTeatroChange(${idx})">${window._agibTeatriOpts||''}<option value="_altro">Altro (inserisci manualmente)</option></select>
+      </div>
+      <div class="modal-field full" id="agib_indirizzo_wrap_${idx}" style="grid-column:1/-1">
+        <div class="modal-label">Indirizzo teatro</div>
+        <input type="text" class="edit-input" id="agib_indirizzo_${idx}" placeholder="Compilato automaticamente dal teatro selezionato">
+      </div>
+    </div>`;
+  wrap.appendChild(div);
+  // Imposta indirizzo automatico al primo teatro
+  setTimeout(() => onTeatroChange(idx), 50);
+}
+
+function onTeatroChange(idx) {
+  const sel = document.getElementById(`agib_teatro_${idx}`);
+  const indir = document.getElementById(`agib_indirizzo_${idx}`);
+  if (!sel || !indir) return;
+  const opt = sel.options[sel.selectedIndex];
+  const indirizzo = opt?.getAttribute('data-indirizzo') || '';
+  if (sel.value !== '_altro') indir.value = indirizzo;
+  else indir.value = '';
+}
+
+function closeAgibModal() {
+  document.getElementById('agibModal').classList.remove('open');
+  agibRigaCount = 0;
+}
+
+// Controlla se un nominativo è già in pratiche precedenti
+function isGiàAssunto(cognomeNome) {
+  return agibData.some(r => r.cognome_nome.toUpperCase() === cognomeNome.toUpperCase());
+}
+
+async function saveAgib() {
+  const idPratica = document.getElementById('agib_id').value;
+  const dataInvio = document.getElementById('agib_data_invio').value.trim();
+  if (!dataInvio) { showToast('Inserisci la data di invio', 'error'); return; }
+
+  const nuoveRighe = [];
+  const wrap = document.getElementById('agib_righe_wrap');
+  const righeEls = wrap.querySelectorAll('[id^="agib_riga_"]');
+
+  righeEls.forEach(div => {
+    const idx = div.id.replace('agib_riga_','');
+    const compSel = document.getElementById(`agib_comp_${idx}`);
+    if (!compSel) return;
+    const contactId = parseInt(compSel.value);
+    const c = contacts.find(x=>x.id===contactId);
+    if (!c) return;
+
+    const cognomeNome = `${c.cognome} ${c.nome}`;
+    const dal = document.getElementById(`agib_dal_${idx}`)?.value||'';
+    const al = document.getElementById(`agib_al_${idx}`)?.value||'';
+    const teatro = document.getElementById(`agib_teatro_${idx}`)?.value||'';
+    const indirizzoTeatro = document.getElementById(`agib_indirizzo_${idx}`)?.value||'';
+    const primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
+    const cf = primaAssunzione === 'SI' ? (c.codice_fiscale||'') : '';
+    const residenza = primaAssunzione === 'SI' ? (c.citta_residenza||'') + (c.indirizzo ? ', '+c.indirizzo : '') : '';
+    const tipoDoc = primaAssunzione === 'SI' ? (c.doc_tipo||'') : '';
+    const numDoc = primaAssunzione === 'SI' ? (c.doc_num||'') : '';
+
+    nuoveRighe.push([idPratica, dataInvio, cognomeNome, dal, al, teatro, indirizzoTeatro, primaAssunzione, cf, residenza, tipoDoc, numDoc]);
+  });
+
+  if (!nuoveRighe.length) { showToast('Aggiungi almeno un componente', 'error'); return; }
+
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+    const r = await fetch(url, {
+      method:'POST',
+      headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:nuoveRighe })
+    });
+    if (!r.ok) throw new Error('Errore salvataggio ' + r.status);
+    closeAgibModal();
+    await loadAgibilita();
+    selectAgib(idPratica);
+    showToast(`Pratica ${idPratica} salvata — ${nuoveRighe.length} righe`, 'success');
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+async function deletePratica(id) {
+  if (!confirm(`Eliminare tutta la pratica ${id}?`)) return;
+  // Trova le righe da eliminare
+  const righe = agibData.filter(r=>r.id_pratica===id).map(r=>r.rowIdx).sort((a,b)=>b-a);
+  try {
+    for (const row of righe) {
+      await sheetsClear(`${AGIB_SHEET}!A${row}:N${row}`);
+    }
+    await loadAgibilita();
+    document.getElementById('agibDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">📑</div><div class="empty-title">Pratica eliminata</div></div>`;
+    showToast(`Pratica ${id} eliminata`, 'success');
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+function generaPDFAgib(id) {
+  const p = agibPratiche.find(x=>x.id===id);
+  if (!p) return;
+
+  const teatriUnici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
+  const teatroColor = {};
+  const teatroBorder = {};
+  teatriUnici.forEach((t,i) => {
+    teatroColor[t] = TEATRO_COLORS[i % TEATRO_COLORS.length];
+    teatroBorder[t] = TEATRO_BORDER[i % TEATRO_BORDER.length];
+  });
+
+  const righeHtml = p.righe.map(r => {
+    const bg = teatroColor[r.teatro] || '#fff';
+    const border = teatroBorder[r.teatro] || '#ccc';
+    const dati = r.prima_assunzione === 'SI' ? `<br><small>C.F. ${r.codice_fiscale||'—'}<br>${r.residenza||'—'}<br>N ${r.tipo_doc||''} ${r.num_doc||''}</small>` : '';
+    return `<tr style="border-left:4px solid ${border};background:${bg}">
+      <td style="padding:8px;font-size:12px">${r.cognome_nome}</td>
+      <td style="padding:8px;font-size:11px">Dal ${r.data_dal||'—'}<br>al ${r.data_al||'—'}</td>
+      <td style="padding:8px;font-size:11px">${r.teatro||'—'}<br><small style="color:#666">${r.indirizzo_teatro||''}</small></td>
+      <td style="padding:8px;font-size:11px">${dati}</td>
+    </tr>`;
+  }).join('');
+
+  const logoUrl = window.location.origin + window.location.pathname.replace('index.html','') + 'resextensa_logo.png';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Agibilità ${id}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .header { display:flex; align-items:center; gap:20px; margin-bottom:24px; border-bottom:2px solid #8a6d3b; padding-bottom:16px; }
+    .header img { height:60px; }
+    .header h1 { font-size:18px; color:#8a6d3b; margin:0; }
+    .header p { font-size:12px; color:#666; margin:4px 0 0; }
+    table { width:100%; border-collapse:collapse; }
+    th { background:#8a6d3b; color:white; padding:10px 8px; font-size:11px; text-align:left; text-transform:uppercase; letter-spacing:0.05em; }
+    td { border-bottom:1px solid #eee; vertical-align:top; }
+    small { color:#555; }
+    .pratica-info { margin-bottom:16px; font-size:12px; color:#666; }
+  </style></head><body>
+  <div class="header">
+    <img src="${logoUrl}" onerror="this.style.display='none'">
+    <div>
+      <h1>RESEXTENSA Ass. Culturale — Bari</h1>
+      <p>Comunicazione Agibilità — ${id}</p>
+    </div>
+  </div>
+  <div class="pratica-info">Data invio: <strong>${p.data_invio||'—'}</strong> &nbsp;·&nbsp; Componenti: <strong>${p.righe.length}</strong></div>
+  <table>
+    <thead><tr><th>Cognome Nome</th><th>Date</th><th>Luogo</th><th>Dati</th></tr></thead>
+    <tbody>${righeHtml}</tbody>
+  </table>
+  <script>window.print(); window.onafterprint = () => window.close();<\/script>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
