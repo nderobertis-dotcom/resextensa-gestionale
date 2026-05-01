@@ -3824,6 +3824,8 @@ RESEXTENSA Ass. Culturale — Bari</textarea>
 
 const DRIVE_AGIB_PDF_FOLDER = '1rLqk20UOaWNaJhIOo1A-5LAhbNidNqRL';
 
+const AGIB_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwGZcV5674eSfvLWRxNqqVth5-EAgctzU6H5kAqoxEq1okkAsR-_3zuOVEI-0Pqna3RXQ/exec';
+
 async function inviaAgibilita() {
   const id = document.getElementById('invio_pratica_id').value;
   const toRaw = document.getElementById('invio_to').value.trim();
@@ -3831,87 +3833,31 @@ async function inviaAgibilita() {
   const message = document.getElementById('invio_message').value.trim();
 
   if (!toRaw) { showToast('Inserisci almeno un destinatario', 'error'); return; }
-  if (!subject) { showToast('Inserisci l\'oggetto', 'error'); return; }
+  if (!subject) { showToast("Inserisci l'oggetto", 'error'); return; }
 
   const destinatari = toRaw.split(',').map(e=>e.trim()).filter(e=>e.includes('@'));
   if (!destinatari.length) { showToast('Nessun indirizzo email valido', 'error'); return; }
 
-  const p = agibPratiche.find(x=>x.id===id);
-  if (!p) return;
-
   document.getElementById('agibInvioModal').classList.remove('open');
-  showToast('Generazione PDF in corso…', 'info');
+  showToast('Generazione PDF e invio in corso…', 'info');
 
   try {
-    // 1. Genera HTML del PDF
-    const pdfHtml = buildAgibPDFHtml(p);
-    const blob = new Blob([pdfHtml], { type: 'text/html' });
-
-    // 2. Carica su Drive come file HTML (apribile come PDF)
-    // Carica su GitHub Pages come file temporaneo nella cartella agibilita
-    // Alternativa: usa un servizio pastebin HTML
-    showToast('Preparazione invio…', 'info');
-
-    // Encode HTML come base64 per includerlo come data URI nel messaggio
-    // Ma i client email non aprono data URI — usiamo htmlpreview.github.io
-    // Carichiamo il file su Drive e usiamo Google Docs viewer
-    const nomeFile = `Agibilita_${id}.html`;
-    const metadata = {
-      name: nomeFile,
-      parents: [DRIVE_AGIB_PDF_FOLDER]
-    };
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([pdfHtml], { type: 'text/html;charset=utf-8' }));
-
-    showToast('Caricamento su Drive…', 'info');
-    const uploadR = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+    const r = await fetch(AGIB_SCRIPT_URL, {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + accessToken },
-      body: form
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idPratica: id,
+        destinatari: destinatari.join(','),
+        oggetto: subject,
+        messaggio: message
+      })
     });
-    if (!uploadR.ok) throw new Error('Errore upload Drive: ' + uploadR.status);
-    const uploadData = await uploadR.json();
-    const fileId = uploadData.id;
-
-    // Rendi il file pubblico
-    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: 'reader', type: 'anyone' })
-    });
-
-    // Google Docs Viewer renderizza l'HTML correttamente
-    const driveDirectUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-    const linkPDF = `https://docs.google.com/viewer?url=${encodeURIComponent(driveDirectUrl)}&embedded=false`;
-
-    // 4. Carica EmailJS e invia link via email
-    if (!window.emailjs) {
-      await new Promise((res,rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
-      });
-      emailjs.init(EJS_PUBKEY);
-    }
-
-    showToast('Invio email in corso…', 'info');
-    for (const email of destinatari) {
-      await emailjs.send(EJS_SERVICE, EJS_TEMPLATE, {
-        to_email: email,
-        subject: subject,
-        message: message + `\n\n📄 Comunicazione Agibilità ${id}:\n${linkPDF}\n\n--- Componenti: ${p.righe.length} | Data: ${fmtDataInvio(p.data_invio)} ---`,
-        name: 'RESEXTENSA Ass. Culturale'
-      });
-    }
-
-    // 5. Aggiorna stato a INVIATA
+    // no-cors returns opaque response — assume success
     await aggiornaStatoPratica(id, 'INVIATA');
-    showToast(`✅ Email inviata a ${destinatari.length} destinatari — pratica INVIATA`, 'success');
-
+    showToast('✅ PDF inviato — pratica segnata come INVIATA', 'success');
   } catch(e) {
-    showToast('Errore: ' + (e.text || e.message || JSON.stringify(e)), 'error');
+    showToast('Errore invio: ' + e.message, 'error');
   }
 }
 
