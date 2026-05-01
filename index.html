@@ -443,6 +443,9 @@
     <button class="tab-btn" id="tab-contratti" onclick="switchTab('contratti')">
       📋 Verifica Contratti
     </button>
+    <button class="tab-btn" id="tab-teatri" onclick="switchTab('teatri')">
+      🎭 Teatri
+    </button>
   </div>
 
   <!-- TAB HOME -->
@@ -462,6 +465,10 @@
       <button class="home-nav-btn" onclick="switchTab('compagnie')">
         <span class="home-nav-icon">🏢</span>
         <div><div class="home-nav-label">Compagnie</div><div class="home-nav-sub">Partner e produzioni</div></div>
+      </button>
+      <button class="home-nav-btn" onclick="switchTab('teatri')">
+        <span class="home-nav-icon">🎭</span>
+        <div><div class="home-nav-label">Teatri</div><div class="home-nav-sub">Strutture e venue</div></div>
       </button>
       <button class="home-nav-btn" onclick="switchTab('contratti')">
         <span class="home-nav-icon">📋</span>
@@ -506,6 +513,13 @@
           <div class="home-card-title">Verifica Contratti</div>
           <div class="home-card-desc">Vista Kanban di tutti i contratti su Google Drive, distribuiti per stato: Redatto, Firma Scritturato/a, Firma Resextensa, Definitivo.</div>
           <div class="home-card-footer" id="hc-contratti">Visualizza →</div>
+        </div>
+
+        <div class="home-card" onclick="switchTab('teatri')">
+          <div class="home-card-icon">🎭</div>
+          <div class="home-card-title">Teatri</div>
+          <div class="home-card-desc">Rubrica delle strutture teatrali e venue. Nome, indirizzo, città e provincia per ogni teatro o spazio utilizzato da RESEXTENSA.</div>
+          <div class="home-card-footer" id="hc-teatri">— teatri</div>
         </div>
 
       </div>
@@ -604,6 +618,46 @@
   <!-- TAB VERIFICA CONTRATTI -->
   <div id="panel-contratti" style="display:none;height:calc(100vh - 128px);overflow-y:auto;background:var(--bg)">
     <div id="contrattiPanel" style="padding:24px;max-width:1400px;margin:0 auto"></div>
+  </div>
+
+  <!-- TAB TEATRI -->
+  <div id="panel-teatri" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
+    <div class="section-stats-bar">
+      <div class="header-stats">
+        <div class="stat"><div class="stat-n" id="stat-teatri-tot">—</div><div class="stat-l">Teatri</div></div>
+        <div class="stat"><div class="stat-n" id="stat-teatri-citta">—</div><div class="stat-l">Città</div></div>
+        <div class="stat"><div class="stat-n" id="stat-teatri-pr">—</div><div class="stat-l">Province</div></div>
+      </div>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
+      <div style="width:240px;min-width:240px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0">
+        <div style="padding:12px;border-bottom:1px solid var(--border)">
+          <div class="search-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="search" class="search-input" id="teatriSearchInput" placeholder="Cerca teatro…" oninput="renderTeatriList()">
+          </div>
+        </div>
+        <div class="contact-list" id="teatriList"></div>
+      </div>
+      <div id="teatriDetail" style="flex:1;overflow-y:auto;background:var(--bg)">
+        <div class="empty-state">
+          <div class="empty-icon">🎭</div>
+          <div class="empty-title">Seleziona un teatro</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TEATRO -->
+<div class="modal-overlay" id="teatroModal">
+  <div class="modal" style="width:500px;max-width:95vw">
+    <div class="modal-title" id="teatroModalTitle">Nuovo teatro</div>
+    <div id="teatroForm" style="display:grid;grid-template-columns:1fr 1fr;gap:14px"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeTeatroModal()">Annulla</button>
+      <button class="btn-primary" onclick="saveTeatro()">Salva su Sheets</button>
+    </div>
   </div>
 </div>
 
@@ -1914,7 +1968,7 @@ async function saveCalendarioToSheets() {
 }
 
 function switchTab(tab) {
-  ['home','rubrica','spettacoli','compagnie','contratti'].forEach(t => {
+  ['home','rubrica','spettacoli','compagnie','contratti','teatri'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.classList.toggle('active', t===tab);
   });
@@ -1923,9 +1977,11 @@ function switchTab(tab) {
   document.getElementById('panel-spettacoli').style.display = tab==='spettacoli' ? 'block' : 'none';
   document.getElementById('panel-compagnie').style.display = tab==='compagnie' ? 'flex' : 'none';
   document.getElementById('panel-contratti').style.display = tab==='contratti' ? 'block' : 'none';
+  document.getElementById('panel-teatri').style.display = tab==='teatri' ? 'flex' : 'none';
   if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
   if (tab==='compagnie') loadCompagnie();
   if (tab==='contratti') loadVerificaContratti();
+  if (tab==='teatri') loadTeatri();
   if (tab==='home') renderHome();
 }
 
@@ -1978,6 +2034,8 @@ function renderHome() {
   if (hcR) hcR.textContent = `${tot} componenti · ${attivi} attivi`;
   const hcS = document.getElementById('hc-spettacoli');
   if (hcS) hcS.textContent = `${spett} spettacoli in produzione`;
+  const hcT = document.getElementById('hc-teatri');
+  if (hcT) hcT.textContent = `${teatri.length} teatri`;
 }
 
 function renderSpettacoli() {
@@ -3049,6 +3107,214 @@ async function loadVerificaContratti() {
   }
 }
 // ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('teatroModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeTeatroModal(); });
+
+// ─── TEATRI ───────────────────────────────────────────────────────────────────
+const TEATRI_SHEET = 'Teatri';
+const TEATRI_RANGE = 'Teatri!A2:E';
+const TEATRI_FIELDS = [
+  { key:'nome_struttura', label:'Nome struttura', full:true },
+  { key:'indirizzo',      label:'Indirizzo', full:true },
+  { key:'cap',            label:'CAP' },
+  { key:'citta',          label:'Città' },
+  { key:'pr',             label:'PR' },
+];
+const TEATRI_COL = { nome_struttura:0, indirizzo:1, cap:2, citta:3, pr:4 };
+
+let teatri = [];
+let selectedTeatroId = null;
+let editTeatroMode = false;
+let nextTeatroId = 1;
+let teatriRowMap = {};
+
+async function loadTeatri() {
+  try {
+    const data = await sheetsGet(TEATRI_RANGE);
+    const rows = data.values || [];
+    teatri = []; teatriRowMap = {}; nextTeatroId = 1;
+    rows.forEach((row, i) => {
+      const g = k => (row[TEATRI_COL[k]] || '').trim().replace(/^'/, '');
+      if (!g('nome_struttura')) return;
+      const t = { id: nextTeatroId++ };
+      Object.keys(TEATRI_COL).forEach(k => { t[k] = toUpperField(k, g(k)); });
+      teatri.push(t);
+      teatriRowMap[t.id] = i + 2;
+    });
+    renderTeatriList();
+    updateTeatriStats();
+  } catch(e) { showToast('Errore caricamento teatri: ' + e.message, 'error'); }
+}
+
+function updateTeatriStats() {
+  const tot = teatri.length;
+  const citta = new Set(teatri.map(t => t.citta).filter(Boolean)).size;
+  const pr = new Set(teatri.map(t => t.pr).filter(Boolean)).size;
+  ['stat-teatri-tot','stat-teatri-citta','stat-teatri-pr'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = [tot,citta,pr][i] || '—';
+  });
+}
+
+function filteredTeatri() {
+  const q = (document.getElementById('teatriSearchInput')?.value || '').toLowerCase();
+  if (!q) return teatri;
+  return teatri.filter(t => `${t.nome_struttura} ${t.citta} ${t.pr} ${t.indirizzo}`.toLowerCase().includes(q));
+}
+
+function renderTeatriList() {
+  const list = filteredTeatri();
+  const el = document.getElementById('teatriList');
+  if (!el) return;
+  const isAdmin = userRole === 'admin';
+  el.innerHTML = list.map(t => {
+    const active = t.id === selectedTeatroId ? ' active' : '';
+    const [bg,fg] = getColor(t.nome_struttura);
+    const initials = t.nome_struttura.substring(0,2).toUpperCase();
+    return `<div class="contact-item${active}" onclick="selectTeatro(${t.id})">
+      <div class="avatar" style="background:${bg};color:${fg};font-size:10px">${initials}</div>
+      <div class="contact-info">
+        <div class="contact-name">${t.nome_struttura}</div>
+        <div class="contact-meta" style="font-size:10px">${t.citta||'—'}${t.pr?' ('+t.pr+')':''}</div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Nessun teatro</div>';
+}
+
+function selectTeatro(id) {
+  selectedTeatroId = id; editTeatroMode = false;
+  const t = teatri.find(x => x.id === id);
+  renderTeatriList();
+  if (t) renderTeatroDetail(t);
+}
+
+function renderTeatroDetail(t) {
+  if (editTeatroMode) return renderTeatroEdit(t);
+  const isAdmin = userRole === 'admin';
+  const [bg,fg] = getColor(t.nome_struttura);
+  document.getElementById('teatriDetail').innerHTML = `
+  <div class="topbar">
+    <div class="topbar-left">
+      <span style="color:var(--text3);font-size:12px">${filteredTeatri().indexOf(t)+1} di ${filteredTeatri().length}</span>
+    </div>
+    <div class="topbar-right">
+      ${isAdmin ? `<button class="btn-secondary" onclick="startEditTeatro()">✎ Modifica</button>` : ''}
+      ${isAdmin ? `<button class="btn-export" onclick="sortAndSaveTeatri()" title="Ordina per nome">⇅ Ordina</button>` : ''}
+      ${isAdmin ? `<button class="btn-danger" onclick="deleteTeatro(${t.id})">✕ Rimuovi</button>` : ''}
+      ${isAdmin ? `<button class="btn-new" onclick="openTeatroModal()">+ Nuovo</button>` : ''}
+    </div>
+  </div>
+  <div class="detail">
+    <div class="detail-header">
+      <div class="avatar-lg" style="background:${bg};color:${fg};font-size:18px">${t.nome_struttura.substring(0,2).toUpperCase()}</div>
+      <div class="detail-name-wrap">
+        <div class="detail-name">${t.nome_struttura}</div>
+        <div class="detail-sub">${t.citta ? `<span style="color:var(--text2)">📍 ${t.citta}${t.pr?' ('+t.pr+')':''}</span>` : ''}</div>
+      </div>
+    </div>
+    <div class="section"><div class="section-title">Indirizzo</div>
+      <div class="fields-grid">
+        <div class="field"><div class="field-label">Indirizzo</div>${valC(t.indirizzo)}</div>
+        <div class="field"><div class="field-label">CAP</div>${valC(t.cap)}</div>
+        <div class="field"><div class="field-label">Città</div>${valC(t.citta)}</div>
+        <div class="field"><div class="field-label">Provincia</div>${valC(t.pr)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTeatroEdit(t) {
+  document.getElementById('teatriDetail').innerHTML = `
+  <div class="topbar">
+    <div class="topbar-left"><span style="color:var(--accent);font-size:13px;font-weight:500">✎ Modifica teatro</span></div>
+    <div class="topbar-right">
+      <button class="btn-secondary" onclick="cancelEditTeatro()">Annulla</button>
+      <button class="btn-primary" onclick="saveEditTeatro(${t.id})">Salva su Sheets</button>
+    </div>
+  </div>
+  <div class="detail">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      ${TEATRI_FIELDS.map(f=>`
+        <div class="modal-field${f.full?' full':''}">
+          <div class="modal-label">${f.label}</div>
+          <input type="text" class="edit-input" id="tedit_${f.key}" value="${(t[f.key]||'').replace(/"/g,'&quot;')}">
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function startEditTeatro() { editTeatroMode=true; renderTeatroDetail(teatri.find(x=>x.id===selectedTeatroId)); }
+function cancelEditTeatro() { editTeatroMode=false; renderTeatroDetail(teatri.find(x=>x.id===selectedTeatroId)); }
+
+async function saveEditTeatro(id) {
+  const t = teatri.find(x=>x.id===id);
+  TEATRI_FIELDS.forEach(f => { const el=document.getElementById('tedit_'+f.key); if(el) t[f.key]=toUpperField(f.key, el.value); });
+  editTeatroMode=false; renderTeatriList(); renderTeatroDetail(t);
+  const row = Object.keys(TEATRI_COL).map(k => t[k]||'');
+  try {
+    await sheetsUpdate(`${TEATRI_SHEET}!A${teatriRowMap[id]}:E${teatriRowMap[id]}`, [row]);
+    showToast('Teatro salvato', 'success');
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+async function deleteTeatro(id) {
+  if (!confirm('Rimuovere questo teatro?')) return;
+  const row = teatriRowMap[id];
+  teatri = teatri.filter(x=>x.id!==id);
+  selectedTeatroId = null;
+  document.getElementById('teatriDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">🎭</div><div class="empty-title">Teatro rimosso</div></div>`;
+  renderTeatriList(); updateTeatriStats();
+  try { await sheetsClear(`${TEATRI_SHEET}!A${row}:E${row}`); showToast('Rimosso', 'success'); }
+  catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+function openTeatroModal(id=null) {
+  const t = id ? teatri.find(x=>x.id===id) : {};
+  document.getElementById('teatroModalTitle').textContent = id ? 'Modifica teatro' : 'Nuovo teatro';
+  document.getElementById('teatroForm').innerHTML = TEATRI_FIELDS.map(f=>`
+    <div class="modal-field${f.full?' full':''}">
+      <div class="modal-label">${f.label}</div>
+      <input type="text" class="edit-input" id="tnew_${f.key}" value="${(t[f.key]||'')}" placeholder="${f.label}">
+    </div>`).join('');
+  document.getElementById('teatroModal').classList.add('open');
+}
+function closeTeatroModal() { document.getElementById('teatroModal').classList.remove('open'); }
+
+async function saveTeatro() {
+  const nome = document.getElementById('tnew_nome_struttura').value.trim();
+  if (!nome) { showToast('Nome struttura obbligatorio', 'error'); return; }
+  const t = { id: nextTeatroId++ };
+  TEATRI_FIELDS.forEach(f => { const el=document.getElementById('tnew_'+f.key); t[f.key]=el ? toUpperField(f.key, el.value) : ''; });
+  teatri.push(t);
+  closeTeatroModal(); renderTeatriList(); selectTeatro(t.id); updateTeatriStats();
+  const row = Object.keys(TEATRI_COL).map(k => t[k]||'');
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(TEATRI_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+    const r = await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:TEATRI_RANGE, majorDimension:'ROWS', values:[row] }) });
+    const result = await r.json();
+    const match = (result.updates?.updatedRange||'').match(/(\d+)$/);
+    if (match) teatriRowMap[t.id] = parseInt(match[1]);
+    showToast(`${nome} aggiunto`, 'success');
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+async function sortAndSaveTeatri() {
+  if (!confirm('Ordinare tutti i teatri per nome e salvare su Google Sheets?')) return;
+  setSyncStatus('loading', 'Ordinamento in corso…');
+  try {
+    teatri.sort((a,b) => (a.nome_struttura||'').localeCompare(b.nome_struttura||'', 'it'));
+    const allRows = teatri.map(t => Object.keys(TEATRI_COL).map(k => t[k]||''));
+    await sheetsClear(`${TEATRI_SHEET}!A2:E${1 + teatri.length + 10}`);
+    await sheetsUpdate(`${TEATRI_SHEET}!A2:E${1 + teatri.length}`, allRows);
+    teatri.forEach((t,i) => { teatriRowMap[t.id] = i + 2; });
+    renderTeatriList();
+    if (selectedTeatroId) { const found = teatri.find(x=>x.id===selectedTeatroId); if(found) renderTeatroDetail(found); }
+    setSyncStatus('ok', 'Ordinato ✓');
+    showToast('Teatri ordinati e salvati', 'success');
+  } catch(e) {
+    setSyncStatus('error', 'Errore');
+    showToast('Errore: '+e.message, 'error');
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
 </body>
