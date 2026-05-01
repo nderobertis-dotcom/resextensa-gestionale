@@ -3822,6 +3822,8 @@ RESEXTENSA Ass. Culturale — Bari</textarea>
   document.getElementById('agibInvioModal').classList.add('open');
 }
 
+const DRIVE_AGIB_PDF_FOLDER = '1rLqk20UOaWNaJhIOo1A-5LAhbNidNqRL';
+
 async function inviaAgibilita() {
   const id = document.getElementById('invio_pratica_id').value;
   const toRaw = document.getElementById('invio_to').value.trim();
@@ -3834,15 +3836,44 @@ async function inviaAgibilita() {
   const destinatari = toRaw.split(',').map(e=>e.trim()).filter(e=>e.includes('@'));
   if (!destinatari.length) { showToast('Nessun indirizzo email valido', 'error'); return; }
 
-  // Genera PDF come stringa base64
   const p = agibPratiche.find(x=>x.id===id);
   if (!p) return;
 
-  showToast('Generazione PDF e invio in corso…', 'info');
   document.getElementById('agibInvioModal').classList.remove('open');
+  showToast('Generazione PDF in corso…', 'info');
 
   try {
-    // Carica EmailJS
+    // 1. Genera HTML del PDF
+    const pdfHtml = buildAgibPDFHtml(p);
+    const blob = new Blob([pdfHtml], { type: 'text/html' });
+
+    // 2. Carica su Drive come file HTML (apribile come PDF)
+    const nomeFile = `Agibilita_${id}_${fmtDataInvio(p.data_invio).replace(/\//g,'-')}.html`;
+    const metadata = { name: nomeFile, parents: [DRIVE_AGIB_PDF_FOLDER], mimeType: 'text/html' };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', blob);
+
+    showToast('Caricamento su Drive…', 'info');
+    const uploadR = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken },
+      body: form
+    });
+    if (!uploadR.ok) throw new Error('Errore upload Drive: ' + uploadR.status);
+    const uploadData = await uploadR.json();
+    const fileId = uploadData.id;
+
+    // 3. Rendi il file pubblico (leggibile da chiunque abbia il link)
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' })
+    });
+
+    const linkPDF = `https://drive.google.com/file/d/${fileId}/view`;
+
+    // 4. Carica EmailJS e invia link via email
     if (!window.emailjs) {
       await new Promise((res,rej) => {
         const s = document.createElement('script');
@@ -3853,34 +3884,26 @@ async function inviaAgibilita() {
       emailjs.init(EJS_PUBKEY);
     }
 
-    // Invia a ogni destinatario
-    let inviati = 0;
+    showToast('Invio email in corso…', 'info');
     for (const email of destinatari) {
       await emailjs.send(EJS_SERVICE, EJS_TEMPLATE, {
         to_email: email,
         subject: subject,
-        message: message + `\n\n--- Pratica: ${id} | Componenti: ${p.righe.length} | Data: ${fmtDataInvio(p.data_invio)} ---`,
+        message: message + `\n\n📄 Comunicazione Agibilità ${id}:\n${linkPDF}\n\n--- Componenti: ${p.righe.length} | Data: ${fmtDataInvio(p.data_invio)} ---`,
         name: 'RESEXTENSA Ass. Culturale'
       });
-      inviati++;
     }
 
-    // Aggiorna stato a INVIATA
+    // 5. Aggiorna stato a INVIATA
     await aggiornaStatoPratica(id, 'INVIATA');
-    showToast(`✅ Inviato a ${inviati} destinatari — pratica segnata come INVIATA`, 'success');
-
-    // Genera e apre PDF
-    generaPDFAgib(id);
+    showToast(`✅ Email inviata a ${destinatari.length} destinatari — pratica INVIATA`, 'success');
 
   } catch(e) {
-    showToast('Errore invio: ' + (e.text || e.message || JSON.stringify(e)), 'error');
+    showToast('Errore: ' + (e.text || e.message || JSON.stringify(e)), 'error');
   }
 }
 
-function generaPDFAgib(id) {
-  const p = agibPratiche.find(x=>x.id===id);
-  if (!p) return;
-
+function buildAgibPDFHtml(p) {
   const teatriUnici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
   const teatroColor = {};
   const teatroBorder = {};
@@ -3908,10 +3931,10 @@ function generaPDFAgib(id) {
     </tr>`;
   }).join('');
 
-  const logoUrl = window.location.origin + window.location.pathname.replace('index.html','') + 'resextensa_logo.png';
+  const logoUrl = window.location.origin + (window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <title>Agibilità ${id}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Agibilità ${p.id}</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     .header { display:flex; align-items:center; gap:20px; margin-bottom:24px; border-bottom:2px solid #8a6d3b; padding-bottom:16px; }
@@ -3923,12 +3946,13 @@ function generaPDFAgib(id) {
     td { border-bottom:1px solid #eee; vertical-align:top; }
     small { color:#555; }
     .pratica-info { margin-bottom:16px; font-size:12px; color:#666; }
+    @media print { body { margin: 10px; } }
   </style></head><body>
   <div class="header">
     <img src="${logoUrl}" onerror="this.style.display='none'">
     <div>
       <h1>RESEXTENSA Ass. Culturale — Bari</h1>
-      <p>Comunicazione Agibilità — ${id}</p>
+      <p>Comunicazione Agibilità — ${p.id}</p>
     </div>
   </div>
   <div class="pratica-info">Data invio: <strong>${fmtDataInvio(p.data_invio)}</strong> &nbsp;·&nbsp; Componenti: <strong>${p.righe.length}</strong></div>
@@ -3936,12 +3960,17 @@ function generaPDFAgib(id) {
     <thead><tr><th>Cognome Nome</th><th>Date</th><th>Luogo</th><th>Dati</th></tr></thead>
     <tbody>${righeHtml}</tbody>
   </table>
-  <script>window.print(); window.onafterprint = () => window.close();<\/script>
   </body></html>`;
+}
 
+function generaPDFAgib(id) {
+  const p = agibPratiche.find(x=>x.id===id);
+  if (!p) return;
+  const html = buildAgibPDFHtml(p);
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
+  setTimeout(() => { try { win.print(); } catch(e){} }, 500);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
