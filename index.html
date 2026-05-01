@@ -3849,13 +3849,16 @@ async function inviaAgibilita() {
 
     // 2. Carica su Drive come file HTML (apribile come PDF)
     const nomeFile = `Agibilita_${id}_${fmtDataInvio(p.data_invio).replace(/\//g,'-')}.html`;
-    const metadata = { name: nomeFile, parents: [DRIVE_AGIB_PDF_FOLDER], mimeType: 'text/html' };
+    const metadata = { 
+      name: nomeFile, 
+      parents: [DRIVE_AGIB_PDF_FOLDER]
+    };
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', blob);
+    form.append('file', new Blob([pdfHtml], { type: 'text/html' }));
 
     showToast('Caricamento su Drive…', 'info');
-    const uploadR = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+    const uploadR = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&convert=true', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + accessToken },
       body: form
@@ -3864,14 +3867,15 @@ async function inviaAgibilita() {
     const uploadData = await uploadR.json();
     const fileId = uploadData.id;
 
-    // 3. Rendi il file pubblico (leggibile da chiunque abbia il link)
+    // Rendi il file pubblico
     await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'reader', type: 'anyone' })
     });
 
-    const linkPDF = `https://drive.google.com/file/d/${fileId}/view`;
+    // Usa link di anteprima che mostra HTML renderizzato
+    const linkPDF = `https://drive.google.com/file/d/${fileId}/preview`;
 
     // 4. Carica EmailJS e invia link via email
     if (!window.emailjs) {
