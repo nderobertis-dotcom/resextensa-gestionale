@@ -631,11 +631,12 @@
     </div>
     <div style="display:flex;flex:1;overflow:hidden">
       <div style="width:240px;min-width:240px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0">
-        <div style="padding:12px;border-bottom:1px solid var(--border)">
-          <div class="search-wrap">
+        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+          <div class="search-wrap" style="flex:1">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input type="search" class="search-input" id="teatriSearchInput" placeholder="Cerca teatro…" oninput="renderTeatriList()">
           </div>
+          <button class="btn-new" id="teatri-add-btn" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="openTeatroModal()">+ Nuovo</button>
         </div>
         <div class="contact-list" id="teatriList"></div>
       </div>
@@ -3166,6 +3167,8 @@ function renderTeatriList() {
   const el = document.getElementById('teatriList');
   if (!el) return;
   const isAdmin = userRole === 'admin';
+  const addBtn = document.getElementById('teatri-add-btn');
+  if (addBtn) addBtn.style.display = isAdmin ? '' : 'none';
   el.innerHTML = list.map(t => {
     const active = t.id === selectedTeatroId ? ' active' : '';
     const [bg,fg] = getColor(t.nome_struttura);
