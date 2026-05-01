@@ -3394,6 +3394,23 @@ let agibPratiche = []; // pratiche raggruppate
 let selectedAgibId = null;
 let nextAgibPratica = 1;
 
+// Converte data da qualsiasi formato a GG/MM/AAAA
+function fmtDataInvio(d) {
+  if (!d) return '—';
+  // Già GG/MM/AAAA
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) return d;
+  // Numero seriale Excel (es. 46143)
+  if (/^\d{4,6}$/.test(d)) {
+    const serial = parseInt(d);
+    const date = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+    return `${date.getUTCDate().toString().padStart(2,'0')}/${(date.getUTCMonth()+1).toString().padStart(2,'0')}/${date.getUTCFullYear()}`;
+  }
+  // AAAA-MM-GG
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return d;
+}
+
 async function loadAgibilita() {
   try {
     const data = await sheetsGet(AGIB_RANGE);
@@ -3459,7 +3476,7 @@ function renderAgibList() {
       <div class="avatar" style="background:var(--accent);color:#1a1200;font-size:10px;font-weight:700">${p.id.slice(-3)}</div>
       <div class="contact-info">
         <div class="contact-name">${p.id}</div>
-        <div class="contact-meta" style="font-size:10px">${p.data_invio||'—'} · ${p.righe.length} componenti</div>
+        <div class="contact-meta" style="font-size:10px">${fmtDataInvio(p.data_invio)} · ${p.righe.length} componenti</div>
         <div class="contact-meta" style="font-size:9px;color:var(--text3)">${teatri_unici.slice(0,2).join(', ')}${teatri_unici.length>2?'…':''}</div>
       </div>
     </div>`;
@@ -3522,7 +3539,7 @@ function renderAgibDetail(p) {
   <div class="topbar">
     <div class="topbar-left">
       <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--accent)">${p.id}</span>
-      <span style="color:var(--text3);font-size:12px">· ${p.data_invio||'—'} · ${p.righe.length} componenti</span>
+      <span style="color:var(--text3);font-size:12px">· ${fmtDataInvio(p.data_invio)} · ${p.righe.length} componenti</span>
     </div>
     <div class="topbar-right">
       ${isAdmin ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
@@ -3695,7 +3712,7 @@ async function saveAgib() {
     const tipoDoc = primaAssunzione === 'SI' ? (c.doc_tipo||'') : '';
     const numDoc = primaAssunzione === 'SI' ? (c.doc_num||'') : '';
 
-    nuoveRighe.push([idPratica, dataInvio, cognomeNome, dal, al, teatro, indirizzoTeatro, primaAssunzione, cf, residenza, tipoDoc, numDoc]);
+    nuoveRighe.push([idPratica, "'" + dataInvio, cognomeNome, "'" + dal, "'" + al, teatro, indirizzoTeatro, primaAssunzione, cf, residenza, tipoDoc, numDoc]);
   });
 
   if (!nuoveRighe.length) { showToast('Aggiungi almeno un componente', 'error'); return; }
@@ -3783,7 +3800,7 @@ function generaPDFAgib(id) {
       <p>Comunicazione Agibilità — ${id}</p>
     </div>
   </div>
-  <div class="pratica-info">Data invio: <strong>${p.data_invio||'—'}</strong> &nbsp;·&nbsp; Componenti: <strong>${p.righe.length}</strong></div>
+  <div class="pratica-info">Data invio: <strong>${fmtDataInvio(p.data_invio)}</strong> &nbsp;·&nbsp; Componenti: <strong>${p.righe.length}</strong></div>
   <table>
     <thead><tr><th>Cognome Nome</th><th>Date</th><th>Luogo</th><th>Dati</th></tr></thead>
     <tbody>${righeHtml}</tbody>
