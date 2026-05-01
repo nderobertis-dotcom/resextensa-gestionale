@@ -3848,15 +3848,21 @@ async function inviaAgibilita() {
     const blob = new Blob([pdfHtml], { type: 'text/html' });
 
     // 2. Carica su Drive come file HTML (apribile come PDF)
-    const nomeFile = `Agibilita_${id}_${fmtDataInvio(p.data_invio).replace(/\//g,'-')}`;
-    const metadata = { 
-      name: nomeFile, 
-      parents: [DRIVE_AGIB_PDF_FOLDER],
-      mimeType: 'application/vnd.google-apps.document'
+    // Carica su GitHub Pages come file temporaneo nella cartella agibilita
+    // Alternativa: usa un servizio pastebin HTML
+    showToast('Preparazione invio…', 'info');
+
+    // Encode HTML come base64 per includerlo come data URI nel messaggio
+    // Ma i client email non aprono data URI — usiamo htmlpreview.github.io
+    // Carichiamo il file su Drive e usiamo Google Docs viewer
+    const nomeFile = `Agibilita_${id}.html`;
+    const metadata = {
+      name: nomeFile,
+      parents: [DRIVE_AGIB_PDF_FOLDER]
     };
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([pdfHtml], { type: 'text/html' }));
+    form.append('file', new Blob([pdfHtml], { type: 'text/html;charset=utf-8' }));
 
     showToast('Caricamento su Drive…', 'info');
     const uploadR = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
@@ -3875,7 +3881,9 @@ async function inviaAgibilita() {
       body: JSON.stringify({ role: 'reader', type: 'anyone' })
     });
 
-    const linkPDF = `https://docs.google.com/document/d/${fileId}/view`;
+    // Google Docs Viewer renderizza l'HTML correttamente
+    const driveDirectUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    const linkPDF = `https://docs.google.com/viewer?url=${encodeURIComponent(driveDirectUrl)}&embedded=false`;
 
     // 4. Carica EmailJS e invia link via email
     if (!window.emailjs) {
