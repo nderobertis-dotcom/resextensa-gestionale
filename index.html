@@ -3493,9 +3493,18 @@ function renderAgibDetail(p) {
         CF: ${r.codice_fiscale||'—'} · Res: ${r.residenza||'—'}<br>
         Doc: ${r.tipo_doc||'—'} ${r.num_doc||'—'}
       </div>` : '';
+    // Formatta data GG/MM/AAAA
+    const fmtD = d => {
+      if (!d) return '—';
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) return d;
+      // Prova a correggere formato numerico
+      const m = d.match(/^(\d{1,2})(\d{2})(\d{4})$/);
+      if (m) return `${m[1].padStart(2,'0')}/${m[2]}/${m[3]}`;
+      return d;
+    };
     return `<tr style="background:${bg};border-left:3px solid ${border}">
       <td style="padding:8px 10px;font-size:12px;font-weight:500">${r.cognome_nome}</td>
-      <td style="padding:8px 10px;font-size:11px">${r.data_dal||'—'} → ${r.data_al||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px">${fmtD(r.data_dal)} → ${fmtD(r.data_al)}</td>
       <td style="padding:8px 10px;font-size:11px">${r.teatro||'—'}<br><span style="font-size:10px;color:var(--text3)">${r.indirizzo_teatro||''}</span></td>
       <td style="padding:8px 10px;text-align:center">
         <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${r.prima_assunzione==='SI'?'#fce4ec':'#e8f5e9'};color:${r.prima_assunzione==='SI'?'#c62828':'#2e7d32'}">${r.prima_assunzione||'—'}</span>
@@ -3536,7 +3545,12 @@ function renderAgibDetail(p) {
   </div>`;
 }
 
-function openAgibModal() {
+async function openAgibModal() {
+  // Assicura che i teatri siano caricati
+  if (!teatri.length) {
+    showToast('Caricamento teatri in corso…', 'info');
+    await loadTeatri();
+  }
   const idPratica = 'AG-' + String(nextAgibPratica).padStart(4,'0');
   const oggi = new Date().toLocaleDateString('it-IT');
 
@@ -3730,10 +3744,17 @@ function generaPDFAgib(id) {
   const righeHtml = p.righe.map(r => {
     const bg = teatroColor[r.teatro] || '#fff';
     const border = teatroBorder[r.teatro] || '#ccc';
+    const fmtD = d => {
+      if (!d) return '—';
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) return d;
+      const m = d.match(/^(\d{1,2})(\d{2})(\d{4})$/);
+      if (m) return `${m[1].padStart(2,'0')}/${m[2]}/${m[3]}`;
+      return d;
+    };
     const dati = r.prima_assunzione === 'SI' ? `<br><small>C.F. ${r.codice_fiscale||'—'}<br>${r.residenza||'—'}<br>N ${r.tipo_doc||''} ${r.num_doc||''}</small>` : '';
     return `<tr style="border-left:4px solid ${border};background:${bg}">
       <td style="padding:8px;font-size:12px">${r.cognome_nome}</td>
-      <td style="padding:8px;font-size:11px">Dal ${r.data_dal||'—'}<br>al ${r.data_al||'—'}</td>
+      <td style="padding:8px;font-size:11px">Dal ${fmtD(r.data_dal)}<br>al ${fmtD(r.data_al)}</td>
       <td style="padding:8px;font-size:11px">${r.teatro||'—'}<br><small style="color:#666">${r.indirizzo_teatro||''}</small></td>
       <td style="padding:8px;font-size:11px">${dati}</td>
     </tr>`;
