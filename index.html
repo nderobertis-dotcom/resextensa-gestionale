@@ -686,6 +686,18 @@
   </div>
 </div>
 
+<!-- MODAL INVIO AGIBILITÀ -->
+<div class="modal-overlay" id="agibInvioModal">
+  <div class="modal" style="width:560px;max-width:95vw">
+    <div class="modal-title" id="agibInvioModalTitle">Invia Agibilità</div>
+    <div id="agibInvioBody" style="display:flex;flex-direction:column;gap:14px"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="document.getElementById('agibInvioModal').classList.remove('open')">Annulla</button>
+      <button class="btn-primary" onclick="inviaAgibilita()">📧 Invia PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NUOVA PRATICA AGIBILITÀ -->
 <div class="modal-overlay" id="agibModal">
   <div class="modal" style="width:700px;max-width:95vw;max-height:90vh;overflow-y:auto">
@@ -3372,12 +3384,17 @@ document.getElementById('agibModal').addEventListener('click', e=>{ if(e.target=
 
 // ─── AGIBILITÀ ────────────────────────────────────────────────────────────────
 const AGIB_SHEET = 'Agibilita';
-const AGIB_RANGE = 'Agibilita!A2:N';
+const AGIB_RANGE = 'Agibilita!A2:O';
 const AGIB_COL = {
   id_pratica:0, data_invio:1, cognome_nome:2, data_dal:3, data_al:4,
   teatro:5, indirizzo_teatro:6, prima_assunzione:7,
-  codice_fiscale:8, residenza:9, tipo_doc:10, num_doc:11
+  codice_fiscale:8, residenza:9, tipo_doc:10, num_doc:11, stato:12
 };
+
+// EmailJS
+const EJS_SERVICE  = 'service_yufhfyl';
+const EJS_TEMPLATE = 'template_034y4tb';
+const EJS_PUBKEY   = 'WgKJFHS0eJIsKJgFm';
 
 // Colori per teatri (ciclo automatico)
 const TEATRO_COLORS = [
@@ -3423,7 +3440,8 @@ async function loadAgibilita() {
         teatro: g('teatro'), indirizzo_teatro: g('indirizzo_teatro'),
         prima_assunzione: g('prima_assunzione'),
         codice_fiscale: g('codice_fiscale'), residenza: g('residenza'),
-        tipo_doc: g('tipo_doc'), num_doc: g('num_doc')
+        tipo_doc: g('tipo_doc'), num_doc: g('num_doc'),
+        stato: g('stato') || 'BOZZA'
       };
     });
 
@@ -3471,13 +3489,16 @@ function renderAgibList() {
 
   el.innerHTML = list.map(p => {
     const active = p.id === selectedAgibId ? ' active' : '';
-    const teatri_unici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
+    const stato = p.righe[0]?.stato || 'BOZZA';
+    const statoColor = stato==='INVIATA' ? '#2e7d32' : stato==='CANCELLATA' ? '#b71c1c' : '#b8860b';
+    const statoBg = stato==='INVIATA' ? '#e8f5e9' : stato==='CANCELLATA' ? '#ffebee' : '#fffbe6';
+    const avatarBg = stato==='CANCELLATA' ? '#ccc' : stato==='INVIATA' ? '#2e7d32' : 'var(--accent)';
     return `<div class="contact-item${active}" onclick="selectAgib('${p.id}')">
-      <div class="avatar" style="background:var(--accent);color:#1a1200;font-size:10px;font-weight:700">${p.id.slice(-3)}</div>
+      <div class="avatar" style="background:${avatarBg};color:#fff;font-size:10px;font-weight:700">${p.id.slice(-3)}</div>
       <div class="contact-info">
-        <div class="contact-name">${p.id}</div>
+        <div class="contact-name" style="${stato==='CANCELLATA'?'text-decoration:line-through;color:var(--text3)':''}">${p.id}</div>
         <div class="contact-meta" style="font-size:10px">${fmtDataInvio(p.data_invio)} · ${p.righe.length} componenti</div>
-        <div class="contact-meta" style="font-size:9px;color:var(--text3)">${teatri_unici.slice(0,2).join(', ')}${teatri_unici.length>2?'…':''}</div>
+        <div style="margin-top:2px"><span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:8px;background:${statoBg};color:${statoColor}">${stato}</span></div>
       </div>
     </div>`;
   }).join('') || '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Nessuna pratica</div>';
@@ -3535,15 +3556,25 @@ function renderAgibDetail(p) {
     `<span style="font-size:11px;padding:3px 10px;border-radius:12px;background:${TEATRO_COLORS[i%10]};border:1px solid ${TEATRO_BORDER[i%10]};color:${TEATRO_BORDER[i%10]};font-weight:500">${t}</span>`
   ).join(' ');
 
+  const stato = p.righe[0]?.stato || 'BOZZA';
+  const isBozza = stato === 'BOZZA';
+  const isInviata = stato === 'INVIATA';
+  const isCancellata = stato === 'CANCELLATA';
+  const statoColor = isInviata ? '#2e7d32' : isCancellata ? '#b71c1c' : '#b8860b';
+  const statoBg = isInviata ? '#e8f5e9' : isCancellata ? '#ffebee' : '#fffbe6';
+
   document.getElementById('agibDetail').innerHTML = `
   <div class="topbar">
     <div class="topbar-left">
       <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--accent)">${p.id}</span>
       <span style="color:var(--text3);font-size:12px">· ${fmtDataInvio(p.data_invio)} · ${p.righe.length} componenti</span>
+      <span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:10px;background:${statoBg};color:${statoColor}">${stato}</span>
     </div>
     <div class="topbar-right">
-      ${isAdmin ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
-      ${isAdmin ? `<button class="btn-danger" onclick="deletePratica('${p.id}')">✕ Elimina</button>` : ''}
+      ${isAdmin && isBozza ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
+      ${isAdmin && isBozza ? `<button class="btn-new" style="font-size:12px;padding:6px 14px" onclick="openInvioAgibModal('${p.id}')">📧 Invia</button>` : ''}
+      ${isAdmin && isInviata ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
+      ${isAdmin && !isCancellata ? `<button class="btn-danger" onclick="deletePratica('${p.id}','${stato}')">✕ ${isBozza ? 'Elimina' : 'Cancella'}</button>` : ''}
     </div>
   </div>
   <div style="padding:20px">
@@ -3712,7 +3743,7 @@ async function saveAgib() {
     const tipoDoc = primaAssunzione === 'SI' ? (c.doc_tipo||'') : '';
     const numDoc = primaAssunzione === 'SI' ? (c.doc_num||'') : '';
 
-    nuoveRighe.push([idPratica, "'" + dataInvio, cognomeNome, "'" + dal, "'" + al, teatro, indirizzoTeatro, primaAssunzione, cf, residenza, tipoDoc, numDoc]);
+    nuoveRighe.push([idPratica, "'" + dataInvio, cognomeNome, "'" + dal, "'" + al, teatro, indirizzoTeatro, primaAssunzione, cf, residenza, tipoDoc, numDoc, 'BOZZA']);
   });
 
   if (!nuoveRighe.length) { showToast('Aggiungi almeno un componente', 'error'); return; }
@@ -3732,18 +3763,118 @@ async function saveAgib() {
   } catch(e) { showToast('Errore: '+e.message, 'error'); }
 }
 
-async function deletePratica(id) {
-  if (!confirm(`Eliminare tutta la pratica ${id}?`)) return;
-  // Trova le righe da eliminare
-  const righe = agibData.filter(r=>r.id_pratica===id).map(r=>r.rowIdx).sort((a,b)=>b-a);
+async function deletePratica(id, stato) {
+  const isBozza = !stato || stato === 'BOZZA';
+  if (isBozza) {
+    // BOZZA: elimina completamente
+    if (!confirm(`Eliminare definitivamente la pratica ${id}?`)) return;
+    const righe = agibData.filter(r=>r.id_pratica===id).map(r=>r.rowIdx).sort((a,b)=>b-a);
+    try {
+      for (const row of righe) await sheetsClear(`${AGIB_SHEET}!A${row}:O${row}`);
+      await loadAgibilita();
+      document.getElementById('agibDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">📑</div><div class="empty-title">Pratica eliminata</div></div>`;
+      showToast(`Pratica ${id} eliminata`, 'success');
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  } else {
+    // INVIATA: segna come CANCELLATA ma mantiene l'ID
+    if (!confirm(`Segnare la pratica ${id} come CANCELLATA?\nL'ID rimarrà in memoria come riferimento storico.`)) return;
+    await aggiornaStatoPratica(id, 'CANCELLATA');
+    showToast(`Pratica ${id} segnata come CANCELLATA`, 'success');
+  }
+}
+
+async function aggiornaStatoPratica(id, nuovoStato) {
+  const righe = agibData.filter(r=>r.id_pratica===id);
   try {
-    for (const row of righe) {
-      await sheetsClear(`${AGIB_SHEET}!A${row}:N${row}`);
+    for (const r of righe) {
+      await sheetsUpdate(`${AGIB_SHEET}!M${r.rowIdx}`, [[nuovoStato]]);
     }
     await loadAgibilita();
-    document.getElementById('agibDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">📑</div><div class="empty-title">Pratica eliminata</div></div>`;
-    showToast(`Pratica ${id} eliminata`, 'success');
-  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+    const p = agibPratiche.find(x=>x.id===id);
+    if (p) renderAgibDetail(p);
+  } catch(e) { showToast('Errore aggiornamento stato: '+e.message, 'error'); }
+}
+
+function openInvioAgibModal(id) {
+  const p = agibPratiche.find(x=>x.id===id);
+  if (!p) return;
+  document.getElementById('agibInvioModalTitle').textContent = `Invia Agibilità ${id}`;
+  document.getElementById('agibInvioBody').innerHTML = `
+    <input type="hidden" id="invio_pratica_id" value="${id}">
+    <div class="modal-field full">
+      <div class="modal-label">Destinatari (separati da virgola)</div>
+      <input type="text" class="edit-input" id="invio_to" placeholder="email1@esempio.it, email2@esempio.it">
+    </div>
+    <div class="modal-field full">
+      <div class="modal-label">Oggetto</div>
+      <input type="text" class="edit-input" id="invio_subject" value="RESEXTENSA — Comunicazione Agibilità ${id}">
+    </div>
+    <div class="modal-field full">
+      <div class="modal-label">Messaggio di accompagnamento</div>
+      <textarea class="edit-input" id="invio_message" rows="5" style="resize:vertical">Gentile,
+
+in allegato trovi la Comunicazione di Agibilità ${id} relativa ai componenti di RESEXTENSA Ass. Culturale — Bari.
+
+Cordiali saluti,
+RESEXTENSA Ass. Culturale — Bari</textarea>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">⚠️ Il PDF verrà allegato automaticamente. Dopo l'invio la pratica non sarà più modificabile.</div>`;
+  document.getElementById('agibInvioModal').classList.add('open');
+}
+
+async function inviaAgibilita() {
+  const id = document.getElementById('invio_pratica_id').value;
+  const toRaw = document.getElementById('invio_to').value.trim();
+  const subject = document.getElementById('invio_subject').value.trim();
+  const message = document.getElementById('invio_message').value.trim();
+
+  if (!toRaw) { showToast('Inserisci almeno un destinatario', 'error'); return; }
+  if (!subject) { showToast('Inserisci l\'oggetto', 'error'); return; }
+
+  const destinatari = toRaw.split(',').map(e=>e.trim()).filter(e=>e.includes('@'));
+  if (!destinatari.length) { showToast('Nessun indirizzo email valido', 'error'); return; }
+
+  // Genera PDF come stringa base64
+  const p = agibPratiche.find(x=>x.id===id);
+  if (!p) return;
+
+  showToast('Generazione PDF e invio in corso…', 'info');
+  document.getElementById('agibInvioModal').classList.remove('open');
+
+  try {
+    // Carica EmailJS
+    if (!window.emailjs) {
+      await new Promise((res,rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      emailjs.init(EJS_PUBKEY);
+    }
+
+    // Invia a ogni destinatario
+    let inviati = 0;
+    for (const email of destinatari) {
+      await emailjs.send(EJS_SERVICE, EJS_TEMPLATE, {
+        to_email: email,
+        subject: subject,
+        message: message + `\n\n--- Pratica: ${id} | Componenti: ${p.righe.length} | Data: ${fmtDataInvio(p.data_invio)} ---`,
+        name: 'RESEXTENSA Ass. Culturale'
+      });
+      inviati++;
+    }
+
+    // Aggiorna stato a INVIATA
+    await aggiornaStatoPratica(id, 'INVIATA');
+    showToast(`✅ Inviato a ${inviati} destinatari — pratica segnata come INVIATA`, 'success');
+
+    // Genera e apre PDF
+    generaPDFAgib(id);
+
+  } catch(e) {
+    showToast('Errore invio: ' + (e.text || e.message || JSON.stringify(e)), 'error');
+  }
 }
 
 function generaPDFAgib(id) {
