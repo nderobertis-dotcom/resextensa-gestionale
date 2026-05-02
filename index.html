@@ -3613,7 +3613,10 @@ async function openModificaAgibModal(id) {
     </div>
     <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
     <div id="agib_righe_wrap"></div>
-    <button class="btn-export" style="margin-top:10px;font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>`;
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-export" style="font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>
+      <button class="btn-secondary" style="font-size:12px" onclick="ordinaRigheAgib()">⇅ Ordina alfabeticamente</button>
+    </div>`;
 
   agibRigaCount = 0;
   // Pre-popola le righe esistenti
@@ -3722,6 +3725,22 @@ function aggiungiRigaAgib() {
       </div>
     </div>`;
   wrap.appendChild(div);
+}
+
+function ordinaRigheAgib() {
+  const wrap = document.getElementById('agib_righe_wrap');
+  if (!wrap) return;
+  const righe = Array.from(wrap.querySelectorAll('[id^="agib_riga_"]'));
+  // Legge il nome di ogni riga e ordina alfabeticamente
+  const conNomi = righe.map(div => {
+    const idx = div.id.replace('agib_riga_','');
+    const nome = document.getElementById(`agib_comp_${idx}`)?.value || '';
+    return { div, nome };
+  });
+  conNomi.sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
+  // Riordina nel DOM
+  conNomi.forEach(({ div }) => wrap.appendChild(div));
+  showToast('Componenti ordinati alfabeticamente', 'success');
 }
 
 function cercaComponenteAgib(idx) {
@@ -3860,18 +3879,27 @@ async function saveAgib() {
 
   try {
     if (isModifica) {
-      // Cancella righe esistenti e riscrive
-      const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).map(r=>r.rowIdx).sort((a,b)=>b-a);
-      for (const row of righeVecchie) await sheetsClear(`${AGIB_SHEET}!A${row}:O${row}`);
+      // Sovrascrive le righe esistenti con i nuovi dati
+      const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).sort((a,b)=>a.rowIdx-b.rowIdx);
+      for (let i = 0; i < Math.max(righeVecchie.length, nuoveRighe.length); i++) {
+        if (i < nuoveRighe.length && i < righeVecchie.length) {
+          await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`, [nuoveRighe[i]]);
+        } else if (i < righeVecchie.length) {
+          await sheetsClear(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`);
+        } else {
+          const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+          await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:[nuoveRighe[i]] }) });
+        }
+      }
+    } else {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+      const r = await fetch(url, {
+        method:'POST',
+        headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+        body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:nuoveRighe })
+      });
+      if (!r.ok) throw new Error('Errore salvataggio ' + r.status);
     }
-
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-    const r = await fetch(url, {
-      method:'POST',
-      headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-      body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:nuoveRighe })
-    });
-    if (!r.ok) throw new Error('Errore salvataggio ' + r.status);
     closeAgibModal();
     await loadAgibilita();
     selectAgib(idPratica);
