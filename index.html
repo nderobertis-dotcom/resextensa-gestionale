@@ -3804,10 +3804,33 @@ async function saveAgib() {
       const c = contacts.find(x=>x.id===parseInt(compIdEl.value));
       if (c) {
         cognomeNome = `${c.cognome} ${c.nome}`;
-        if (!isModifica) primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
-        if (primaAssunzione === 'SI') {
-          cf = c.codice_fiscale||''; residenza = (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
-          tipoDoc = c.doc_tipo||''; numDoc = c.doc_num||'';
+        if (isModifica) {
+          // Mantieni tutti i dati originali dal foglio
+          const rigaEsistente = agibData.find(r=>r.id_pratica===idPratica && r.cognome_nome===cognomeNome);
+          if (rigaEsistente) {
+            primaAssunzione = rigaEsistente.prima_assunzione || 'NO';
+            cf = rigaEsistente.codice_fiscale || '';
+            residenza = rigaEsistente.residenza || '';
+            tipoDoc = rigaEsistente.tipo_doc || '';
+            numDoc = rigaEsistente.num_doc || '';
+          } else {
+            // Componente nuovo aggiunto in modifica
+            primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
+            if (primaAssunzione === 'SI') {
+              cf = c.codice_fiscale||'';
+              residenza = (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
+              tipoDoc = c.doc_tipo||'';
+              numDoc = c.doc_num||'';
+            }
+          }
+        } else {
+          primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
+          if (primaAssunzione === 'SI') {
+            cf = c.codice_fiscale||'';
+            residenza = (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
+            tipoDoc = c.doc_tipo||'';
+            numDoc = c.doc_num||'';
+          }
         }
       }
     } else {
@@ -3816,9 +3839,11 @@ async function saveAgib() {
       if (isModifica) {
         const rigaEsistente = agibData.find(r=>r.id_pratica===idPratica && r.cognome_nome===cognomeNome);
         if (rigaEsistente) {
-          primaAssunzione = rigaEsistente.prima_assunzione;
-          cf = rigaEsistente.codice_fiscale; residenza = rigaEsistente.residenza;
-          tipoDoc = rigaEsistente.tipo_doc; numDoc = rigaEsistente.num_doc;
+          primaAssunzione = rigaEsistente.prima_assunzione || 'NO';
+          cf = rigaEsistente.codice_fiscale || '';
+          residenza = rigaEsistente.residenza || '';
+          tipoDoc = rigaEsistente.tipo_doc || '';
+          numDoc = rigaEsistente.num_doc || '';
         }
       }
     }
