@@ -3573,6 +3573,7 @@ function renderAgibDetail(p) {
       ${p.righe[0]?.destinatari ? `<span style="font-size:11px;color:var(--text3)">→ ${p.righe[0].destinatari}</span>` : ''}
     </div>
     <div class="topbar-right">
+      ${isAdmin && isBozza ? `<button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="openModificaAgibModal('${p.id}')">✎ Modifica</button>` : ''}
       ${isAdmin && isBozza ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
       ${isAdmin && isBozza ? `<button class="btn-new" style="font-size:12px;padding:6px 14px" onclick="openInvioAgibModal('${p.id}')">📧 Invia</button>` : ''}
       ${isAdmin && isInviata ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
@@ -3593,6 +3594,69 @@ function renderAgibDetail(p) {
       <tbody>${tableRows}</tbody>
     </table>
   </div>`;
+}
+
+async function openModificaAgibModal(id) {
+  const p = agibPratiche.find(x=>x.id===id);
+  if (!p) return;
+  if (!teatri.length) await loadTeatri();
+
+  document.getElementById('agibModalTitle').textContent = `Modifica Pratica — ${id}`;
+  document.getElementById('agibModalBody').innerHTML = `
+    <input type="hidden" id="agib_id" value="${id}">
+    <input type="hidden" id="agib_modifica_mode" value="1">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <div class="modal-field">
+        <div class="modal-label">Data invio</div>
+        <input type="text" class="edit-input" id="agib_data_invio" value="${fmtDataInvio(p.data_invio)}" placeholder="GG/MM/AAAA">
+      </div>
+    </div>
+    <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
+    <div id="agib_righe_wrap"></div>
+    <button class="btn-export" style="margin-top:10px;font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>`;
+
+  agibRigaCount = 0;
+  // Pre-popola le righe esistenti
+  p.righe.forEach(r => {
+    agibRigaCount++;
+    const idx = agibRigaCount;
+    const wrap = document.getElementById('agib_righe_wrap');
+    const div = document.createElement('div');
+    div.id = `agib_riga_${idx}`;
+    div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;position:relative';
+    // Trova il contatto corrispondente
+    const c = contacts.find(x => `${x.cognome} ${x.nome}` === r.cognome_nome);
+    div.innerHTML = `
+      <button onclick="document.getElementById('agib_riga_${idx}').remove()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>
+      <input type="hidden" id="agib_comp_id_${idx}" value="${c?.id||''}">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div class="modal-field full" style="grid-column:1/-1;position:relative">
+          <div class="modal-label">Componente</div>
+          <input type="text" class="edit-input" id="agib_comp_${idx}" value="${r.cognome_nome}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
+          <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Data dal</div>
+          <input type="text" class="edit-input" id="agib_dal_${idx}" value="${r.data_dal}" placeholder="GG/MM/AAAA">
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Data al</div>
+          <input type="text" class="edit-input" id="agib_al_${idx}" value="${r.data_al}" placeholder="GG/MM/AAAA">
+        </div>
+        <div class="modal-field" style="position:relative">
+          <div class="modal-label">Teatro</div>
+          <input type="text" class="edit-input" id="agib_teatro_${idx}" value="${r.teatro}" placeholder="Cerca teatro…" oninput="cercaTeatroAgib(${idx})" autocomplete="off">
+          <div id="agib_teatro_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+        </div>
+        <div class="modal-field full" style="grid-column:2/-1">
+          <div class="modal-label">Indirizzo teatro</div>
+          <input type="text" class="edit-input" id="agib_indirizzo_${idx}" value="${r.indirizzo_teatro}" placeholder="Compilato automaticamente">
+        </div>
+      </div>`;
+    wrap.appendChild(div);
+  });
+
+  document.getElementById('agibModal').classList.add('open');
 }
 
 async function openAgibModal() {
@@ -3720,6 +3784,7 @@ function isGiàAssunto(cognomeNome) {
 async function saveAgib() {
   const idPratica = document.getElementById('agib_id').value;
   const dataInvio = document.getElementById('agib_data_invio').value.trim();
+  const isModifica = document.getElementById('agib_modifica_mode')?.value === '1';
   if (!dataInvio) { showToast('Inserisci la data di invio', 'error'); return; }
 
   const nuoveRighe = [];
@@ -3729,21 +3794,39 @@ async function saveAgib() {
   righeEls.forEach(div => {
     const idx = div.id.replace('agib_riga_','');
     const compIdEl = document.getElementById(`agib_comp_id_${idx}`);
-    if (!compIdEl || !compIdEl.value) return;
-    const contactId = parseInt(compIdEl.value);
-    const c = contacts.find(x=>x.id===contactId);
-    if (!c) return;
+    const compNomeEl = document.getElementById(`agib_comp_${idx}`);
+    if (!compNomeEl?.value) return;
 
-    const cognomeNome = `${c.cognome} ${c.nome}`;
+    let cognomeNome, cf = '', residenza = '', tipoDoc = '', numDoc = '';
+    let primaAssunzione = 'NO';
+
+    if (compIdEl?.value) {
+      const c = contacts.find(x=>x.id===parseInt(compIdEl.value));
+      if (c) {
+        cognomeNome = `${c.cognome} ${c.nome}`;
+        if (!isModifica) primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
+        if (primaAssunzione === 'SI') {
+          cf = c.codice_fiscale||''; residenza = (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
+          tipoDoc = c.doc_tipo||''; numDoc = c.doc_num||'';
+        }
+      }
+    } else {
+      cognomeNome = compNomeEl.value;
+      // In modifica mantieni i dati esistenti
+      if (isModifica) {
+        const rigaEsistente = agibData.find(r=>r.id_pratica===idPratica && r.cognome_nome===cognomeNome);
+        if (rigaEsistente) {
+          primaAssunzione = rigaEsistente.prima_assunzione;
+          cf = rigaEsistente.codice_fiscale; residenza = rigaEsistente.residenza;
+          tipoDoc = rigaEsistente.tipo_doc; numDoc = rigaEsistente.num_doc;
+        }
+      }
+    }
+
     const dal = document.getElementById(`agib_dal_${idx}`)?.value||'';
     const al = document.getElementById(`agib_al_${idx}`)?.value||'';
     const teatro = document.getElementById(`agib_teatro_${idx}`)?.value||'';
     const indirizzoTeatro = document.getElementById(`agib_indirizzo_${idx}`)?.value||'';
-    const primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
-    const cf = primaAssunzione === 'SI' ? (c.codice_fiscale||'') : '';
-    const residenza = primaAssunzione === 'SI' ? (c.citta_residenza||'') + (c.indirizzo ? ', '+c.indirizzo : '') : '';
-    const tipoDoc = primaAssunzione === 'SI' ? (c.doc_tipo||'') : '';
-    const numDoc = primaAssunzione === 'SI' ? (c.doc_num||'') : '';
 
     nuoveRighe.push([idPratica, "'" + dataInvio, cognomeNome, "'" + dal, "'" + al, teatro, indirizzoTeatro, primaAssunzione, cf, residenza, tipoDoc, numDoc, 'BOZZA']);
   });
@@ -3751,6 +3834,12 @@ async function saveAgib() {
   if (!nuoveRighe.length) { showToast('Aggiungi almeno un componente', 'error'); return; }
 
   try {
+    if (isModifica) {
+      // Cancella righe esistenti e riscrive
+      const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).map(r=>r.rowIdx).sort((a,b)=>b-a);
+      for (const row of righeVecchie) await sheetsClear(`${AGIB_SHEET}!A${row}:O${row}`);
+    }
+
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
     const r = await fetch(url, {
       method:'POST',
@@ -3761,7 +3850,7 @@ async function saveAgib() {
     closeAgibModal();
     await loadAgibilita();
     selectAgib(idPratica);
-    showToast(`Pratica ${idPratica} salvata — ${nuoveRighe.length} righe`, 'success');
+    showToast(`Pratica ${idPratica} ${isModifica?'modificata':'salvata'} — ${nuoveRighe.length} righe`, 'success');
   } catch(e) { showToast('Errore: '+e.message, 'error'); }
 }
 
@@ -3936,4 +4025,3 @@ function generaPDFAgib(id) {
 </script>
 </body>
 </html>
-
