@@ -4040,16 +4040,23 @@ function buildAgibPDFHtml(p) {
   <style>
     @page {
       size: A4 portrait;
-      margin: 15mm 12mm 15mm 12mm;
+      margin: 42mm 12mm 15mm 12mm;
     }
     body { font-family: Arial, sans-serif; margin: 0; font-size: 11px; }
+
+    /* Intestazione fissa ripetuta su ogni pagina */
     .header {
+      position: fixed;
+      top: -38mm;
+      left: 0; right: 0;
       display:flex; align-items:center; gap:16px;
-      border-bottom:2px solid #8a6d3b; padding-bottom:12px; margin-bottom:16px;
+      border-bottom:2px solid #8a6d3b; padding-bottom:10px;
+      background: white;
     }
-    .header img { height:50px; }
-    .header h1 { font-size:16px; color:#8a6d3b; margin:0; }
-    .header p { font-size:11px; color:#666; margin:3px 0 0; }
+    .header img { height:46px; }
+    .header h1 { font-size:15px; color:#8a6d3b; margin:0; }
+    .header p { font-size:10px; color:#666; margin:3px 0 0; }
+
     .pratica-info { margin-bottom:12px; font-size:11px; color:#666; }
     table { width:100%; border-collapse:collapse; table-layout:fixed; }
     thead { display:table-header-group; }
@@ -4066,7 +4073,6 @@ function buildAgibPDFHtml(p) {
     col.col-dati   { width: 28%; }
     @media print {
       body { margin: 0; }
-      thead { display:table-header-group; }
       tr { page-break-inside: avoid; }
     }
   </style></head><body>
@@ -4074,10 +4080,9 @@ function buildAgibPDFHtml(p) {
     <img src="${logoUrl}" onerror="this.style.display='none'">
     <div>
       <h1>RESEXTENSA Ass. Culturale — Bari</h1>
-      <p>Comunicazione Agibilità — ${p.id}</p>
+      <p>Comunicazione Agibilità — ${p.id} &nbsp;·&nbsp; Data invio: ${fmtDataInvio(p.data_invio)} &nbsp;·&nbsp; Componenti: ${p.righe.length}</p>
     </div>
   </div>
-  <div class="pratica-info">Data invio: <strong>${fmtDataInvio(p.data_invio)}</strong> &nbsp;·&nbsp; Componenti: <strong>${p.righe.length}</strong></div>
   <table>
     <colgroup>
       <col class="col-nome"><col class="col-date"><col class="col-luogo"><col class="col-dati">
