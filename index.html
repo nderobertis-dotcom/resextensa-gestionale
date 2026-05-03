@@ -4038,17 +4038,37 @@ function buildAgibPDFHtml(p) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Agibilità ${p.id}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .header { display:flex; align-items:center; gap:20px; margin-bottom:24px; border-bottom:2px solid #8a6d3b; padding-bottom:16px; }
-    .header img { height:60px; }
-    .header h1 { font-size:18px; color:#8a6d3b; margin:0; }
-    .header p { font-size:12px; color:#666; margin:4px 0 0; }
-    table { width:100%; border-collapse:collapse; }
-    th { background:#8a6d3b; color:white; padding:10px 8px; font-size:11px; text-align:left; text-transform:uppercase; letter-spacing:0.05em; }
-    td { border-bottom:1px solid #eee; vertical-align:top; }
-    small { color:#555; }
-    .pratica-info { margin-bottom:16px; font-size:12px; color:#666; }
-    @media print { body { margin: 10px; } }
+    @page {
+      size: A4 portrait;
+      margin: 15mm 12mm 15mm 12mm;
+    }
+    body { font-family: Arial, sans-serif; margin: 0; font-size: 11px; }
+    .header {
+      display:flex; align-items:center; gap:16px;
+      border-bottom:2px solid #8a6d3b; padding-bottom:12px; margin-bottom:16px;
+    }
+    .header img { height:50px; }
+    .header h1 { font-size:16px; color:#8a6d3b; margin:0; }
+    .header p { font-size:11px; color:#666; margin:3px 0 0; }
+    .pratica-info { margin-bottom:12px; font-size:11px; color:#666; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    thead { display:table-header-group; }
+    th {
+      background:#8a6d3b; color:white; padding:8px 6px;
+      font-size:10px; text-align:left; text-transform:uppercase;
+      letter-spacing:0.05em;
+    }
+    td { border-bottom:1px solid #eee; vertical-align:top; padding:6px; font-size:11px; word-wrap:break-word; }
+    small { color:#555; font-size:9px; }
+    col.col-nome   { width: 22%; }
+    col.col-date   { width: 18%; }
+    col.col-luogo  { width: 32%; }
+    col.col-dati   { width: 28%; }
+    @media print {
+      body { margin: 0; }
+      thead { display:table-header-group; }
+      tr { page-break-inside: avoid; }
+    }
   </style></head><body>
   <div class="header">
     <img src="${logoUrl}" onerror="this.style.display='none'">
@@ -4059,6 +4079,9 @@ function buildAgibPDFHtml(p) {
   </div>
   <div class="pratica-info">Data invio: <strong>${fmtDataInvio(p.data_invio)}</strong> &nbsp;·&nbsp; Componenti: <strong>${p.righe.length}</strong></div>
   <table>
+    <colgroup>
+      <col class="col-nome"><col class="col-date"><col class="col-luogo"><col class="col-dati">
+    </colgroup>
     <thead><tr><th>Cognome Nome</th><th>Date</th><th>Luogo</th><th>Dati</th></tr></thead>
     <tbody>${righeHtml}</tbody>
   </table>
