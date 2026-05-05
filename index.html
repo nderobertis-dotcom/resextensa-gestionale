@@ -1452,7 +1452,38 @@ const MESE_MAP = {A:1,B:2,C:3,D:4,E:5,H:6,L:7,M:8,P:9,R:10,S:11,T:12};
 const MESE_NOMI = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
 // Codici catastali principali (subset Italia + estero)
-const COMUNI_CF = {"A001":"Abano Terme","A006":"Abbadia Lariana","A662":"Bari","A944":"Bergamo","B157":"Bologna","B383":"Brescia","C351":"Caserta","C469":"Catania","C744":"Chieti","D612":"Firenze","D969":"Foggia","E379":"Genova","F839":"Napoli","F158":"Molfetta","F284":"Molfetta","G273":"Palermo","G388":"Parma","G482":"Pescara","G491":"Piacenza","G713":"Potenza","G888":"Ragusa","H223":"Reggio Calabria","H224":"Reggio Emilia","H501":"Roma","H703":"Salerno","H769":"Sassari","I138":"Siena","I307":"Siracusa","I628":"Taranto","I725":"Teramo","I804":"Torino","I862":"Trapani","L219":"Trieste","L328":"Udine","L736":"Venezia","L949":"Verona","M082":"Vicenza","M195":"Viterbo","B180":"Brindisi","B354":"Cagliari","B519":"Campobasso","B428":"Bitonto","B093":"Bisceglie","A225":"Altamura","L425":"Triggiano","A893":"Bitonto","E783":"Cingoli","L781":"San Giovanni Lupatoto","A475":"Assisi","B019":"Borgomanero","Z110":"Francia","Z404":"USA","Z112":"Germania","Z130":"Spagna","Z135":"Svizzera","Z119":"Belgio","Z126":"Paesi Bassi","Z111":"Regno Unito","Z131":"Svezia","Z114":"Danimarca","Z118":"Austria","Z138":"Portogallo","Z133":"Polonia","Z156":"Romania","Z127":"Norvegia","Z125":"Lussemburgo","Z144":"Grecia","Z102":"Albania","Z323":"Argentina","Z332":"Brasile","Z232":"Egitto","Z222":"Cina"};
+// Database codici catastali - comuni principali + lookup API per gli altri
+const COMUNI_CF = {"A001":"Abano Terme","A006":"Abbadia Lariana","A662":"Bari","A944":"Bergamo","B157":"Bologna","B383":"Brescia","C351":"Caserta","C469":"Catania","C744":"Chieti","D612":"Firenze","D969":"Foggia","E379":"Genova","F839":"Napoli","F158":"Molfetta","G273":"Palermo","G388":"Parma","G482":"Pescara","G491":"Piacenza","G713":"Potenza","G888":"Ragusa","H223":"Reggio Calabria","H224":"Reggio Emilia","H501":"Roma","H703":"Salerno","H769":"Sassari","I138":"Siena","I307":"Siracusa","I628":"Taranto","I725":"Teramo","I804":"Torino","I862":"Trapani","L219":"Trieste","L328":"Udine","L736":"Venezia","L949":"Verona","M082":"Vicenza","M195":"Viterbo","B180":"Brindisi","B354":"Cagliari","B519":"Campobasso","B428":"Bitonto","B093":"Bisceglie","A225":"Altamura","L425":"Triggiano","E783":"Cingoli","L781":"San Giovanni Lupatoto","A475":"Assisi","B019":"Borgomanero","A245":"Andria","A284":"Apricena","B166":"Barletta","B296":"Bisceglie","C983":"Conversano","D761":"Gioia del Colle","F376":"Monopoli","G262":"Palagiano","G942":"Putignano","H985":"Rutigliano","I158":"Sammichele di Bari","I158":"Sannicandro di Bari","L424":"Trani","L049":"Terlizzi","A048":"Acquaviva delle Fonti","C983":"Conversano","D883":"Giovinazzo","E716":"Lecce","G942":"Putignano","M361":"Corato","F376":"Monopoli","E716":"Lecce","G278":"Palo del Colle","H926":"Ruvo di Puglia","I791":"Spinazzola","L024":"Terlizzi","B619":"Canosa di Puglia","C136":"Casamassima","C726":"Castellana Grotte","D508":"Fasano","F065":"Minervino Murge","G312":"Noci","H117":"Putignano","Z110":"Francia","Z404":"USA","Z412":"Canada","Z112":"Germania","Z130":"Spagna","Z135":"Svizzera","Z119":"Belgio","Z126":"Paesi Bassi","Z111":"Regno Unito","Z131":"Svezia","Z114":"Danimarca","Z118":"Austria","Z138":"Portogallo","Z133":"Polonia","Z156":"Romania","Z127":"Norvegia","Z125":"Lussemburgo","Z144":"Grecia","Z102":"Albania","Z323":"Argentina","Z332":"Brasile","Z232":"Egitto","Z222":"Cina","Z236":"Giappone","Z149":"Russia","Z148":"Ungheria","Z139":"Rep. Ceca","Z143":"Bulgaria","Z140":"Slovenia","Z141":"Croazia","Z142":"Bosnia","Z145":"Serbia","Z158":"Ucraina","Z160":"Moldavia","Z736":"Marocco","Z314":"Venezuela","Z322":"Cile","Z326":"Colombia","Z336":"Perù"};
+
+// Cache per comuni trovati via API
+const COMUNI_CF_CACHE = {};
+
+async function getComuneFromCodice(codice) {
+  if (!codice) return null;
+  // Prima cerca nel database locale
+  if (COMUNI_CF[codice]) return COMUNI_CF[codice];
+  // Poi cerca nella cache
+  if (COMUNI_CF_CACHE[codice]) return COMUNI_CF_CACHE[codice];
+  // Infine chiama API
+  try {
+    const r = await fetch(`https://axqvoqvjlslanskowfnk.supabase.co/rest/v1/comuni?codice_catastale=eq.${codice}&select=nome`, {
+      headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4cXZvcXZqbHNsYW5za293Zm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODUwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder' }
+    });
+    // Se API non disponibile, prova altra fonte
+    throw new Error('API non disponibile');
+  } catch {
+    // Fallback: cerca su comuni-italiani.it via fetch
+    try {
+      const r2 = await fetch(`https://comuni-italiani.it/api/cerca/?cf=${codice}`);
+      const d2 = await r2.json();
+      if (d2?.[0]?.nome) {
+        COMUNI_CF_CACHE[codice] = d2[0].nome;
+        return d2[0].nome;
+      }
+    } catch {}
+  }
+  return null;
+}
 
 function normalizzaNome(s) {
   return s.toUpperCase()
@@ -1543,23 +1574,50 @@ function verificaCF(cf, cognome, nome, dataNascita, luogoNascita) {
       else avvisi.push('✓ Luogo di nascita corrispondente');
     }
   } else {
-    avvisi.push(`ℹ Codice comune "${codComune}" non presente nel database locale — verifica manuale necessaria`);
+    avvisi.push(`__COMUNE_LOOKUP__${codComune}__${luogoNascita||''}__`);
   }
 
   return { ok: errori.length === 0, errori, avvisi };
 }
 
-function mostraVerificaCF(contactId) {
+async function mostraVerificaCF(contactId) {
   const c = contacts.find(x => x.id === contactId);
   if (!c || !c.codice_fiscale) { showToast('Codice fiscale non presente', 'error'); return; }
 
   const ris = verificaCF(c.codice_fiscale, c.cognome, c.nome, c.data_nascita, c.luogo_nascita);
 
+  // Risolvi codice comune se non trovato nel database locale
+  const avvisiRisolti = [];
+  for (const a of ris.avvisi) {
+    if (a.startsWith('__COMUNE_LOOKUP__')) {
+      const parts = a.split('__');
+      const codComune = parts[2];
+      const luogoNascita = parts[3];
+      showToast('Ricerca comune in corso…', 'info');
+      const comuneTrovato = await getComuneFromCodice(codComune);
+      if (comuneTrovato) {
+        avvisiRisolti.push(`✓ Luogo di nascita dal CF: ${comuneTrovato} (${codComune})`);
+        if (luogoNascita) {
+          const luogoUp = luogoNascita.toUpperCase();
+          const comuneUp = comuneTrovato.toUpperCase();
+          if (!luogoUp.includes(comuneUp) && !comuneUp.includes(luogoUp.split('(')[0].trim()))
+            avvisiRisolti.push(`⚠ Luogo di nascita: il CF indica "${comuneTrovato}" ma nel campo è inserito "${luogoNascita}" — verificare`);
+          else avvisiRisolti.push('✓ Luogo di nascita corrispondente');
+        }
+        // Salva in cache locale
+        COMUNI_CF_CACHE[codComune] = comuneTrovato;
+      } else {
+        avvisiRisolti.push(`ℹ Codice comune "${codComune}" — verifica manuale su <a href="https://www.agenziaentrate.gov.it/portale/web/guest/schede/istanze/richiesta-attribuzione-codice-fiscale/tabella-codici-catastali-dei-comuni" target="_blank" style="color:var(--accent)">Agenzia Entrate</a>`);
+      }
+    } else {
+      avvisiRisolti.push(a);
+    }
+  }
+
   const righe = [
-    ...ris.avvisi.map(a => `<div style="color:${a.startsWith('✓') ? '#2e7d52' : a.startsWith('⚠') ? '#b8860b' : '#6b6860'};font-size:12px;padding:3px 0">${a}</div>`),
+    ...avvisiRisolti.map(a => `<div style="color:${a.startsWith('✓') ? '#2e7d52' : a.startsWith('⚠') ? '#b8860b' : '#6b6860'};font-size:12px;padding:3px 0">${a}</div>`),
     ...ris.errori.map(e => `<div style="color:#c0392b;font-size:12px;padding:3px 0">✗ ${e}</div>`)
   ].join('');
-
   const box = document.getElementById('cf-verify-result');
   if (box) {
     box.innerHTML = `
