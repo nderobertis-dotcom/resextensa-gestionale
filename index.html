@@ -3499,16 +3499,14 @@ async function salvaFornitore() {
     await sheetsUpdate(`${FORN_SHEET}!A${sheetRow}:L${sheetRow}`, [row]);
     showToast('Fornitore aggiornato', 'success');
   } else {
-    // Nuovo fornitore
+    // Nuovo fornitore — append diretto al foglio Fornitori
     const newId = 'FO-' + Date.now();
     const row = [newId, g('ragione_sociale'), g('categoria'), g('piva'), g('cf_fornitore'),
                  g('referente'), g('telefono'), g('email'), g('indirizzo'), g('citta'), g('stato')||'ATTIVO', g('note')];
-    await sheetsAppend([row]);  // usa sheetsAppend generico — devo usare quello giusto
-    // Append diretto al foglio Fornitori
-    const token = await checkToken();
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${FORN_SHEET}!A:L:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+    checkTokenAndRefresh();
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FORN_SHEET+'!A:L')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
       method: 'POST',
-      headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({ values: [row] })
     });
     showToast('Fornitore aggiunto', 'success');
@@ -3524,11 +3522,11 @@ async function eliminaFornitore(id) {
   if (!f || !confirm(`Eliminare definitivamente "${f.ragione_sociale}"?`)) return;
   const idx = fornitori.findIndex(x=>x.id===id);
   const sheetRow = idx + 2;
-  const token = await checkToken();
+  checkTokenAndRefresh();
   // Sovrascrive la riga con valori vuoti (soft delete)
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${FORN_SHEET}!A${sheetRow}:L${sheetRow}?valueInputOption=RAW`, {
     method: 'PUT',
-    headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ values: [['','','','','','','','','','','','']] })
   });
   showToast('Fornitore eliminato', 'success');
