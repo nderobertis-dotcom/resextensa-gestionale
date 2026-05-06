@@ -449,7 +449,9 @@
     <button class="tab-btn" id="tab-agibilita" onclick="switchTab('agibilita')">
       📑 Agibilità
     </button>
-  </div>
+    <button class="tab-btn" id="tab-fornitori" onclick="switchTab('fornitori')">
+      🛒 Fornitori
+    </button>
 
   <!-- TAB HOME -->
   <div id="panel-home" style="display:flex;height:calc(100vh - 128px);overflow:hidden">
@@ -480,6 +482,10 @@
       <button class="home-nav-btn" onclick="switchTab('contratti')">
         <span class="home-nav-icon">📋</span>
         <div><div class="home-nav-label">Verifica Contratti</div><div class="home-nav-sub">Stato firme per nominativo</div></div>
+      </button>
+      <button class="home-nav-btn" onclick="switchTab('fornitori')">
+        <span class="home-nav-icon">🛒</span>
+        <div><div class="home-nav-label">Fornitori</div><div class="home-nav-sub">Beni e servizi</div></div>
       </button>
     </div>
 
@@ -527,6 +533,13 @@
           <div class="home-card-title">Teatri</div>
           <div class="home-card-desc">Rubrica delle strutture teatrali e venue. Nome, indirizzo, città e provincia per ogni teatro o spazio utilizzato da RESEXTENSA.</div>
           <div class="home-card-footer" id="hc-teatri">— teatri</div>
+        </div>
+
+        <div class="home-card" onclick="switchTab('fornitori')">
+          <div class="home-card-icon">🛒</div>
+          <div class="home-card-title">Fornitori Beni & Servizi</div>
+          <div class="home-card-desc">Rubrica dei fornitori di beni e servizi: ragione sociale, partita IVA, categoria merceologica, referente, contatti e note operative.</div>
+          <div class="home-card-footer" id="hc-fornitori">— fornitori</div>
         </div>
 
       </div>
@@ -652,6 +665,58 @@
           <div class="empty-icon">🎭</div>
           <div class="empty-title">Seleziona un teatro</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB FORNITORI -->
+  <div id="panel-fornitori" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
+    <div class="section-stats-bar">
+      <div class="header-stats">
+        <div class="stat"><div class="stat-n" id="stat-forn-tot">—</div><div class="stat-l">Fornitori</div></div>
+        <div class="stat"><div class="stat-n" id="stat-forn-cat">—</div><div class="stat-l">Categorie</div></div>
+        <div class="stat"><div class="stat-n" id="stat-forn-attivi" style="color:var(--attivo)">—</div><div class="stat-l">Attivi</div></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-export" id="forn-csv-btn" style="font-size:11px;padding:5px 12px" onclick="esportaFornitoriCSV()">↓ CSV</button>
+      </div>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
+      <!-- Sidebar lista fornitori -->
+      <div style="width:260px;min-width:260px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0">
+        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="search-wrap" style="flex:1">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input type="search" class="search-input" id="fornSearchInput" placeholder="Cerca fornitore…" oninput="renderFornitoriList()">
+            </div>
+            <button class="btn-new" id="forn-add-btn" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="openFornitoreModal()">+ Nuovo</button>
+          </div>
+          <select class="search-input" id="fornCatFilter" onchange="renderFornitoriList()" style="font-size:11px;padding:5px 8px">
+            <option value="">Tutte le categorie</option>
+          </select>
+        </div>
+        <div class="contact-list" id="fornitoriList"></div>
+      </div>
+      <!-- Dettaglio fornitore -->
+      <div id="fornitoriDetail" style="flex:1;overflow-y:auto;background:var(--bg)">
+        <div class="empty-state">
+          <div class="empty-icon">🛒</div>
+          <div class="empty-title">Seleziona un fornitore</div>
+          <div class="empty-sub">Oppure crea un nuovo fornitore con il pulsante + Nuovo</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FORNITORE -->
+  <div class="modal-overlay" id="fornitoreModal">
+    <div class="modal" style="width:620px;max-width:95vw">
+      <div class="modal-title" id="fornitoreModalTitle">Nuovo Fornitore</div>
+      <div id="fornitoreModalBody" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeFornitoreModal()">Annulla</button>
+        <button class="btn-new" onclick="salvaFornitore()">Salva su Sheets</button>
       </div>
     </div>
   </div>
@@ -2017,6 +2082,7 @@ async function saveNew() {
   await appendContactToSheets(c);
   // Ricarica da Sheets per sincronizzare sheetRowMap e rimuovere eventuali duplicati
   await loadFromSheets();
+  loadFornitori();
   selectContact(c.id);
 }
 
@@ -2107,11 +2173,13 @@ function switchTab(tab) {
   document.getElementById('panel-compagnie').style.display = tab==='compagnie' ? 'flex' : 'none';
   document.getElementById('panel-contratti').style.display = tab==='contratti' ? 'block' : 'none';
   document.getElementById('panel-teatri').style.display = tab==='teatri' ? 'flex' : 'none';
+  document.getElementById('panel-fornitori').style.display = tab==='fornitori' ? 'flex' : 'none';
   document.getElementById('panel-agibilita').style.display = tab==='agibilita' ? 'flex' : 'none';
   if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
   if (tab==='compagnie') loadCompagnie();
   if (tab==='contratti') loadVerificaContratti();
   if (tab==='teatri') loadTeatri();
+  if (tab==='fornitori') loadFornitori();
   if (tab==='agibilita') loadAgibilita();
   if (tab==='home') renderHome();
 }
@@ -3239,6 +3307,245 @@ async function loadVerificaContratti() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 document.getElementById('teatroModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeTeatroModal(); });
+
+// ─── FORNITORI BENI & SERVIZI ─────────────────────────────────────────────────
+// Foglio Sheets: "Fornitori" — colonne A:L da riga 2
+// A:id, B:ragione_sociale, C:categoria, D:piva, E:cf_fornitore, F:referente,
+// G:telefono, H:email, I:indirizzo, J:citta, K:stato, L:note
+
+const FORN_SHEET = 'Fornitori';
+const FORN_RANGE = 'Fornitori!A2:L';
+let fornitori = [];
+let selectedFornitoreId = null;
+
+const FORN_CATEGORIE = [
+  'Costumi & Sartoria','Scenografia','Audio & Luci','Video & Fotografia',
+  'Stampa & Comunicazione','Trasporti & Logistica','Catering & Ristorazione',
+  'Alloggio','Ufficio & Cancelleria','IT & Software','Consulenza','Altro'
+];
+
+async function loadFornitori() {
+  try {
+    const r = await sheetsGet(`${FORN_RANGE}`);
+    const rows = r.values || [];
+    fornitori = rows.map(row => ({
+      id:              row[0]  || '',
+      ragione_sociale: row[1]  || '',
+      categoria:       row[2]  || '',
+      piva:            row[3]  || '',
+      cf_fornitore:    row[4]  || '',
+      referente:       row[5]  || '',
+      telefono:        row[6]  || '',
+      email:           row[7]  || '',
+      indirizzo:       row[8]  || '',
+      citta:           row[9]  || '',
+      stato:           row[10] || 'ATTIVO',
+      note:            row[11] || '',
+    })).filter(f => f.ragione_sociale);
+    updateFornitoriStats();
+    populateFornitoriCatFilter();
+    renderFornitoriList();
+    document.getElementById('hc-fornitori').textContent = `${fornitori.length} fornitori`;
+  } catch(e) { console.warn('Fornitori non caricati:', e); }
+}
+
+function updateFornitoriStats() {
+  const attivi = fornitori.filter(f => f.stato === 'ATTIVO').length;
+  const cats = new Set(fornitori.map(f => f.categoria).filter(Boolean)).size;
+  document.getElementById('stat-forn-tot').textContent   = fornitori.length;
+  document.getElementById('stat-forn-cat').textContent   = cats;
+  document.getElementById('stat-forn-attivi').textContent = attivi;
+}
+
+function populateFornitoriCatFilter() {
+  const sel = document.getElementById('fornCatFilter');
+  const curr = sel.value;
+  const cats = [...new Set(fornitori.map(f => f.categoria).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Tutte le categorie</option>' +
+    cats.map(c => `<option value="${c}" ${curr===c?'selected':''}>${c}</option>`).join('');
+}
+
+function renderFornitoriList() {
+  const q = (document.getElementById('fornSearchInput')?.value||'').toLowerCase();
+  const cat = document.getElementById('fornCatFilter')?.value || '';
+  const el = document.getElementById('fornitoriList');
+  let filtered = fornitori.filter(f => {
+    const match = !q || [f.ragione_sociale,f.referente,f.email,f.piva,f.citta].some(v=>v.toLowerCase().includes(q));
+    const catOk = !cat || f.categoria === cat;
+    return match && catOk;
+  });
+  filtered.sort((a,b)=>a.ragione_sociale.localeCompare(b.ragione_sociale,'it'));
+  el.innerHTML = filtered.map(f => {
+    const isSel = f.id === selectedFornitoreId;
+    const colore = f.stato==='ATTIVO' ? 'var(--attivo)' : 'var(--cessato)';
+    return `<div class="contact-item${isSel?' selected':''}" onclick="selectFornitore('${f.id}')">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="contact-avatar" style="background:var(--accent);color:white;font-size:12px">${(f.ragione_sociale[0]||'?').toUpperCase()}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.ragione_sociale}</div>
+          <div style="font-size:10px;color:${colore};font-weight:500">${f.stato||'—'} · ${f.categoria||'—'}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Nessun fornitore trovato</div>';
+}
+
+function selectFornitore(id) {
+  selectedFornitoreId = id;
+  renderFornitoriList();
+  const f = fornitori.find(x => x.id === id);
+  if (!f) return;
+  const colore = f.stato === 'ATTIVO' ? 'var(--attivo)' : 'var(--cessato)';
+  const field = (label, val) => val ? `
+    <div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);margin-bottom:4px">${label}</div>
+      <div style="font-size:13px;font-family:'DM Mono',monospace;color:var(--text)">${val}</div>
+    </div>` : '';
+  document.getElementById('fornitoriDetail').innerHTML = `
+    <div style="padding:32px 40px;max-width:760px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--accent)">${f.ragione_sociale}</div>
+          <div style="font-size:12px;color:${colore};font-weight:500;margin-top:4px">${f.stato||'—'} · ${f.categoria||'—'}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          ${isAdmin ? `<button class="btn-modify" onclick="openFornitoreModal('${f.id}')">✎ Modifica</button>
+          <button class="btn-danger" onclick="eliminaFornitore('${f.id}')">✕ Rimuovi</button>` : ''}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:14px">Dati fiscali</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          ${field('Partita IVA', f.piva)}
+          ${field('Cod. Fiscale', f.cf_fornitore)}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:14px">Referente & Contatti</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          ${field('Referente', f.referente)}
+          ${field('Telefono', f.telefono)}
+          ${field('Email', f.email ? `<a href="mailto:${f.email}" style="color:var(--accent)">${f.email}</a>` : '')}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:14px">Sede</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          ${field('Indirizzo', f.indirizzo)}
+          ${field('Città', f.citta)}
+        </div>
+      </div>
+
+      ${f.note ? `<div style="border-top:1px solid var(--border);padding-top:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:10px">Note</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-wrap">${f.note}</div>
+      </div>` : ''}
+    </div>`;
+}
+
+function openFornitoreModal(id) {
+  const isEdit = !!id;
+  const f = isEdit ? fornitori.find(x=>x.id===id) : {};
+  document.getElementById('fornitoreModalTitle').textContent = isEdit ? `✎ Modifica — ${f.ragione_sociale}` : 'Nuovo Fornitore';
+
+  const inp = (key, label, val, type='text', full=false, opts=null) => `
+    <div style="${full?'grid-column:1/-1':''}">
+      <div class="modal-label">${label}</div>
+      ${opts ? `<select class="edit-input" id="fm_${key}">${opts.map(o=>`<option ${(val||'')==o?'selected':''}>${o}</option>`).join('')}</select>`
+             : `<input class="edit-input" id="fm_${key}" type="${type}" value="${val||''}">`}
+    </div>`;
+
+  document.getElementById('fornitoreModalBody').innerHTML =
+    inp('ragione_sociale','Ragione Sociale *', f.ragione_sociale, 'text', true) +
+    inp('categoria','Categoria', f.categoria, 'text', false,
+        ['', ...FORN_CATEGORIE]) +
+    inp('stato','Stato', f.stato||'ATTIVO', 'text', false, ['ATTIVO','INATTIVO']) +
+    inp('piva','Partita IVA', f.piva) +
+    inp('cf_fornitore','Codice Fiscale', f.cf_fornitore) +
+    inp('referente','Referente', f.referente) +
+    inp('telefono','Telefono', f.telefono) +
+    inp('email','Email', f.email, 'email') +
+    inp('indirizzo','Indirizzo', f.indirizzo, 'text', true) +
+    inp('citta','Città', f.citta) +
+    inp('note','Note', f.note, 'text', true);
+
+  document.getElementById('fornitoreModal').dataset.editId = id || '';
+  document.getElementById('fornitoreModal').classList.add('open');
+}
+
+function closeFornitoreModal() {
+  document.getElementById('fornitoreModal').classList.remove('open');
+}
+document.getElementById('fornitoreModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeFornitoreModal(); });
+
+async function salvaFornitore() {
+  const g = id => document.getElementById('fm_'+id)?.value?.trim()||'';
+  if (!g('ragione_sociale')) { showToast('Inserire la ragione sociale', 'error'); return; }
+
+  const editId = document.getElementById('fornitoreModal').dataset.editId;
+  const isEdit = !!editId;
+
+  if (isEdit) {
+    // Trova riga nel foglio e aggiorna
+    const idx = fornitori.findIndex(f=>f.id===editId);
+    if (idx<0) return;
+    const sheetRow = idx + 2;
+    const row = [editId, g('ragione_sociale'), g('categoria'), g('piva'), g('cf_fornitore'),
+                 g('referente'), g('telefono'), g('email'), g('indirizzo'), g('citta'), g('stato'), g('note')];
+    await sheetsUpdate(`${FORN_SHEET}!A${sheetRow}:L${sheetRow}`, [row]);
+    showToast('Fornitore aggiornato', 'success');
+  } else {
+    // Nuovo fornitore
+    const newId = 'FO-' + Date.now();
+    const row = [newId, g('ragione_sociale'), g('categoria'), g('piva'), g('cf_fornitore'),
+                 g('referente'), g('telefono'), g('email'), g('indirizzo'), g('citta'), g('stato')||'ATTIVO', g('note')];
+    await sheetsAppend([row]);  // usa sheetsAppend generico — devo usare quello giusto
+    // Append diretto al foglio Fornitori
+    const token = await checkToken();
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${FORN_SHEET}!A:L:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] })
+    });
+    showToast('Fornitore aggiunto', 'success');
+  }
+
+  closeFornitoreModal();
+  await loadFornitori();
+  if (isEdit) selectFornitore(editId);
+}
+
+async function eliminaFornitore(id) {
+  const f = fornitori.find(x=>x.id===id);
+  if (!f || !confirm(`Eliminare definitivamente "${f.ragione_sociale}"?`)) return;
+  const idx = fornitori.findIndex(x=>x.id===id);
+  const sheetRow = idx + 2;
+  const token = await checkToken();
+  // Sovrascrive la riga con valori vuoti (soft delete)
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${FORN_SHEET}!A${sheetRow}:L${sheetRow}?valueInputOption=RAW`, {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values: [['','','','','','','','','','','','']] })
+  });
+  showToast('Fornitore eliminato', 'success');
+  selectedFornitoreId = null;
+  document.getElementById('fornitoriDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">🛒</div><div class="empty-title">Seleziona un fornitore</div></div>`;
+  await loadFornitori();
+}
+
+function esportaFornitoriCSV() {
+  const cols = ['ID','Ragione Sociale','Categoria','P.IVA','C.Fiscale','Referente','Telefono','Email','Indirizzo','Città','Stato','Note'];
+  const rows = fornitori.map(f=>[f.id,f.ragione_sociale,f.categoria,f.piva,f.cf_fornitore,f.referente,f.telefono,f.email,f.indirizzo,f.citta,f.stato,f.note].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
+  const csv = [cols, ...rows].map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download = `Fornitori_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─── TEATRI ───────────────────────────────────────────────────────────────────
 const TEATRI_SHEET = 'Teatri';
