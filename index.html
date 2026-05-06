@@ -3448,7 +3448,21 @@ function selectFornitore(id) {
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:10px">Note</div>
         <div style="font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-wrap">${f.note}</div>
       </div>` : ''}
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600">Contratti</div>
+          ${userRole === 'admin' ? `<div>
+            <input type="file" id="forn-upload-input-${f.id}" multiple accept=".pdf,.doc,.docx" style="display:none" onchange="uploadContrattiForn(this,'${f.id}','${f.ragione_sociale.replace(/'/g,"\\'")}')">
+            <button class="btn-new" style="font-size:11px;padding:5px 12px" onclick="document.getElementById('forn-upload-input-${f.id}').click()">↑ Carica contratto</button>
+          </div>` : ''}
+        </div>
+        <div id="forn-contratti-${f.id}"><span style="color:var(--text3);font-size:12px">🔍 Caricamento…</span></div>
+      </div>
     </div>`;
+
+  // Carica elenco contratti in background
+  caricaContrattiFornitore(f.id, f.ragione_sociale);
 }
 
 function openFornitoreModal(id) {
@@ -3547,6 +3561,120 @@ function esportaFornitoriCSV() {
   a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
   a.download = `Fornitori_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── CONTRATTI FORNITORI ──────────────────────────────────────────────────────
+// I contratti vengono salvati in una sottocartella "FORN_<id>" dentro DRIVE_CONTRATTI_FOLDER
+
+async function trovaCreaCartellaFornitore(fornId, ragioneSociale) {
+  const nome = `FORN_${fornId}`;
+  const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  const d = await r.json();
+  if (d.files?.length) return d.files[0].id;
+  // Crea cartella
+  const r2 = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.folder', parents: [DRIVE_CONTRATTI_FOLDER] })
+  });
+  const d2 = await r2.json();
+  return d2.id;
+}
+
+async function caricaContrattiFornitore(fornId, ragioneSociale) {
+  const box = document.getElementById(`forn-contratti-${fornId}`);
+  if (!box) return;
+  try {
+    const nome = `FORN_${fornId}`;
+    const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const d = await r.json();
+    if (!d.files?.length) {
+      box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun contratto caricato</span>';
+      return;
+    }
+    const folderId = d.files[0].id;
+    const q2 = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+    const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,mimeType,size,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=name`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const d2 = await r2.json();
+    const files = d2.files || [];
+    if (!files.length) {
+      box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun contratto caricato</span>';
+      return;
+    }
+    box.innerHTML = files.map(file => {
+      const size = file.size ? (parseInt(file.size)/1024).toFixed(0) + ' KB' : '';
+      const icon = file.mimeType?.includes('pdf') ? '📄' : file.name.match(/\.docx?$/i) ? '📝' : '📎';
+      const datamod = new Date(file.modifiedTime).toLocaleDateString('it-IT');
+      const safeId = file.id;
+      const safeName = file.name.replace(/'/g,"\\'");
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <span style="font-size:16px">${icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
+          <div style="font-size:10px;color:var(--text3)">${size}${size?' · ':''}${datamod}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <a href="https://drive.google.com/file/d/${safeId}/view" target="_blank" class="btn-export" style="font-size:11px;padding:4px 10px;text-decoration:none">👁 Visualizza</a>
+          <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="downloadDriveFile('${safeId}','${safeName}')">↓ Scarica</button>
+          ${userRole==='admin' ? `<button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="eliminaContrattiForn('${safeId}','${fornId}','${ragioneSociale.replace(/'/g,"\\'")}')">✕</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    const box2 = document.getElementById(`forn-contratti-${fornId}`);
+    if (box2) box2.innerHTML = `<span style="color:var(--cessato);font-size:12px">Errore: ${e.message}</span>`;
+  }
+}
+
+async function uploadContrattiForn(input, fornId, ragioneSociale) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const box = document.getElementById(`forn-contratti-${fornId}`);
+  if (box) box.innerHTML = `<span style="color:var(--text2);font-size:12px">⏳ Caricamento ${files.length} file in corso…</span>`;
+  try {
+    const folderId = await trovaCreaCartellaFornitore(fornId, ragioneSociale);
+    for (const file of files) {
+      const metadata = { name: file.name, parents: [folderId] };
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
+      const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + accessToken },
+        body: form
+      });
+      if (!r.ok) throw new Error(`Errore upload ${file.name}: ${r.status}`);
+    }
+    showToast(`${files.length} file caricati`, 'success');
+    input.value = '';
+    await caricaContrattiFornitore(fornId, ragioneSociale);
+  } catch(e) {
+    showToast('Errore upload: ' + e.message, 'error');
+    await caricaContrattiFornitore(fornId, ragioneSociale);
+  }
+}
+
+async function eliminaContrattiForn(fileId, fornId, ragioneSociale) {
+  if (!confirm('Eliminare definitivamente questo contratto?')) return;
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    showToast('Contratto eliminato', 'success');
+    await caricaContrattiFornitore(fornId, ragioneSociale);
+  } catch(e) {
+    showToast('Errore eliminazione: ' + e.message, 'error');
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
