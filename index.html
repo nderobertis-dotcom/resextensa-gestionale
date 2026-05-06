@@ -3315,7 +3315,7 @@ document.getElementById('teatroModal').addEventListener('click', e=>{ if(e.targe
 // G:telefono, H:email, I:indirizzo, J:citta, K:stato, L:note
 
 const FORN_SHEET = 'Fornitori';
-const FORN_RANGE = 'Fornitori!A2:L';
+const FORN_RANGE = 'Fornitori!A2:M';
 let fornitori = [];
 let selectedFornitoreId = null;
 
@@ -3345,7 +3345,8 @@ async function loadFornitori() {
       indirizzo:       row[8]  || '',
       citta:           row[9]  || '',
       stato:           row[10] || 'ATTIVO',
-      note:            row[11] || '',
+      pec:             row[11] || '',
+      note:            row[12] || '',
     })).filter(f => f.ragione_sociale);
     updateFornitoriStats();
     populateFornitoriCatFilter();
@@ -3433,6 +3434,7 @@ function selectFornitore(id) {
           ${field('Referente', f.referente)}
           ${field('Telefono', f.telefono)}
           ${field('Email', f.email ? `<a href="mailto:${f.email}" style="color:var(--accent)">${f.email}</a>` : '')}
+          ${field('PEC', f.pec ? `<a href="mailto:${f.pec}" style="color:var(--accent)">${f.pec}</a>` : '')}
         </div>
       </div>
 
@@ -3487,6 +3489,7 @@ function openFornitoreModal(id) {
     inp('referente','Referente', f.referente) +
     inp('telefono','Telefono', f.telefono) +
     inp('email','Email', f.email, 'email') +
+    inp('pec','PEC', f.pec, 'email') +
     inp('indirizzo','Indirizzo', f.indirizzo, 'text', true) +
     inp('citta','Città', f.citta) +
     inp('note','Note', f.note, 'text', true);
@@ -3513,16 +3516,16 @@ async function salvaFornitore() {
     if (idx<0) return;
     const sheetRow = idx + 2;
     const row = [editId, g('ragione_sociale'), g('categoria'), g('piva'), g('cf_fornitore'),
-                 g('referente'), g('telefono'), g('email'), g('indirizzo'), g('citta'), g('stato'), g('note')];
-    await sheetsUpdate(`${FORN_SHEET}!A${sheetRow}:L${sheetRow}`, [row]);
+                 g('referente'), g('telefono'), g('email'), g('indirizzo'), g('citta'), g('stato'), g('pec'), g('note')];
+    await sheetsUpdate(`${FORN_SHEET}!A${sheetRow}:M${sheetRow}`, [row]);
     showToast('Fornitore aggiornato', 'success');
   } else {
     // Nuovo fornitore — append diretto al foglio Fornitori
     const newId = 'FO-' + Date.now();
     const row = [newId, g('ragione_sociale'), g('categoria'), g('piva'), g('cf_fornitore'),
-                 g('referente'), g('telefono'), g('email'), g('indirizzo'), g('citta'), g('stato')||'ATTIVO', g('note')];
+                 g('referente'), g('telefono'), g('email'), g('indirizzo'), g('citta'), g('stato')||'ATTIVO', g('pec'), g('note')];
     checkTokenAndRefresh();
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FORN_SHEET+'!A:L')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FORN_SHEET+'!A:M')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
       method: 'POST',
       headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({ values: [row] })
@@ -3542,10 +3545,10 @@ async function eliminaFornitore(id) {
   const sheetRow = idx + 2;
   checkTokenAndRefresh();
   // Sovrascrive la riga con valori vuoti (soft delete)
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${FORN_SHEET}!A${sheetRow}:L${sheetRow}?valueInputOption=RAW`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${FORN_SHEET}!A${sheetRow}:M${sheetRow}?valueInputOption=RAW`, {
     method: 'PUT',
     headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values: [['','','','','','','','','','','','']] })
+    body: JSON.stringify({ values: [['','','','','','','','','','','','','']] })
   });
   showToast('Fornitore eliminato', 'success');
   selectedFornitoreId = null;
@@ -3554,8 +3557,8 @@ async function eliminaFornitore(id) {
 }
 
 function esportaFornitoriCSV() {
-  const cols = ['ID','Ragione Sociale','Categoria','P.IVA','C.Fiscale','Referente','Telefono','Email','Indirizzo','Città','Stato','Note'];
-  const rows = fornitori.map(f=>[f.id,f.ragione_sociale,f.categoria,f.piva,f.cf_fornitore,f.referente,f.telefono,f.email,f.indirizzo,f.citta,f.stato,f.note].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
+  const cols = ['ID','Ragione Sociale','Categoria','P.IVA','C.Fiscale','Referente','Telefono','Email','Indirizzo','Città','Stato','PEC','Note'];
+  const rows = fornitori.map(f=>[f.id,f.ragione_sociale,f.categoria,f.piva,f.cf_fornitore,f.referente,f.telefono,f.email,f.indirizzo,f.citta,f.stato,f.pec,f.note].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
   const csv = [cols, ...rows].map(r=>r.join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
