@@ -3327,6 +3327,10 @@ const FORN_CATEGORIE = [
 
 async function loadFornitori() {
   try {
+    // Mostra/nasconde pulsanti admin
+    const addBtn = document.getElementById('forn-add-btn');
+    if (addBtn) addBtn.style.display = userRole === 'admin' ? '' : 'none';
+
     const r = await sheetsGet(`${FORN_RANGE}`);
     const rows = r.values || [];
     fornitori = rows.map(row => ({
@@ -3410,8 +3414,8 @@ function selectFornitore(id) {
           <div style="font-size:12px;color:${colore};font-weight:500;margin-top:4px">${f.stato||'—'} · ${f.categoria||'—'}</div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
-          ${isAdmin ? `<button class="btn-modify" onclick="openFornitoreModal('${f.id}')">✎ Modifica</button>
-          <button class="btn-danger" onclick="eliminaFornitore('${f.id}')">✕ Rimuovi</button>` : ''}
+          ${userRole === 'admin' ? `<button class="btn-modify" onclick="openFornitoreModal(this.dataset.id)" data-id="${f.id}">✎ Modifica</button>
+          <button class="btn-danger" onclick="eliminaFornitore(this.dataset.id)" data-id="${f.id}">✕ Rimuovi</button>` : ''}
         </div>
       </div>
 
