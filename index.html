@@ -3795,36 +3795,88 @@ function renderFattureTable() {
 function parseFatturaXML(xmlText) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'application/xml');
-  const get = (tag) => doc.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
+  const get = (parent, tag) => parent.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
+  const getDoc = tag => doc.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
 
-  // Fornitore: preferisce Denominazione, fallback Nome+Cognome
-  const denominazione = get('Denominazione');
-  const nome     = get('Nome');
-  const cognome  = get('Cognome');
-  const fornitore = denominazione || `${cognome} ${nome}`.trim();
+  // ── Fornitore (CedentePrestatore) ────────────────────────────────────────
+  const cedente = doc.getElementsByTagName('CedentePrestatore')[0];
+  const denominazione = cedente ? get(cedente, 'Denominazione') : '';
+  const nomeForn  = cedente ? get(cedente, 'Nome') : '';
+  const cognomeForn = cedente ? get(cedente, 'Cognome') : '';
+  const fornitore = denominazione || `${cognomeForn} ${nomeForn}`.trim();
+  const piva_forn = cedente ? (get(cedente,'IdCodice') || get(cedente,'CodiceFiscale')) : '';
+  const cf_forn   = cedente ? get(cedente, 'CodiceFiscale') : '';
+  const sede_forn = cedente ? {
+    indirizzo: get(cedente, 'Indirizzo'),
+    cap:       get(cedente, 'CAP'),
+    comune:    get(cedente, 'Comune'),
+    provincia: get(cedente, 'Provincia'),
+  } : {};
+  const telefono_forn = cedente ? get(cedente, 'Telefono') : '';
+  const email_forn    = cedente ? (get(cedente, 'Email') || get(cedente, 'PECDestinatario')) : '';
+  const regime_forn   = cedente ? get(cedente, 'RegimeFiscale') : '';
 
-  // Numero e data
-  const numero = get('Numero');
-  const data   = get('Data'); // formato YYYY-MM-DD
+  // ── Cliente (CessionarioCommittente) ─────────────────────────────────────
+  const cessionario = doc.getElementsByTagName('CessionarioCommittente')[0];
+  const cliente_nome = cessionario ? (get(cessionario,'Denominazione') || `${get(cessionario,'Cognome')} ${get(cessionario,'Nome')}`.trim()) : 'Associazione Culturale ResExtensa';
+  const cliente_piva = cessionario ? (get(cessionario,'IdCodice') || get(cessionario,'CodiceFiscale')) : '';
+  const cliente_cf   = cessionario ? get(cessionario,'CodiceFiscale') : '';
+  const sede_cli = cessionario ? {
+    indirizzo: get(cessionario,'Indirizzo'),
+    cap:       get(cessionario,'CAP'),
+    comune:    get(cessionario,'Comune'),
+    provincia: get(cessionario,'Provincia'),
+  } : {};
 
-  // Totale documento
-  const totale = get('ImportoTotaleDocumento');
+  // ── Dati documento ────────────────────────────────────────────────────────
+  const numero = getDoc('Numero');
+  const data   = getDoc('Data');
+  const totale = getDoc('ImportoTotaleDocumento');
+  const tipoDoc = getDoc('TipoDocumento'); // TD01=fattura, TD04=NC, ecc.
 
-  // Imponibile e IVA: somma di tutti i DatiRiepilogo (fatture multi-aliquota)
-  const riepilogos = doc.getElementsByTagName('DatiRiepilogo');
-  let imponibile = 0, iva = 0;
-  for (const r of riepilogos) {
-    imponibile += parseFloat(r.getElementsByTagName('ImponibileImporto')[0]?.textContent || '0');
-    iva        += parseFloat(r.getElementsByTagName('Imposta')[0]?.textContent || '0');
+  // ── Righe di dettaglio ────────────────────────────────────────────────────
+  const linee = doc.getElementsByTagName('DettaglioLinee');
+  const righe = [];
+  for (const linea of linee) {
+    const desc   = get(linea, 'Descrizione');
+    const qta    = parseFloat(get(linea, 'Quantita') || '1');
+    const prezzoU = parseFloat(get(linea, 'PrezzoUnitario') || '0');
+    const prezzoT = parseFloat(get(linea, 'PrezzoTotale') || '0');
+    const aliqIVA = get(linea, 'AliquotaIVA');
+    const natura  = get(linea, 'Natura'); // N1, N2, ecc. per esenzioni
+    if (desc && (prezzoT !== 0 || prezzoU !== 0)) {
+      righe.push({ desc, qta, prezzoU, prezzoT, aliqIVA, natura });
+    }
   }
 
+  // ── Riepilogo IVA ─────────────────────────────────────────────────────────
+  const riepilogos = doc.getElementsByTagName('DatiRiepilogo');
+  let imponibile = 0, iva = 0;
+  const righeIVA = [];
+  for (const r of riepilogos) {
+    const imp  = parseFloat(get(r,'ImponibileImporto') || '0');
+    const imp2 = parseFloat(get(r,'Imposta') || '0');
+    const aliq = get(r,'AliquotaIVA');
+    const rif  = get(r,'RiferimentoNormativo');
+    const nat  = get(r,'Natura');
+    imponibile += imp;
+    iva        += imp2;
+    righeIVA.push({ aliq, imp, imp2, rif, nat });
+  }
+
+  // ── Dati pagamento fattura ────────────────────────────────────────────────
+  const detPag   = doc.getElementsByTagName('DettaglioPagamento')[0];
+  const modalitaPagFattura = detPag ? get(detPag,'ModalitaPagamento') : '';
+  const scadenza = detPag ? get(detPag,'DataScadenzaPagamento') : '';
+
   return {
-    fornitore,
-    numero,
-    data,
+    fornitore, piva_forn, cf_forn, sede_forn, telefono_forn, email_forn, regime_forn,
+    cliente_nome, cliente_piva, cliente_cf, sede_cli,
+    numero, data, totale, tipoDoc,
+    righe, righeIVA,
     imponibile: imponibile.toFixed(2),
-    iva:        iva.toFixed(2),
-    totale:     totale || (imponibile + iva).toFixed(2),
+    iva: iva.toFixed(2),
+    modalitaPagFattura, scadenza,
   };
 }
 
@@ -4005,109 +4057,262 @@ async function salvaFattura() {
   await loadFatture();
 }
 
-// ── Generazione PDF leggibile fattura ─────────────────────────────────────────
-function buildFatturaHTML(f) {
-  const fmt  = v => v ? '€ ' + parseFloat(v).toFixed(2).replace('.', ',') : '€ 0,00';
+// ── Recupera XML da Drive e genera PDF completo ───────────────────────────────
+async function fetchXMLFromDrive(fileId) {
+  checkTokenAndRefresh();
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  if (!r.ok) throw new Error('File non trovato su Drive');
+  return await r.text();
+}
+
+function tipoDocLabel(td) {
+  const m = { TD01:'Fattura', TD02:'Acconto/Anticipo su fattura', TD03:'Acconto/Anticipo su parcella',
+    TD04:'Nota di credito', TD05:'Nota di debito', TD06:'Parcella', TD16:'Integrazione fattura',
+    TD17:'Integrazione/Autofattura', TD24:'Fattura differita', TD25:'Fattura differita' };
+  return m[td] || 'Fattura';
+}
+
+function modalitaPagLabel(mp) {
+  const m = { MP01:'Contanti', MP02:'Assegno', MP03:'Assegno circolare', MP04:'Contanti presso Tesoreria',
+    MP05:'Bonifico', MP06:'Vaglia cambiario', MP07:'Bollettino bancario', MP08:'Carta di pagamento',
+    MP09:'RID', MP10:'RID utenze', MP11:'RID veloce', MP12:'RIBA', MP13:'MAV', MP14:'Quietanza erario',
+    MP15:'Giroconto su conti di contabilità speciale', MP16:'Domiciliazione bancaria', MP17:'Domiciliazione postale',
+    MP18:'Bollettino di c/c postale', MP19:'SEPA Direct Debit', MP20:'SEPA Direct Debit CORE', MP21:'SEPA Direct Debit B2B',
+    MP22:'Trattenuta su somme già riscosse', MP23:'PagoPA' };
+  return m[mp] || mp;
+}
+
+function buildFatturaHTML(f, xmlDati) {
+  const fmt  = v => v !== undefined && v !== '' ? '€ ' + parseFloat(v).toFixed(2).replace('.', ',') : '—';
   const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
   const isPagata = f.stato === 'PAGATA';
 
+  // Usa dati XML se disponibili, altrimenti fallback ai dati Sheets
+  const tipoDoc   = xmlDati ? tipoDocLabel(xmlDati.tipoDoc) : 'Fattura';
+  const piva_forn = xmlDati?.piva_forn || '';
+  const cf_forn   = xmlDati?.cf_forn   || '';
+  const sede_forn = xmlDati?.sede_forn || {};
+  const tel_forn  = xmlDati?.telefono_forn || '';
+  const em_forn   = xmlDati?.email_forn || '';
+  const cli_nome  = xmlDati?.cliente_nome || 'Associazione Culturale ResExtensa';
+  const cli_piva  = xmlDati?.cliente_piva || '06024770726';
+  const cli_cf    = xmlDati?.cliente_cf || '';
+  const sede_cli  = xmlDati?.sede_cli || { indirizzo:'Via Trevisani', cap:'70122', comune:'Bari', provincia:'BA' };
+  const righe     = xmlDati?.righe || [];
+  const righeIVA  = xmlDati?.righeIVA || [];
+  const modPag    = xmlDati ? modalitaPagLabel(xmlDati.modalitaPagFattura) : '';
+  const scadenza  = xmlDati?.scadenza || '';
+  const totale    = xmlDati?.totale || f.totale;
+  const imponibile = xmlDati?.imponibile || f.imponibile;
+  const iva        = xmlDati?.iva || f.iva;
+
+  const indirizzoForn = [sede_forn.indirizzo, sede_forn.cap, sede_forn.comune, sede_forn.provincia ? `(${sede_forn.provincia})` : ''].filter(Boolean).join(' ');
+  const indirizzoCli  = [sede_cli.indirizzo, sede_cli.cap, sede_cli.comune, sede_cli.provincia ? `(${sede_cli.provincia})` : ''].filter(Boolean).join(' ');
+
+  const righeHTML = righe.length
+    ? righe.map(r => `
+        <tr>
+          <td style="padding:7px 10px;border-bottom:1px solid #eee;font-size:11px">${r.desc}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-size:11px">${r.qta % 1 === 0 ? r.qta : r.qta.toFixed(2)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;font-family:monospace;font-size:11px">${fmt(r.prezzoU)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-size:10px;color:#666">${r.natura ? r.natura : r.aliqIVA+'%'}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;font-family:monospace;font-size:11px;font-weight:600">${fmt(r.prezzoT)}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="5" style="padding:12px 10px;color:#aaa;font-size:11px;text-align:center">Dettaglio righe non disponibile</td></tr>`;
+
+  const righeIVAhtml = righeIVA.length
+    ? righeIVA.map(r => `
+        <tr>
+          <td style="padding:5px 10px;font-size:10px">${r.aliq}% ${r.rif ? '— '+r.rif : ''} ${r.nat ? '('+r.nat+')' : ''}</td>
+          <td style="padding:5px 10px;text-align:right;font-family:monospace;font-size:10px">${fmt(r.imp)}</td>
+          <td style="padding:5px 10px;text-align:right;font-family:monospace;font-size:10px">${fmt(r.imp2)}</td>
+        </tr>`).join('')
+    : '';
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <title>Fattura ${f.numero} — ${f.fornitore}</title>
+  <title>${tipoDoc} ${f.numero} — ${f.fornitore}</title>
   <style>
-    @page { size: A4 portrait; margin: 16mm 14mm; }
+    @page { size: A4 portrait; margin: 14mm 12mm 14mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #333; margin: 0; }
-    .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom: 2px solid #8a6d3b; padding-bottom: 14px; margin-bottom: 18px; }
-    .header-left h1 { font-size: 20px; color: #8a6d3b; margin: 0 0 2px; font-family: Georgia, serif; }
-    .header-left p { font-size: 10px; color: #888; margin: 0; }
-    .badge { padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;
-             background: ${isPagata ? '#d4edda' : '#fff3cd'}; color: ${isPagata ? '#155724' : '#856404'}; }
-    .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #aaa; font-weight: 700; margin: 16px 0 8px; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
-    .field label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #999; display: block; margin-bottom: 2px; }
-    .field span  { font-size: 12px; color: #222; }
-    .divider { border: none; border-top: 1px solid #eee; margin: 14px 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    th { background: #8a6d3b; color: white; padding: 7px 10px; font-size: 10px; text-align: left; text-transform: uppercase; letter-spacing: 0.06em; }
-    th.r { text-align: right; }
-    td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 11px; }
-    td.r { text-align: right; font-family: monospace; }
-    .totale-row td { font-weight: 700; font-size: 13px; border-top: 2px solid #8a6d3b; border-bottom: none; }
-    .pag-box { margin-top: 16px; padding: 12px 14px; background: ${isPagata ? '#f0fdf4' : '#fffbeb'};
-                border: 1px solid ${isPagata ? '#86efac' : '#fde68a'}; border-radius: 6px; }
-    .pag-box .title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-                       color: ${isPagata ? '#166534' : '#92400e'}; margin-bottom: 8px; }
-    .footer { margin-top: 20px; font-size: 9px; color: #bbb; text-align: center; border-top: 1px solid #eee; padding-top: 8px; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin: 0; background: white; }
+
+    /* Intestazione fornitore */
+    .forn-header { border-bottom: 3px solid #1a1a2e; padding-bottom: 14px; margin-bottom: 16px; display:flex; justify-content:space-between; align-items:flex-start; }
+    .forn-name { font-size: 18px; font-weight: 700; color: #1a1a2e; margin: 0 0 4px; }
+    .forn-meta { font-size: 10px; color: #555; line-height: 1.7; }
+    .doc-badge { text-align: right; }
+    .doc-tipo { font-size: 15px; font-weight: 700; color: #1a1a2e; text-transform: uppercase; letter-spacing: 0.05em; }
+    .doc-numero { font-size: 13px; color: #555; margin-top: 3px; }
+    .doc-data { font-size: 11px; color: #888; margin-top: 2px; }
+
+    /* Box cedente/cessionario */
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .party-box { border: 1px solid #ddd; border-radius: 5px; padding: 10px 12px; }
+    .party-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #999; font-weight: 700; margin-bottom: 6px; }
+    .party-name { font-size: 12px; font-weight: 700; color: #1a1a2e; margin-bottom: 3px; }
+    .party-detail { font-size: 10px; color: #555; line-height: 1.6; }
+
+    /* Tabella righe */
+    .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #999; font-weight: 700; margin: 14px 0 6px; }
+    table.righe { width: 100%; border-collapse: collapse; }
+    table.righe thead tr { background: #1a1a2e; color: white; }
+    table.righe thead th { padding: 7px 10px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
+    table.righe thead th.r { text-align: right; }
+    table.righe thead th.c { text-align: center; }
+
+    /* Totali */
+    .totali-wrap { display: flex; justify-content: flex-end; margin-top: 4px; }
+    .totali-table { width: 280px; border-collapse: collapse; }
+    .totali-table td { padding: 5px 10px; font-size: 11px; }
+    .totali-table td.lbl { color: #555; }
+    .totali-table td.val { text-align: right; font-family: monospace; }
+    .totali-table .total-row { border-top: 2px solid #1a1a2e; }
+    .totali-table .total-row td { font-size: 13px; font-weight: 700; padding-top: 7px; }
+
+    /* Riepilogo IVA */
+    .iva-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10px; }
+    .iva-table th { background: #f0f0f0; padding: 5px 10px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: #666; }
+    .iva-table th.r { text-align: right; }
+
+    /* Pagamento */
+    .pag-section { margin-top: 14px; padding: 11px 14px; border-radius: 5px;
+      background: ${isPagata ? '#f0fdf4' : '#fffbeb'};
+      border: 1px solid ${isPagata ? '#86efac' : '#fde68a'}; }
+    .pag-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: ${isPagata ? '#166534' : '#92400e'}; margin-bottom: 6px; }
+    .pag-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px 16px; }
+    .pag-field label { font-size: 9px; text-transform: uppercase; color: #999; display: block; margin-bottom: 1px; }
+    .pag-field span { font-size: 11px; color: #222; }
+
+    .footer { margin-top: 16px; font-size: 9px; color: #bbb; text-align: center; border-top: 1px solid #eee; padding-top: 8px; }
   </style></head><body>
 
-  <div class="header">
-    <div class="header-left">
-      <h1>RESEXTENSA Ass. Culturale — Bari</h1>
-      <p>Fattura d'acquisto registrata il ${new Date().toLocaleDateString('it-IT')}</p>
+  <!-- INTESTAZIONE FORNITORE -->
+  <div class="forn-header">
+    <div>
+      <div class="forn-name">${f.fornitore}</div>
+      <div class="forn-meta">
+        ${piva_forn ? `P.IVA: <strong>${piva_forn}</strong>` : ''}
+        ${cf_forn && cf_forn !== piva_forn ? ` &nbsp;|&nbsp; C.F.: <strong>${cf_forn}</strong>` : ''}
+        ${indirizzoForn ? `<br>${indirizzoForn}` : ''}
+        ${tel_forn ? `<br>Tel: ${tel_forn}` : ''}
+        ${em_forn ? ` &nbsp;|&nbsp; ${em_forn}` : ''}
+      </div>
     </div>
-    <div><span class="badge">${f.stato}</span></div>
+    <div class="doc-badge">
+      <div class="doc-tipo">${tipoDoc}</div>
+      <div class="doc-numero">N° ${f.numero}</div>
+      <div class="doc-data">Data: ${fmtD(f.data_fattura)}</div>
+      ${scadenza ? `<div class="doc-data">Scadenza: ${fmtD(scadenza)}</div>` : ''}
+    </div>
   </div>
 
-  <div class="section-title">Dati fattura</div>
-  <div class="grid2">
-    <div class="field"><label>Fornitore</label><span>${f.fornitore}</span></div>
-    <div class="field"><label>N° Fattura</label><span style="font-family:monospace">${f.numero}</span></div>
-    <div class="field"><label>Data fattura</label><span>${fmtD(f.data_fattura)}</span></div>
-    <div class="field"><label>File originale</label><span style="font-size:10px;color:#888">${f.nome_file || '—'}</span></div>
+  <!-- CEDENTE / CESSIONARIO -->
+  <div class="parties">
+    <div class="party-box">
+      <div class="party-label">Fornitore</div>
+      <div class="party-name">${f.fornitore}</div>
+      <div class="party-detail">
+        ${piva_forn ? `P.IVA: ${piva_forn}<br>` : ''}
+        ${indirizzoForn}
+      </div>
+    </div>
+    <div class="party-box">
+      <div class="party-label">Cliente</div>
+      <div class="party-name">${cli_nome}</div>
+      <div class="party-detail">
+        ${cli_piva ? `P.IVA: ${cli_piva}<br>` : ''}
+        ${cli_cf && cli_cf !== cli_piva ? `C.F.: ${cli_cf}<br>` : ''}
+        ${indirizzoCli}
+      </div>
+    </div>
   </div>
 
-  <hr class="divider">
-  <div class="section-title">Importi</div>
-  <table>
-    <thead><tr><th>Descrizione</th><th class="r">Imponibile</th><th class="r">IVA</th><th class="r">Totale</th></tr></thead>
-    <tbody>
+  <!-- RIGHE DETTAGLIO -->
+  <div class="section-title">Descrizione beni/servizi</div>
+  <table class="righe">
+    <thead>
       <tr>
-        <td>${f.fornitore}</td>
-        <td class="r">${fmt(f.imponibile)}</td>
-        <td class="r">${fmt(f.iva)}</td>
-        <td class="r">${fmt(f.totale)}</td>
+        <th style="text-align:left;width:50%">Descrizione</th>
+        <th class="c" style="width:8%">Qtà</th>
+        <th class="r" style="width:14%">Prezzo unit.</th>
+        <th class="c" style="width:10%">IVA</th>
+        <th class="r" style="width:14%">Importo</th>
       </tr>
-    </tbody>
-    <tfoot>
-      <tr class="totale-row">
-        <td>Totale documento</td>
-        <td class="r">${fmt(f.imponibile)}</td>
-        <td class="r">${fmt(f.iva)}</td>
-        <td class="r">${fmt(f.totale)}</td>
-      </tr>
-    </tfoot>
+    </thead>
+    <tbody>${righeHTML}</tbody>
   </table>
 
-  <div class="pag-box">
-    <div class="title">${isPagata ? '✓ Pagamento registrato' : '⏳ In attesa di pagamento'}</div>
-    ${isPagata ? `
-    <div class="grid2">
-      <div class="field"><label>Data pagamento</label><span>${fmtD(f.data_pag)}</span></div>
-      <div class="field"><label>Modalità</label><span>${f.modalita_pag || '—'}</span></div>
-      ${f.note_pag ? `<div class="field" style="grid-column:1/-1"><label>Note</label><span>${f.note_pag}</span></div>` : ''}
-    </div>` : '<span style="font-size:11px;color:#92400e">Nessun pagamento registrato</span>'}
+  <!-- RIEPILOGO IVA -->
+  ${righeIVA.length > 0 ? `
+  <div class="section-title" style="margin-top:12px">Riepilogo IVA</div>
+  <table class="iva-table">
+    <thead><tr><th>Aliquota / Riferimento</th><th class="r">Imponibile</th><th class="r">Imposta</th></tr></thead>
+    <tbody>${righeIVAhtml}</tbody>
+  </table>` : ''}
+
+  <!-- TOTALI -->
+  <div class="totali-wrap">
+    <table class="totali-table">
+      <tr><td class="lbl">Imponibile</td><td class="val">${fmt(imponibile)}</td></tr>
+      <tr><td class="lbl">IVA</td><td class="val">${fmt(iva)}</td></tr>
+      <tr class="total-row"><td class="lbl">Totale documento</td><td class="val">${fmt(totale)}</td></tr>
+    </table>
   </div>
 
-  ${f.note ? `<div style="margin-top:14px"><div class="section-title">Note</div><div style="font-size:11px;color:#555">${f.note}</div></div>` : ''}
+  <!-- MODALITÀ DI PAGAMENTO PREVISTA -->
+  ${modPag ? `<div style="margin-top:10px;font-size:10px;color:#666">Modalità di pagamento indicata in fattura: <strong>${modPag}</strong></div>` : ''}
 
-  <div class="footer">RESEXTENSA Ass. Culturale — documento generato dal gestionale in data ${new Date().toLocaleDateString('it-IT')}</div>
+  <!-- STATO PAGAMENTO -->
+  <div class="pag-section">
+    <div class="pag-title">${isPagata ? '✓ Pagamento registrato' : '⏳ In attesa di pagamento'}</div>
+    ${isPagata ? `
+    <div class="pag-grid">
+      <div class="pag-field"><label>Data pagamento</label><span>${fmtD(f.data_pag)}</span></div>
+      <div class="pag-field"><label>Modalità</label><span>${f.modalita_pag || '—'}</span></div>
+      ${f.note_pag ? `<div class="pag-field"><label>Note</label><span>${f.note_pag}</span></div>` : ''}
+    </div>` : `<span style="font-size:11px;color:#92400e">Nessun pagamento registrato</span>`}
+  </div>
+
+  ${f.note ? `<div style="margin-top:12px;font-size:10px;color:#666"><strong>Note:</strong> ${f.note}</div>` : ''}
+
+  <div class="footer">
+    Documento generato dal gestionale RESEXTENSA — ${new Date().toLocaleDateString('it-IT')} — File originale: ${f.nome_file || '—'}
+  </div>
   </body></html>`;
 }
 
-function visualizzaFatturaPDF(id) {
+async function visualizzaFatturaPDF(id) {
   const f = fatture.find(x => x.id === id);
   if (!f) return;
-  const html = buildFatturaHTML(f);
+  showToast('Generazione documento…', 'info');
+  let xmlDati = null;
+  if (f.file_id) {
+    try {
+      const xmlText = await fetchXMLFromDrive(f.file_id);
+      xmlDati = parseFatturaXML(xmlText);
+    } catch(e) { console.warn('XML non disponibile, uso dati Sheets:', e.message); }
+  }
+  const html = buildFatturaHTML(f, xmlDati);
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
 }
 
-function scaricaFatturaPDF(id) {
+async function scaricaFatturaPDF(id) {
   const f = fatture.find(x => x.id === id);
   if (!f) return;
-  const html = buildFatturaHTML(f);
-  // Apre in nuova finestra e attiva stampa → Salva come PDF
+  showToast('Preparazione stampa…', 'info');
+  let xmlDati = null;
+  if (f.file_id) {
+    try {
+      const xmlText = await fetchXMLFromDrive(f.file_id);
+      xmlDati = parseFatturaXML(xmlText);
+    } catch(e) { console.warn('XML non disponibile, uso dati Sheets:', e.message); }
+  }
+  const html = buildFatturaHTML(f, xmlDati);
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
