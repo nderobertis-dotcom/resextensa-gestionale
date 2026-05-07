@@ -771,61 +771,29 @@
 
   <!-- MODAL CARICA FATTURA -->
   <div class="modal-overlay" id="fatturaUploadModal">
-    <div class="modal" style="width:560px;max-width:95vw">
-      <div class="modal-title">↑ Carica fattura d'acquisto</div>
+    <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;overflow-y:auto">
+      <div class="modal-title">↑ Carica fatture d'acquisto (XML)</div>
       <div style="display:flex;flex-direction:column;gap:14px">
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:11px;color:var(--text2);line-height:1.6">
-          Il file verrà rinominato come <code style="background:var(--surface);padding:1px 5px;border-radius:3px">nomefornitore_numerofattura.pdf</code> prima del caricamento su Drive.
+          Seleziona uno o più file <strong>XML</strong> scaricati dal portale AdE. I dati contabili vengono letti automaticamente — puoi correggerli prima di salvare. Il file verrà rinominato come <code style="background:var(--surface);padding:1px 5px;border-radius:3px">nomefornitore_numerofattura.xml</code>.
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div style="grid-column:1/-1">
-            <div class="modal-label">File PDF fattura *</div>
-            <div id="fat-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:18px;text-align:center;cursor:pointer;color:var(--text3);font-size:12px"
-              onclick="document.getElementById('fat-file-input').click()"
-              ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
-              ondragleave="this.style.borderColor='var(--border)'"
-              ondrop="handleFatturaDrop(event)">
-              <div style="font-size:22px;margin-bottom:6px">📄</div>
-              <div>Trascina il PDF qui o <strong style="color:var(--accent)">clicca per selezionare</strong></div>
-              <div id="fat-file-name" style="margin-top:8px;color:var(--text);font-weight:500;font-size:11px"></div>
-            </div>
-            <input type="file" id="fat-file-input" accept=".pdf" style="display:none" onchange="onFatturaFileSelected(this)">
-          </div>
-          <div>
-            <div class="modal-label">Nome fornitore *</div>
-            <input class="edit-input" id="fat-fornitore" placeholder="es. Rossi Costumi" list="fat-forn-list">
-            <datalist id="fat-forn-list"></datalist>
-          </div>
-          <div>
-            <div class="modal-label">N° Fattura *</div>
-            <input class="edit-input" id="fat-numero" placeholder="es. 2026/042">
-          </div>
-          <div>
-            <div class="modal-label">Data fattura *</div>
-            <input class="edit-input" id="fat-data" type="date">
-          </div>
-          <div>
-            <div class="modal-label">Imponibile €</div>
-            <input class="edit-input" id="fat-imponibile" type="number" step="0.01" min="0" placeholder="0.00" oninput="aggiornaCalcoloIVA()">
-          </div>
-          <div>
-            <div class="modal-label">IVA €</div>
-            <input class="edit-input" id="fat-iva" type="number" step="0.01" min="0" placeholder="0.00" oninput="aggiornaCalcoloIVA()">
-          </div>
-          <div>
-            <div class="modal-label">Totale € <span style="font-size:10px;color:var(--text3)">(auto)</span></div>
-            <input class="edit-input" id="fat-totale" type="number" step="0.01" placeholder="0.00" readonly style="background:var(--surface2)">
-          </div>
-          <div>
-            <div class="modal-label">Note</div>
-            <input class="edit-input" id="fat-note" placeholder="Facoltativo">
-          </div>
+        <div id="fat-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;color:var(--text3);font-size:12px"
+          onclick="document.getElementById('fat-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+          ondragleave="this.style.borderColor='var(--border)'"
+          ondrop="handleFatturaDrop(event)">
+          <div style="font-size:24px;margin-bottom:6px">📂</div>
+          <div>Trascina i file XML qui o <strong style="color:var(--accent)">clicca per selezionare</strong></div>
+          <div id="fat-file-name" style="margin-top:8px;color:var(--accent);font-weight:500;font-size:11px"></div>
         </div>
+        <input type="file" id="fat-file-input" accept=".xml,.p7m" multiple style="display:none" onchange="onFatturaFileSelected(this)">
+        <datalist id="fat-forn-list"></datalist>
+        <div id="fat-preview-list"></div>
         <div id="fat-upload-status" style="font-size:12px;min-height:16px"></div>
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeFatturaUpload()">Annulla</button>
-        <button class="btn-new" onclick="salvaFattura()">↑ Carica e salva</button>
+        <button class="btn-new" onclick="salvaFattura()">↑ Carica tutte e salva</button>
       </div>
     </div>
   </div>
@@ -3824,104 +3792,193 @@ function renderFattureTable() {
   }).join('');
 }
 
-// ── Upload fattura ────────────────────────────────────────────────────────────
+// ── Parsing FatturaPA XML ────────────────────────────────────────────────────
+function parseFatturaXML(xmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, 'application/xml');
+  const get = (tag) => doc.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
+
+  // Fornitore: preferisce Denominazione, fallback Nome+Cognome
+  const denominazione = get('Denominazione');
+  const nome     = get('Nome');
+  const cognome  = get('Cognome');
+  const fornitore = denominazione || `${cognome} ${nome}`.trim();
+
+  // Numero e data
+  const numero = get('Numero');
+  const data   = get('Data'); // formato YYYY-MM-DD
+
+  // Totale documento
+  const totale = get('ImportoTotaleDocumento');
+
+  // Imponibile e IVA: somma di tutti i DatiRiepilogo (fatture multi-aliquota)
+  const riepilogos = doc.getElementsByTagName('DatiRiepilogo');
+  let imponibile = 0, iva = 0;
+  for (const r of riepilogos) {
+    imponibile += parseFloat(r.getElementsByTagName('ImponibileImporto')[0]?.textContent || '0');
+    iva        += parseFloat(r.getElementsByTagName('Imposta')[0]?.textContent || '0');
+  }
+
+  return {
+    fornitore,
+    numero,
+    data,
+    imponibile: imponibile.toFixed(2),
+    iva:        iva.toFixed(2),
+    totale:     totale || (imponibile + iva).toFixed(2),
+  };
+}
+
+// ── Upload fatture multi-XML ──────────────────────────────────────────────────
+let fattureInCoda = []; // array di {file, dati, stato}
+
 function openFatturaUpload() {
-  fatturaFileSelected = null;
+  fattureInCoda = [];
+  document.getElementById('fat-upload-status').textContent = '';
+  document.getElementById('fat-preview-list').innerHTML = '';
   document.getElementById('fat-file-name').textContent = '';
   document.getElementById('fat-drop-zone').style.borderColor = 'var(--border)';
-  ['fat-fornitore','fat-numero','fat-data','fat-imponibile','fat-iva','fat-totale','fat-note'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  document.getElementById('fat-upload-status').textContent = '';
-  // Popola datalist fornitori
-  const dl = document.getElementById('fat-forn-list');
-  if (dl) dl.innerHTML = fornitori.map(f=>`<option value="${f.ragione_sociale}">`).join('');
   document.getElementById('fatturaUploadModal').classList.add('open');
 }
-function closeFatturaUpload() { document.getElementById('fatturaUploadModal').classList.remove('open'); }
-document.getElementById('fatturaUploadModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeFatturaUpload(); });
+function closeFatturaUpload() {
+  document.getElementById('fatturaUploadModal').classList.remove('open');
+  fattureInCoda = [];
+}
+document.getElementById('fatturaUploadModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeFatturaUpload(); });
 
 function onFatturaFileSelected(input) {
-  if (!input.files[0]) return;
-  fatturaFileSelected = input.files[0];
-  document.getElementById('fat-file-name').textContent = '📎 ' + fatturaFileSelected.name;
+  if (!input.files.length) return;
+  elaboraFileFatture(Array.from(input.files));
 }
 function handleFatturaDrop(e) {
   e.preventDefault();
   document.getElementById('fat-drop-zone').style.borderColor = 'var(--border)';
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
-  fatturaFileSelected = file;
-  document.getElementById('fat-file-name').textContent = '📎 ' + file.name;
+  elaboraFileFatture(Array.from(e.dataTransfer.files));
 }
-function aggiornaCalcoloIVA() {
-  const imp = parseFloat(document.getElementById('fat-imponibile').value)||0;
-  const iva = parseFloat(document.getElementById('fat-iva').value)||0;
-  document.getElementById('fat-totale').value = (imp + iva).toFixed(2);
+
+async function elaboraFileFatture(files) {
+  const xmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.xml') || f.name.toLowerCase().endsWith('.p7m'));
+  if (!xmlFiles.length) { showToast('Seleziona file XML (FatturaPA)', 'error'); return; }
+  document.getElementById('fat-file-name').textContent = `📎 ${xmlFiles.length} file selezionati`;
+  document.getElementById('fat-upload-status').innerHTML = '<span style="color:var(--text2)">🔍 Lettura XML in corso…</span>';
+
+  fattureInCoda = [];
+  for (const file of xmlFiles) {
+    try {
+      const text = await file.text();
+      const dati = parseFatturaXML(text);
+      fattureInCoda.push({ file, dati, errore: null });
+    } catch(e) {
+      fattureInCoda.push({ file, dati: null, errore: e.message });
+    }
+  }
+  document.getElementById('fat-upload-status').textContent = '';
+  renderFatturePreview();
 }
+
+function renderFatturePreview() {
+  const box = document.getElementById('fat-preview-list');
+  if (!fattureInCoda.length) { box.innerHTML = ''; return; }
+
+  box.innerHTML = fattureInCoda.map((item, idx) => {
+    if (item.errore) return `
+      <div style="padding:10px 12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;margin-bottom:8px;font-size:11px">
+        ❌ <strong>${item.file.name}</strong> — Errore lettura: ${item.errore}
+      </div>`;
+    const d = item.dati;
+    const nomeForn = d.fornitore.replace(/[^a-zA-Z0-9À-ÿ\s]/g,'').trim().replace(/\s+/g,'_');
+    const nomeNum  = d.numero.replace(/[^a-zA-Z0-9]/g,'');
+    const nomeFile = `${nomeForn}_${nomeNum}.xml`;
+    return `
+      <div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;font-size:11px" id="fat-preview-${idx}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="flex:1">
+            <div style="font-weight:600;color:var(--text);font-size:12px">📄 ${item.file.name}</div>
+            <div style="color:var(--text3);margin-top:2px">→ verrà rinominato: <code style="background:var(--surface2);padding:1px 4px;border-radius:3px">${nomeFile}</code></div>
+          </div>
+          <button onclick="rimuoviFatturaInCoda(${idx})" style="background:none;border:none;cursor:pointer;color:var(--cessato);font-size:14px;padding:0">✕</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr) repeat(3,1fr);gap:6px 12px;margin-top:10px">
+          <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Fornitore</div>
+            <input class="edit-input" style="font-size:11px;padding:4px 6px" value="${d.fornitore}" onchange="fattureInCoda[${idx}].dati.fornitore=this.value" list="fat-forn-list"></div>
+          <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">N° Fattura</div>
+            <input class="edit-input" style="font-size:11px;padding:4px 6px" value="${d.numero}" onchange="fattureInCoda[${idx}].dati.numero=this.value"></div>
+          <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Data</div>
+            <input class="edit-input" style="font-size:11px;padding:4px 6px" type="date" value="${d.data}" onchange="fattureInCoda[${idx}].dati.data=this.value"></div>
+          <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Imponibile €</div>
+            <input class="edit-input" style="font-size:11px;padding:4px 6px" type="number" step="0.01" value="${d.imponibile}" onchange="fattureInCoda[${idx}].dati.imponibile=this.value"></div>
+          <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">IVA €</div>
+            <input class="edit-input" style="font-size:11px;padding:4px 6px" type="number" step="0.01" value="${d.iva}" onchange="fattureInCoda[${idx}].dati.iva=this.value"></div>
+          <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Totale €</div>
+            <input class="edit-input" style="font-size:11px;padding:4px 6px" type="number" step="0.01" value="${d.totale}" onchange="fattureInCoda[${idx}].dati.totale=this.value"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function rimuoviFatturaInCoda(idx) {
+  fattureInCoda.splice(idx, 1);
+  renderFatturePreview();
+}
+
+// funzione legacy mantenuta per compatibilità
+function aggiornaCalcoloIVA() {}
 
 async function salvaFattura() {
-  const g = id => document.getElementById(id)?.value?.trim()||'';
-  const fornitore = g('fat-fornitore');
-  const numero    = g('fat-numero');
-  const data      = g('fat-data');
-  const imp       = g('fat-imponibile');
-  if (!fornitore || !numero || !data || !imp) {
-    showToast('Compila i campi obbligatori: Fornitore, N° Fattura, Data, Imponibile', 'error');
-    return;
-  }
+  const valide = fattureInCoda.filter(x => !x.errore && x.dati?.fornitore && x.dati?.numero);
+  if (!valide.length) { showToast('Nessuna fattura valida da salvare', 'error'); return; }
+
   const statusEl = document.getElementById('fat-upload-status');
-  statusEl.innerHTML = '<span style="color:var(--text2)">⏳ Salvataggio in corso…</span>';
+  statusEl.innerHTML = `<span style="color:var(--text2)">⏳ Caricamento 0/${valide.length}…</span>`;
+  checkTokenAndRefresh();
 
-  const newId = 'FAT-' + Date.now();
-  // Costruisce nome file normalizzato
-  const nomeForn = fornitore.replace(/[^a-zA-Z0-9À-ÿ\s]/g,'').trim().replace(/\s+/g,'_');
-  const nomeNum  = numero.replace(/[^a-zA-Z0-9]/g,'');
-  const nomeFile = `${nomeForn}_${nomeNum}.pdf`;
-
-  let fileId = '';
-  // Upload su Drive se file selezionato
-  if (fatturaFileSelected && DRIVE_FATTURE_FOLDER) {
+  let ok = 0, err = 0;
+  for (const item of valide) {
     try {
-      statusEl.innerHTML = '<span style="color:var(--text2)">⏳ Upload PDF su Drive…</span>';
-      const renamedFile = new File([fatturaFileSelected], nomeFile, { type: 'application/pdf' });
-      const metadata = { name: nomeFile, parents: [DRIVE_FATTURE_FOLDER] };
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file', renamedFile);
-      checkTokenAndRefresh();
-      const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+      const d = item.dati;
+      const nomeForn = d.fornitore.replace(/[^a-zA-Z0-9À-ÿ\s]/g,'').trim().replace(/\s+/g,'_');
+      const nomeNum  = d.numero.replace(/[^a-zA-Z0-9]/g,'');
+      const estensione = item.file.name.toLowerCase().endsWith('.p7m') ? '.xml.p7m' : '.xml';
+      const nomeFile = `${nomeForn}_${nomeNum}${estensione}`;
+      const newId = 'FAT-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+
+      // Upload file su Drive rinominato
+      let fileId = '';
+      if (DRIVE_FATTURE_FOLDER) {
+        const renamedFile = new File([item.file], nomeFile, { type: item.file.type });
+        const metadata = { name: nomeFile, parents: [DRIVE_FATTURE_FOLDER] };
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', renamedFile);
+        const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+          method: 'POST', headers: { Authorization: 'Bearer '+accessToken }, body: form
+        });
+        if (r.ok) fileId = (await r.json()).id;
+      }
+
+      // Salva riga su Sheets
+      const row = [newId, fileId, nomeFile, d.fornitore, d.numero, d.data,
+                   d.imponibile, d.iva, d.totale, 'DA PAGARE', '', '', '', ''];
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FAT_SHEET+'!A:N')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + accessToken },
-        body: form
+        headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [row] })
       });
-      if (!r.ok) throw new Error('Upload Drive fallito: ' + r.status);
-      const dr = await r.json();
-      fileId = dr.id;
+      ok++;
+      statusEl.innerHTML = `<span style="color:var(--text2)">⏳ Caricamento ${ok}/${valide.length}…</span>`;
     } catch(e) {
-      statusEl.innerHTML = `<span style="color:var(--cessato)">⚠ Upload Drive non riuscito: ${e.message}. La fattura verrà salvata senza file.</span>`;
+      err++;
+      console.error('Errore fattura:', item.dati?.numero, e);
     }
-  } else if (fatturaFileSelected && !DRIVE_FATTURE_FOLDER) {
-    statusEl.innerHTML = '<span style="color:#b8860b">⚠ Cartella Drive non configurata — la fattura viene salvata senza file allegato. Imposta DRIVE_FATTURE_FOLDER nel codice.</span>';
   }
 
-  // Salva riga su Sheets
-  const row = [newId, fileId, fileId ? nomeFile : '', fornitore, numero, data,
-               g('fat-imponibile'), g('fat-iva'), g('fat-totale'), 'DA PAGARE', '', '', '', g('fat-note')];
-  try {
-    statusEl.innerHTML = '<span style="color:var(--text2)">⏳ Salvataggio su Sheets…</span>';
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FAT_SHEET+'!A:N')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [row] })
-    });
-    showToast('Fattura salvata', 'success');
+  if (err === 0) {
+    showToast(`✅ ${ok} fatture salvate`, 'success');
     closeFatturaUpload();
-    await loadFatture();
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--cessato)">❌ Errore Sheets: ${e.message}</span>`;
+  } else {
+    showToast(`⚠ ${ok} salvate, ${err} errori`, 'error');
   }
+  await loadFatture();
 }
 
 // ── Pagamento ─────────────────────────────────────────────────────────────────
