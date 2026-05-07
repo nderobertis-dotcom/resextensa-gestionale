@@ -3761,9 +3761,8 @@ function renderFattureTable() {
   tbody.innerHTML = list.map(f => {
     const isPagata = f.stato === 'PAGATA';
     const statoBg  = isPagata ? 'background:#d4edda;color:#155724' : 'background:#fff3cd;color:#856404';
-    const viewBtn  = f.file_id
-      ? `<a href="https://drive.google.com/file/d/${f.file_id}/view" target="_blank" title="Visualizza PDF" style="cursor:pointer;text-decoration:none;font-size:15px">👁</a>`
-      : '<span style="color:var(--text3);font-size:12px">—</span>';
+    const viewBtn  = `<span title="Visualizza fattura" style="cursor:pointer;font-size:15px" onclick="visualizzaFatturaPDF('${f.id}')">👁</span>`;
+    const scaricaBtn = `<span title="Scarica PDF fattura" style="cursor:pointer;font-size:15px" onclick="scaricaFatturaPDF('${f.id}')">↓</span>`;
     return `<tr style="border-bottom:1px solid var(--border);${isPagata?'':'background:var(--surface)'}">
       <td style="padding:8px">
         <div style="font-weight:500;color:var(--text)">${f.fornitore}</div>
@@ -3782,7 +3781,7 @@ function renderFattureTable() {
       <td style="padding:8px;text-align:center">
         <div style="display:flex;gap:6px;justify-content:center;align-items:center">
           ${viewBtn}
-          ${f.file_id ? `<span title="Scarica" style="cursor:pointer;font-size:15px" onclick="downloadDriveFile('${f.file_id}','${f.nome_file.replace(/'/g,"\\'")}')">↓</span>` : ''}
+          ${scaricaBtn}
           <span title="${isPagata?'Vedi pagamento':'Registra pagamento'}" style="cursor:pointer;font-size:15px" onclick="openPagamentoModal('${f.id}')">💶</span>
           <span title="Allega ricevuta" style="cursor:pointer;font-size:15px" onclick="openRicevuteModal('${f.id}','${f.fornitore.replace(/'/g,"\\'")}')">📎</span>
           ${userRole==='admin' ? `<span title="Elimina" style="cursor:pointer;font-size:15px;color:var(--cessato)" onclick="eliminaFattura('${f.id}')">✕</span>` : ''}
@@ -4006,7 +4005,115 @@ async function salvaFattura() {
   await loadFatture();
 }
 
-// ── Pagamento ─────────────────────────────────────────────────────────────────
+// ── Generazione PDF leggibile fattura ─────────────────────────────────────────
+function buildFatturaHTML(f) {
+  const fmt  = v => v ? '€ ' + parseFloat(v).toFixed(2).replace('.', ',') : '€ 0,00';
+  const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
+  const isPagata = f.stato === 'PAGATA';
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Fattura ${f.numero} — ${f.fornitore}</title>
+  <style>
+    @page { size: A4 portrait; margin: 16mm 14mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #333; margin: 0; }
+    .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom: 2px solid #8a6d3b; padding-bottom: 14px; margin-bottom: 18px; }
+    .header-left h1 { font-size: 20px; color: #8a6d3b; margin: 0 0 2px; font-family: Georgia, serif; }
+    .header-left p { font-size: 10px; color: #888; margin: 0; }
+    .badge { padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;
+             background: ${isPagata ? '#d4edda' : '#fff3cd'}; color: ${isPagata ? '#155724' : '#856404'}; }
+    .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #aaa; font-weight: 700; margin: 16px 0 8px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+    .field label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #999; display: block; margin-bottom: 2px; }
+    .field span  { font-size: 12px; color: #222; }
+    .divider { border: none; border-top: 1px solid #eee; margin: 14px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th { background: #8a6d3b; color: white; padding: 7px 10px; font-size: 10px; text-align: left; text-transform: uppercase; letter-spacing: 0.06em; }
+    th.r { text-align: right; }
+    td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 11px; }
+    td.r { text-align: right; font-family: monospace; }
+    .totale-row td { font-weight: 700; font-size: 13px; border-top: 2px solid #8a6d3b; border-bottom: none; }
+    .pag-box { margin-top: 16px; padding: 12px 14px; background: ${isPagata ? '#f0fdf4' : '#fffbeb'};
+                border: 1px solid ${isPagata ? '#86efac' : '#fde68a'}; border-radius: 6px; }
+    .pag-box .title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+                       color: ${isPagata ? '#166534' : '#92400e'}; margin-bottom: 8px; }
+    .footer { margin-top: 20px; font-size: 9px; color: #bbb; text-align: center; border-top: 1px solid #eee; padding-top: 8px; }
+  </style></head><body>
+
+  <div class="header">
+    <div class="header-left">
+      <h1>RESEXTENSA Ass. Culturale — Bari</h1>
+      <p>Fattura d'acquisto registrata il ${new Date().toLocaleDateString('it-IT')}</p>
+    </div>
+    <div><span class="badge">${f.stato}</span></div>
+  </div>
+
+  <div class="section-title">Dati fattura</div>
+  <div class="grid2">
+    <div class="field"><label>Fornitore</label><span>${f.fornitore}</span></div>
+    <div class="field"><label>N° Fattura</label><span style="font-family:monospace">${f.numero}</span></div>
+    <div class="field"><label>Data fattura</label><span>${fmtD(f.data_fattura)}</span></div>
+    <div class="field"><label>File originale</label><span style="font-size:10px;color:#888">${f.nome_file || '—'}</span></div>
+  </div>
+
+  <hr class="divider">
+  <div class="section-title">Importi</div>
+  <table>
+    <thead><tr><th>Descrizione</th><th class="r">Imponibile</th><th class="r">IVA</th><th class="r">Totale</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>${f.fornitore}</td>
+        <td class="r">${fmt(f.imponibile)}</td>
+        <td class="r">${fmt(f.iva)}</td>
+        <td class="r">${fmt(f.totale)}</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr class="totale-row">
+        <td>Totale documento</td>
+        <td class="r">${fmt(f.imponibile)}</td>
+        <td class="r">${fmt(f.iva)}</td>
+        <td class="r">${fmt(f.totale)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="pag-box">
+    <div class="title">${isPagata ? '✓ Pagamento registrato' : '⏳ In attesa di pagamento'}</div>
+    ${isPagata ? `
+    <div class="grid2">
+      <div class="field"><label>Data pagamento</label><span>${fmtD(f.data_pag)}</span></div>
+      <div class="field"><label>Modalità</label><span>${f.modalita_pag || '—'}</span></div>
+      ${f.note_pag ? `<div class="field" style="grid-column:1/-1"><label>Note</label><span>${f.note_pag}</span></div>` : ''}
+    </div>` : '<span style="font-size:11px;color:#92400e">Nessun pagamento registrato</span>'}
+  </div>
+
+  ${f.note ? `<div style="margin-top:14px"><div class="section-title">Note</div><div style="font-size:11px;color:#555">${f.note}</div></div>` : ''}
+
+  <div class="footer">RESEXTENSA Ass. Culturale — documento generato dal gestionale in data ${new Date().toLocaleDateString('it-IT')}</div>
+  </body></html>`;
+}
+
+function visualizzaFatturaPDF(id) {
+  const f = fatture.find(x => x.id === id);
+  if (!f) return;
+  const html = buildFatturaHTML(f);
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+}
+
+function scaricaFatturaPDF(id) {
+  const f = fatture.find(x => x.id === id);
+  if (!f) return;
+  const html = buildFatturaHTML(f);
+  // Apre in nuova finestra e attiva stampa → Salva come PDF
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.addEventListener('load', () => setTimeout(() => win.print(), 400));
+}
+// ─────────────────────────────────────────────────────────────────────────────
 function openPagamentoModal(id) {
   fatturaPagamentoId = id;
   const f = fatture.find(x => x.id === id);
