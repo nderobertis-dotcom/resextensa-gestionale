@@ -742,6 +742,9 @@
           <option value="PAGATA">Pagate</option>
           <option value="DA PAGARE">Da pagare</option>
         </select>
+        <select class="search-input" id="fatSpettFilter" style="font-size:11px;padding:5px 8px" onchange="renderFattureTable()">
+          <option value="">Tutti gli spettacoli</option>
+        </select>
         <button class="btn-export" style="font-size:11px;padding:5px 12px" onclick="esportaFattureCSV()">↓ CSV</button>
         <button class="btn-new" style="font-size:11px;padding:5px 14px" onclick="openFatturaUpload()">↑ Carica fattura</button>
       </div>
@@ -759,6 +762,7 @@
             <th style="padding:9px 8px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3)">Stato</th>
             <th style="padding:9px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3)">Data pag.</th>
             <th style="padding:9px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3)">Modalità</th>
+            <th style="padding:9px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3)">Spettacolo</th>
             <th style="padding:9px 8px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3)">Azioni</th>
           </tr>
         </thead>
@@ -3696,7 +3700,7 @@ function esportaFornitoriCSV() {
 // M:note_pag  N:note
 
 const FAT_SHEET = 'Fatture2026';
-const FAT_RANGE = 'Fatture2026!A2:N';
+const FAT_RANGE = 'Fatture2026!A2:O';
 let fatture = [];
 let fatturaPagamentoId = null; // ID fattura in lavorazione nel modal pagamento
 let fatturaFileSelected = null; // File PDF selezionato
@@ -3720,6 +3724,7 @@ async function loadFatture() {
       modalita_pag: row[11] || '',
       note_pag:     row[12] || '',
       note:         row[13] || '',
+      codice_spett: row[14] || '',
     })).filter(f => f.id && f.fornitore);
     aggiornStatsFatture(); // stats globali iniziali
     renderFattureTable();  // poi renderizza e ricalcola in base al filtro
@@ -3744,15 +3749,29 @@ function aggiornStatsFatture(lista) {
 }
 
 function renderFattureTable() {
-  const q    = (document.getElementById('fatSearchInput')?.value||'').toLowerCase();
+  const q     = (document.getElementById('fatSearchInput')?.value||'').toLowerCase();
   const stato = document.getElementById('fatStatoFilter')?.value||'';
-  const fmt  = v => v ? '€ '+(parseFloat(v)||0).toFixed(2).replace('.',',') : '—';
-  const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
+  const spett = document.getElementById('fatSpettFilter')?.value||'';
+  const fmt   = v => v ? '€ '+(parseFloat(v)||0).toFixed(2).replace('.',',') : '—';
+  const fmtD  = v => v ? v.split('-').reverse().join('/') : '—';
+
+  // Popola dropdown spettacoli con quelli usati nelle fatture + lista globale
+  const spettEl = document.getElementById('fatSpettFilter');
+  if (spettEl && spettEl.options.length <= 1) {
+    const tuttiSpett = [...new Set([
+      ...fatture.map(f=>f.codice_spett).filter(Boolean),
+      ...allSpettacoli()
+    ])].sort();
+    spettEl.innerHTML = '<option value="">Tutti gli spettacoli</option>' +
+      tuttiSpett.map(s=>`<option value="${s}">${s}</option>`).join('');
+    if (spett) spettEl.value = spett;
+  }
 
   let list = fatture.filter(f => {
-    const matchQ = !q || [f.fornitore,f.numero,f.nome_file].some(x=>x.toLowerCase().includes(q));
+    const matchQ = !q || [f.fornitore,f.numero,f.nome_file,f.codice_spett||''].some(x=>x.toLowerCase().includes(q));
     const matchS = !stato || f.stato === stato;
-    return matchQ && matchS;
+    const matchP = !spett || f.codice_spett === spett;
+    return matchQ && matchS && matchP;
   });
   list.sort((a,b) => (b.data_fattura||'').localeCompare(a.data_fattura||''));
 
@@ -3785,6 +3804,13 @@ function renderFattureTable() {
       </td>
       <td style="padding:8px;white-space:nowrap;font-size:11px">${fmtD(f.data_pag)}</td>
       <td style="padding:8px;font-size:11px;color:var(--text2)">${f.modalita_pag||'—'}</td>
+      <td style="padding:6px 8px">
+        <select style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);width:100%;min-width:120px;max-width:160px"
+          onchange="salvaSpettacoloFattura('${f.id}',this.value)" title="Assegna spettacolo">
+          <option value="">— nessuno —</option>
+          ${allSpettacoli().map(s=>`<option value="${s}" ${f.codice_spett===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
       <td style="padding:8px;text-align:center">
         <div style="display:flex;gap:6px;justify-content:center;align-items:center">
           ${viewBtn}
@@ -3897,6 +3923,38 @@ function parseFatturaXML(xmlText) {
   const modalitaPagFattura = detPag ? get(detPag,'ModalitaPagamento') : '';
   const scadenza = detPag ? get(detPag,'DataScadenzaPagamento') : '';
 
+  // ── Codice spettacolo (ricerca automatica in causale e descrizioni) ──────────
+  // Il fornitore può inserirlo come: "COD:NOMESPEC", "SPETT:NOME", oppure il nome
+  // dello spettacolo compare direttamente nella causale o descrizione riga
+  let codice_spett = '';
+  // Usa lista dinamica degli spettacoli (da rubrica + lista fissa)
+  const spettacoliNoti = allSpettacoli();
+
+  // Cerca in CausaleDocumento
+  const causali = doc.getElementsByTagName('CausaleDocumento');
+  const tuttiTesti = [];
+  for (const c of causali) tuttiTesti.push(c.textContent.toUpperCase());
+  // Cerca nelle descrizioni righe
+  const descLinee = doc.getElementsByTagName('Descrizione');
+  for (const d of descLinee) tuttiTesti.push(d.textContent.toUpperCase());
+  // Cerca DatiOrdineAcquisto > IdDocumento (campo più usato per riferimenti)
+  const idDocOrdine = getDoc('IdDocumento');
+  if (idDocOrdine) tuttiTesti.push(idDocOrdine.toUpperCase());
+
+  // Pattern espliciti: COD:XXX / SPETT:XXX / SPETTACOLO:XXX
+  const patternCodice = /(?:COD|SPETT|SPETTACOLO|CODICE)[:\s\-]+([A-Z0-9'\s]+?)(?:\s*[-,;\/]|$)/i;
+  for (const testo of tuttiTesti) {
+    const m = testo.match(patternCodice);
+    if (m) { codice_spett = m[1].trim(); break; }
+  }
+  // Se non trovato pattern esplicito, cerca nome spettacolo noto nei testi
+  if (!codice_spett) {
+    for (const testo of tuttiTesti) {
+      const trovato = spettacoliNoti.find(s => testo.includes(s.toUpperCase()));
+      if (trovato) { codice_spett = trovato; break; }
+    }
+  }
+
   return {
     fornitore, piva_forn, cf_forn, sede_forn, telefono_forn, email_forn, regime_forn,
     cliente_nome, cliente_piva, cliente_cf, sede_cli,
@@ -3905,6 +3963,7 @@ function parseFatturaXML(xmlText) {
     imponibile: imponibile.toFixed(2),
     iva: iva.toFixed(2),
     modalitaPagFattura, scadenza,
+    codice_spett,
   };
 }
 
@@ -3997,6 +4056,11 @@ function renderFatturePreview() {
             <input class="edit-input" style="font-size:11px;padding:4px 6px" type="number" step="0.01" value="${d.iva}" onchange="fattureInCoda[${idx}].dati.iva=this.value"></div>
           <div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Totale €</div>
             <input class="edit-input" style="font-size:11px;padding:4px 6px" type="number" step="0.01" value="${d.totale}" onchange="fattureInCoda[${idx}].dati.totale=this.value"></div>
+          <div style="grid-column:1/-1"><div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Spettacolo ${d.codice_spett?'<span style="color:var(--attivo);font-weight:600">✓ rilevato automaticamente</span>':''}</div>
+            <select class="edit-input" style="font-size:11px;padding:4px 6px;width:100%" onchange="fattureInCoda[${idx}].dati.codice_spett=this.value">
+              <option value="">— nessuno —</option>
+              ${allSpettacoli().map(s=>`<option value="${s}" ${(d.codice_spett||'')=== s?'selected':''}>${s}</option>`).join('')}
+            </select></div>
         </div>
       </div>`;
   }).join('');
@@ -4068,8 +4132,9 @@ async function salvaFattura() {
 
       // Salva riga su Sheets
       const row = [newId, fileId, nomeFile, d.fornitore, d.numero, d.data,
-                   d.imponibile, d.iva, d.totale, 'DA PAGARE', '', '', '', ''];
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FAT_SHEET+'!A:N')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+                   d.imponibile, d.iva, d.totale, 'DA PAGARE', '', '', '', '',
+                   d.codice_spett || ''];
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FAT_SHEET+'!A:O')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
         method: 'POST',
         headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [row] })
@@ -4356,6 +4421,23 @@ async function scaricaFatturaPDF(id) {
   win.addEventListener('load', () => setTimeout(() => win.print(), 400));
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function salvaSpettacoloFattura(id, codice) {
+  const idx = fatture.findIndex(f => f.id === id);
+  if (idx < 0) return;
+  const sheetRow = idx + 2;
+  try {
+    checkTokenAndRefresh();
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FAT_SHEET+'!O'+sheetRow)}?valueInputOption=RAW`, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[codice]] })
+    });
+    fatture[idx].codice_spett = codice;
+    showToast(codice ? `Spettacolo assegnato: ${codice}` : 'Spettacolo rimosso', 'success');
+  } catch(e) { showToast('Errore salvataggio: '+e.message, 'error'); }
+}
+
 function openPagamentoModal(id) {
   fatturaPagamentoId = id;
   const f = fatture.find(x => x.id === id);
@@ -4498,7 +4580,7 @@ async function eliminaFattura(id) {
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${FAT_SHEET}!A${sheetRow}:N${sheetRow}?valueInputOption=RAW`, {
       method: 'PUT',
       headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [['','','','','','','','','','','','','','']] })
+      body: JSON.stringify({ values: [['','','','','','','','','','','','','','','']] })
     });
     showToast('Fattura eliminata', 'success');
     await loadFatture();
@@ -4506,8 +4588,8 @@ async function eliminaFattura(id) {
 }
 
 function esportaFattureCSV() {
-  const cols = ['ID','File Drive','Nome File','Fornitore','N° Fattura','Data','Imponibile','IVA','Totale','Stato','Data Pag.','Modalità','Note Pag.','Note'];
-  const rows = fatture.map(f=>[f.id,f.file_id,f.nome_file,f.fornitore,f.numero,f.data_fattura,f.imponibile,f.iva,f.totale,f.stato,f.data_pag,f.modalita_pag,f.note_pag,f.note].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
+  const cols = ['ID','File Drive','Nome File','Fornitore','N° Fattura','Data','Imponibile','IVA','Totale','Stato','Data Pag.','Modalità','Note Pag.','Note','Spettacolo'];
+  const rows = fatture.map(f=>[f.id,f.file_id,f.nome_file,f.fornitore,f.numero,f.data_fattura,f.imponibile,f.iva,f.totale,f.stato,f.data_pag,f.modalita_pag,f.note_pag,f.note,f.codice_spett].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
   const csv = [cols,...rows].map(r=>r.join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
