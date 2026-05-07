@@ -3929,11 +3929,35 @@ async function salvaFattura() {
   if (!valide.length) { showToast('Nessuna fattura valida da salvare', 'error'); return; }
 
   const statusEl = document.getElementById('fat-upload-status');
-  statusEl.innerHTML = `<span style="color:var(--text2)">⏳ Caricamento 0/${valide.length}…</span>`;
+
+  // ── Controllo duplicati ───────────────────────────────────────────────────
+  const duplicati = [];
+  const daProcessare = [];
+  for (const item of valide) {
+    const chiave = `${item.dati.fornitore.toLowerCase().trim()}|${item.dati.numero.toLowerCase().trim()}`;
+    const esiste = fatture.some(f =>
+      `${f.fornitore.toLowerCase().trim()}|${f.numero.toLowerCase().trim()}` === chiave
+    );
+    if (esiste) duplicati.push(`${item.dati.fornitore} — ${item.dati.numero}`);
+    else daProcessare.push(item);
+  }
+
+  if (duplicati.length) {
+    const msg = duplicati.length === valide.length
+      ? `Tutte le fatture selezionate sono già presenti nel gestionale:\n\n${duplicati.join('\n')}`
+      : `Le seguenti fatture sono già presenti e verranno saltate:\n\n${duplicati.join('\n')}\n\nProcedo con le ${daProcessare.length} rimanenti?`;
+    if (duplicati.length === valide.length) { showToast(`⚠ ${duplicati.length} duplicati — nessuna fattura salvata`, 'error'); return; }
+    if (!confirm(msg)) return;
+  }
+
+  if (!daProcessare.length) return;
+  // ─────────────────────────────────────────────────────────────────────────
+
+  statusEl.innerHTML = `<span style="color:var(--text2)">⏳ Caricamento 0/${daProcessare.length}…</span>`;
   checkTokenAndRefresh();
 
   let ok = 0, err = 0;
-  for (const item of valide) {
+  for (const item of daProcessare) {
     try {
       const d = item.dati;
       const nomeForn = d.fornitore.replace(/[^a-zA-Z0-9À-ÿ\s]/g,'').trim().replace(/\s+/g,'_');
@@ -3965,18 +3989,19 @@ async function salvaFattura() {
         body: JSON.stringify({ values: [row] })
       });
       ok++;
-      statusEl.innerHTML = `<span style="color:var(--text2)">⏳ Caricamento ${ok}/${valide.length}…</span>`;
+      statusEl.innerHTML = `<span style="color:var(--text2)">⏳ Caricamento ${ok}/${daProcessare.length}…</span>`;
     } catch(e) {
       err++;
       console.error('Errore fattura:', item.dati?.numero, e);
     }
   }
 
+  const dupMsg = duplicati.length ? `, ${duplicati.length} già presenti saltate` : '';
   if (err === 0) {
-    showToast(`✅ ${ok} fatture salvate`, 'success');
+    showToast(`✅ ${ok} fatture salvate${dupMsg}`, 'success');
     closeFatturaUpload();
   } else {
-    showToast(`⚠ ${ok} salvate, ${err} errori`, 'error');
+    showToast(`⚠ ${ok} salvate, ${err} errori${dupMsg}`, 'error');
   }
   await loadFatture();
 }
