@@ -3721,22 +3721,26 @@ async function loadFatture() {
       note_pag:     row[12] || '',
       note:         row[13] || '',
     })).filter(f => f.id && f.fornitore);
-    aggiornStatsFatture();
-    renderFattureTable();
+    aggiornStatsFatture(); // stats globali iniziali
+    renderFattureTable();  // poi renderizza e ricalcola in base al filtro
   } catch(e) { console.warn('Fatture non caricate:', e); }
 }
 
-function aggiornStatsFatture() {
-  const pagate  = fatture.filter(f => f.stato === 'PAGATA');
-  const damare  = fatture.filter(f => f.stato !== 'PAGATA');
-  const totImp  = fatture.reduce((s,f) => s + (parseFloat(f.imponibile)||0), 0);
+function aggiornStatsFatture(lista) {
+  // Se lista non passata usa tutte le fatture (stats globali)
+  const src = lista || fatture;
+  const pagate  = src.filter(f => f.stato === 'PAGATA');
+  const damare  = src.filter(f => f.stato !== 'PAGATA');
+  const totImp  = src.reduce((s,f) => s + (parseFloat(f.imponibile)||0), 0);
   const totPag  = pagate.reduce((s,f)  => s + (parseFloat(f.totale)||0), 0);
   const fmt = v => '€ ' + v.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
-  document.getElementById('fat-tot').textContent          = fatture.length;
-  document.getElementById('fat-pagate').textContent       = pagate.length;
-  document.getElementById('fat-damare').textContent       = damare.length;
+  const hasFiltro = lista && lista.length !== fatture.length;
+  const label = hasFiltro ? ` (${src.length} filtrate)` : '';
+  document.getElementById('fat-tot').textContent           = src.length + (hasFiltro ? ` / ${fatture.length}` : '');
+  document.getElementById('fat-pagate').textContent        = pagate.length;
+  document.getElementById('fat-damare').textContent        = damare.length;
   document.getElementById('fat-totimponibile').textContent = fmt(totImp);
-  document.getElementById('fat-totpagato').textContent    = fmt(totPag);
+  document.getElementById('fat-totpagato').textContent     = fmt(totPag);
 }
 
 function renderFattureTable() {
@@ -3751,6 +3755,9 @@ function renderFattureTable() {
     return matchQ && matchS;
   });
   list.sort((a,b) => (b.data_fattura||'').localeCompare(a.data_fattura||''));
+
+  // Aggiorna stats con i dati filtrati
+  aggiornStatsFatture(list);
 
   const tbody = document.getElementById('fattureTbody');
   if (!list.length) {
@@ -3799,22 +3806,43 @@ function parseFatturaXML(xmlText) {
   const getDoc = tag => doc.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
 
   // ── Fornitore (CedentePrestatore) ────────────────────────────────────────
+  // P.IVA/CF di ResExtensa
+  const PIVA_RESEXTENSA = '06024770726';
+
   const cedente = doc.getElementsByTagName('CedentePrestatore')[0];
   const denominazione = cedente ? get(cedente, 'Denominazione') : '';
-  const nomeForn  = cedente ? get(cedente, 'Nome') : '';
+  const nomeForn    = cedente ? get(cedente, 'Nome') : '';
   const cognomeForn = cedente ? get(cedente, 'Cognome') : '';
-  const fornitore = denominazione || `${cognomeForn} ${nomeForn}`.trim();
-  const piva_forn = cedente ? (get(cedente,'IdCodice') || get(cedente,'CodiceFiscale')) : '';
-  const cf_forn   = cedente ? get(cedente, 'CodiceFiscale') : '';
-  const sede_forn = cedente ? {
-    indirizzo: get(cedente, 'Indirizzo'),
-    cap:       get(cedente, 'CAP'),
-    comune:    get(cedente, 'Comune'),
-    provincia: get(cedente, 'Provincia'),
-  } : {};
-  const telefono_forn = cedente ? get(cedente, 'Telefono') : '';
-  const email_forn    = cedente ? (get(cedente, 'Email') || get(cedente, 'PECDestinatario')) : '';
-  const regime_forn   = cedente ? get(cedente, 'RegimeFiscale') : '';
+  const piva_cedente = cedente ? (get(cedente,'IdCodice') || get(cedente,'CodiceFiscale')) : '';
+
+  // Se il cedente è ResExtensa → fattura di vendita (attiva), non di acquisto
+  const isFatturaVendita = piva_cedente === PIVA_RESEXTENSA;
+
+  let fornitore, piva_forn, cf_forn, sede_forn, telefono_forn, email_forn, regime_forn;
+
+  if (isFatturaVendita) {
+    // Segna esplicitamente come fattura di vendita — sarà evidenziata in anteprima
+    fornitore     = '⚠ FATTURA DI VENDITA — non è una fattura di acquisto';
+    piva_forn     = piva_cedente;
+    cf_forn       = '';
+    sede_forn     = {};
+    telefono_forn = '';
+    email_forn    = '';
+    regime_forn   = '';
+  } else {
+    fornitore     = denominazione || `${cognomeForn} ${nomeForn}`.trim();
+    piva_forn     = piva_cedente;
+    cf_forn       = cedente ? get(cedente, 'CodiceFiscale') : '';
+    sede_forn     = cedente ? {
+      indirizzo: get(cedente, 'Indirizzo'),
+      cap:       get(cedente, 'CAP'),
+      comune:    get(cedente, 'Comune'),
+      provincia: get(cedente, 'Provincia'),
+    } : {};
+    telefono_forn = cedente ? get(cedente, 'Telefono') : '';
+    email_forn    = cedente ? (get(cedente, 'Email') || get(cedente, 'PECDestinatario')) : '';
+    regime_forn   = cedente ? get(cedente, 'RegimeFiscale') : '';
+  }
 
   // ── Cliente (CessionarioCommittente) ─────────────────────────────────────
   const cessionario = doc.getElementsByTagName('CessionarioCommittente')[0];
@@ -3936,6 +3964,13 @@ function renderFatturePreview() {
       <div style="padding:10px 12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;margin-bottom:8px;font-size:11px">
         ❌ <strong>${item.file.name}</strong> — Errore lettura: ${item.errore}
       </div>`;
+
+    // Fattura di vendita — blocca e segnala
+    if (item.dati.fornitore.startsWith('⚠')) return `
+      <div style="padding:10px 12px;background:#fee2e2;border:1px solid #f87171;border-radius:6px;margin-bottom:8px;font-size:11px">
+        🚫 <strong>${item.file.name}</strong><br>
+        <span style="color:#991b1b">Questo file è una <strong>fattura di vendita emessa da ResExtensa</strong> — non è una fattura di acquisto e non verrà importata.</span>
+      </div>`;
     const d = item.dati;
     const nomeForn = d.fornitore.replace(/[^a-zA-Z0-9À-ÿ\s]/g,'').trim().replace(/\s+/g,'_');
     const nomeNum  = d.numero.replace(/[^a-zA-Z0-9]/g,'');
@@ -3976,7 +4011,7 @@ function rimuoviFatturaInCoda(idx) {
 function aggiornaCalcoloIVA() {}
 
 async function salvaFattura() {
-  const valide = fattureInCoda.filter(x => !x.errore && x.dati?.fornitore && x.dati?.numero);
+  const valide = fattureInCoda.filter(x => !x.errore && x.dati?.fornitore && x.dati?.numero && !x.dati.fornitore.startsWith('⚠'));
   if (!valide.length) { showToast('Nessuna fattura valida da salvare', 'error'); return; }
 
   const statusEl = document.getElementById('fat-upload-status');
@@ -4047,12 +4082,14 @@ async function salvaFattura() {
     }
   }
 
-  const dupMsg = duplicati.length ? `, ${duplicati.length} già presenti saltate` : '';
+  const vendita = fattureInCoda.filter(x => x.dati?.fornitore?.startsWith('⚠')).length;
+  const dupMsg  = duplicati.length ? `, ${duplicati.length} già presenti saltate` : '';
+  const vendMsg = vendita ? `, ${vendita} fatture di vendita escluse` : '';
   if (err === 0) {
-    showToast(`✅ ${ok} fatture salvate${dupMsg}`, 'success');
+    showToast(`✅ ${ok} fatture salvate${dupMsg}${vendMsg}`, 'success');
     closeFatturaUpload();
   } else {
-    showToast(`⚠ ${ok} salvate, ${err} errori${dupMsg}`, 'error');
+    showToast(`⚠ ${ok} salvate, ${err} errori${dupMsg}${vendMsg}`, 'error');
   }
   await loadFatture();
 }
