@@ -727,6 +727,21 @@
 
   <!-- TAB FATTURE D'ACQUISTO -->
   <div id="panel-fatture" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
+
+    <!-- Sub-navigazione: Elenco / Centri di costo -->
+    <div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface)">
+      <button id="fat-view-lista" onclick="switchFattureView('lista')"
+        style="padding:10px 20px;font-size:12px;font-family:inherit;border:none;border-bottom:2px solid var(--accent);background:none;color:var(--accent);font-weight:600;cursor:pointer">
+        📋 Elenco fatture
+      </button>
+      <button id="fat-view-cdc" onclick="switchFattureView('cdc')"
+        style="padding:10px 20px;font-size:12px;font-family:inherit;border:none;border-bottom:2px solid transparent;background:none;color:var(--text3);cursor:pointer">
+        🎭 Centri di costo
+      </button>
+    </div>
+
+    <!-- VISTA: ELENCO FATTURE -->
+    <div id="fat-panel-lista" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
     <div class="section-stats-bar">
       <div class="header-stats">
         <div class="stat"><div class="stat-n" id="fat-tot">—</div><div class="stat-l">Fatture</div></div>
@@ -767,13 +782,35 @@
           </tr>
         </thead>
         <tbody id="fattureTbody">
-          <tr><td colspan="10" style="padding:40px;text-align:center;color:var(--text3)">Caricamento…</td></tr>
+          <tr><td colspan="11" style="padding:40px;text-align:center;color:var(--text3)">Caricamento…</td></tr>
         </tbody>
       </table>
     </div>
-  </div>
+    </div><!-- fine fat-panel-lista -->
 
-  <!-- MODAL CARICA FATTURA -->
+    <!-- VISTA: CENTRI DI COSTO -->
+    <div id="fat-panel-cdc" style="display:none;flex:1;overflow-y:auto;flex-direction:column">
+      <div class="section-stats-bar">
+        <div class="header-stats">
+          <div class="stat"><div class="stat-n" id="cdc-tot-spett" style="color:var(--accent)">—</div><div class="stat-l">Spettacoli</div></div>
+          <div class="stat"><div class="stat-n" id="cdc-tot-fatture">—</div><div class="stat-l">Fatture assegnate</div></div>
+          <div class="stat"><div class="stat-n" id="cdc-tot-nonassegnate" style="color:var(--cessato)">—</div><div class="stat-l">Non assegnate</div></div>
+          <div class="stat"><div class="stat-n" id="cdc-tot-imponibile" style="color:var(--accent)">—</div><div class="stat-l">Tot. imponibile</div></div>
+          <div class="stat"><div class="stat-n" id="cdc-tot-pagato" style="color:var(--attivo)">—</div><div class="stat-l">Tot. pagato</div></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="search-input" id="cdcAnnoFilter" style="font-size:11px;padding:5px 8px" onchange="renderCentriDiCosto()">
+            <option value="">Tutte le date</option>
+          </select>
+          <button class="btn-export" style="font-size:11px;padding:5px 12px" onclick="esportaCDCCSV()">↓ CSV centri di costo</button>
+        </div>
+      </div>
+      <div style="padding:16px 24px" id="cdc-container">
+        <div style="text-align:center;padding:40px;color:var(--text3)">Caricamento…</div>
+      </div>
+    </div>
+
+  </div><!-- fine panel-fatture -->
   <div class="modal-overlay" id="fatturaUploadModal">
     <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;overflow-y:auto">
       <div class="modal-title">↑ Carica fatture d'acquisto (XML)</div>
@@ -4437,6 +4474,168 @@ async function salvaSpettacoloFattura(id, codice) {
     showToast(codice ? `Spettacolo assegnato: ${codice}` : 'Spettacolo rimosso', 'success');
   } catch(e) { showToast('Errore salvataggio: '+e.message, 'error'); }
 }
+
+// ── Navigazione viste fatture ─────────────────────────────────────────────────
+function switchFattureView(view) {
+  const isLista = view === 'lista';
+  document.getElementById('fat-panel-lista').style.display = isLista ? 'flex' : 'none';
+  document.getElementById('fat-panel-cdc').style.display   = isLista ? 'none' : 'flex';
+  const btnLista = document.getElementById('fat-view-lista');
+  const btnCdc   = document.getElementById('fat-view-cdc');
+  btnLista.style.borderBottomColor = isLista ? 'var(--accent)' : 'transparent';
+  btnLista.style.color = isLista ? 'var(--accent)' : 'var(--text3)';
+  btnLista.style.fontWeight = isLista ? '600' : '400';
+  btnCdc.style.borderBottomColor = !isLista ? 'var(--accent)' : 'transparent';
+  btnCdc.style.color = !isLista ? 'var(--accent)' : 'var(--text3)';
+  btnCdc.style.fontWeight = !isLista ? '600' : '400';
+  if (!isLista) renderCentriDiCosto();
+}
+
+// ── Centri di costo ───────────────────────────────────────────────────────────
+function renderCentriDiCosto() {
+  const fmt  = v => '€ ' + (parseFloat(v)||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
+
+  const gruppi = {};
+  for (const f of fatture) {
+    const chiave = f.codice_spett?.trim() || '__NESSUNO__';
+    if (!gruppi[chiave]) gruppi[chiave] = [];
+    gruppi[chiave].push(f);
+  }
+
+  const assegnate    = fatture.filter(f => f.codice_spett?.trim());
+  const nonAssegnate = fatture.filter(f => !f.codice_spett?.trim());
+  const totImp = assegnate.reduce((s,f) => s+(parseFloat(f.imponibile)||0), 0);
+  const totPag = assegnate.filter(f=>f.stato==='PAGATA').reduce((s,f)=>s+(parseFloat(f.totale)||0),0);
+  const nSpett = Object.keys(gruppi).filter(k => k !== '__NESSUNO__').length;
+
+  document.getElementById('cdc-tot-spett').textContent       = nSpett;
+  document.getElementById('cdc-tot-fatture').textContent     = assegnate.length;
+  document.getElementById('cdc-tot-nonassegnate').textContent = nonAssegnate.length;
+  document.getElementById('cdc-tot-imponibile').textContent  = fmt(totImp);
+  document.getElementById('cdc-tot-pagato').textContent      = fmt(totPag);
+
+  const spettacoli = Object.keys(gruppi).filter(k => k !== '__NESSUNO__').sort();
+  if (gruppi['__NESSUNO__']?.length) spettacoli.push('__NESSUNO__');
+
+  const container = document.getElementById('cdc-container');
+
+  container.innerHTML = spettacoli.map(chiave => {
+    const isNessuno = chiave === '__NESSUNO__';
+    const lista = gruppi[chiave];
+    const totFatture    = lista.length;
+    const totImponibile = lista.reduce((s,f) => s+(parseFloat(f.imponibile)||0), 0);
+    const totIVA        = lista.reduce((s,f) => s+(parseFloat(f.iva)||0), 0);
+    const totTotale     = lista.reduce((s,f) => s+(parseFloat(f.totale)||0), 0);
+    const pagate        = lista.filter(f => f.stato === 'PAGATA');
+    const daPagare      = lista.filter(f => f.stato !== 'PAGATA');
+    const totPagato     = pagate.reduce((s,f)  => s+(parseFloat(f.totale)||0), 0);
+    const totResiduo    = daPagare.reduce((s,f) => s+(parseFloat(f.totale)||0), 0);
+    const percPagata    = totTotale > 0 ? Math.round((totPagato/totTotale)*100) : 0;
+    const nomeSpett     = isNessuno ? '— Fatture non assegnate a nessuno spettacolo' : chiave;
+    const accentColor   = isNessuno ? '#aaa' : 'var(--accent)';
+
+    const righeHTML = lista
+      .sort((a,b) => (b.data_fattura||'').localeCompare(a.data_fattura||''))
+      .map(f => {
+        const isPagata = f.stato === 'PAGATA';
+        const statoBg = isPagata ? 'background:#d4edda;color:#155724' : 'background:#fff3cd;color:#856404';
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 10px">${f.fornitore}</td>
+          <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:10px">${f.numero||'—'}</td>
+          <td style="padding:6px 10px;white-space:nowrap">${fmtD(f.data_fattura)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace">${fmt(f.imponibile)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace">${fmt(f.iva)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-weight:600">${fmt(f.totale)}</td>
+          <td style="padding:6px 10px;text-align:center">
+            <span style="padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;${statoBg}">${f.stato}</span>
+          </td>
+          <td style="padding:6px 10px;white-space:nowrap;color:var(--text2)">${fmtD(f.data_pag)}</td>
+          <td style="padding:6px 10px;color:var(--text2)">${f.modalita_pag||'—'}</td>
+        </tr>`;
+      }).join('');
+
+    return `
+    <div style="border:1px solid var(--border);border-radius:10px;margin-bottom:24px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+      <div style="background:var(--surface);padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:10px;height:10px;border-radius:50%;background:${accentColor};flex-shrink:0"></div>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:${accentColor}">${nomeSpett}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${totFatture} fattur${totFatture===1?'a':'e'} · ${pagate.length} pagate · ${daPagare.length} da pagare</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          ${[['Imponibile',fmt(totImponibile),accentColor],['IVA',fmt(totIVA),'var(--text2)'],['Totale',fmt(totTotale),'var(--text)'],['Pagato',fmt(totPagato),'var(--attivo)'],['Residuo',fmt(totResiduo),'var(--cessato)']].map(([lbl,val,col])=>`
+          <div style="text-align:center;min-width:88px">
+            <div style="font-size:13px;font-weight:700;color:${col};font-family:'DM Mono',monospace">${val}</div>
+            <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">${lbl}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+      ${!isNessuno ? `<div style="height:4px;background:var(--border)"><div style="height:100%;width:${percPagata}%;background:var(--attivo);transition:width 0.5s"></div></div>` : ''}
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+            <th style="padding:7px 10px;text-align:left;font-size:9px;text-transform:uppercase;color:var(--text3)">Fornitore</th>
+            <th style="padding:7px 10px;text-align:left;font-size:9px;text-transform:uppercase;color:var(--text3)">N° Fattura</th>
+            <th style="padding:7px 10px;text-align:left;font-size:9px;text-transform:uppercase;color:var(--text3)">Data</th>
+            <th style="padding:7px 10px;text-align:right;font-size:9px;text-transform:uppercase;color:var(--text3)">Imponibile</th>
+            <th style="padding:7px 10px;text-align:right;font-size:9px;text-transform:uppercase;color:var(--text3)">IVA</th>
+            <th style="padding:7px 10px;text-align:right;font-size:9px;text-transform:uppercase;color:var(--text3)">Totale</th>
+            <th style="padding:7px 10px;text-align:center;font-size:9px;text-transform:uppercase;color:var(--text3)">Stato</th>
+            <th style="padding:7px 10px;text-align:left;font-size:9px;text-transform:uppercase;color:var(--text3)">Data pag.</th>
+            <th style="padding:7px 10px;text-align:left;font-size:9px;text-transform:uppercase;color:var(--text3)">Modalità</th>
+          </tr></thead>
+          <tbody>${righeHTML}</tbody>
+          <tfoot><tr style="background:var(--surface);border-top:2px solid var(--border);font-weight:700">
+            <td colspan="3" style="padding:8px 10px;font-size:11px;color:var(--text2)">Totale ${isNessuno?'non assegnate':chiave}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:'DM Mono',monospace;color:${accentColor}">${fmt(totImponibile)}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2)">${fmt(totIVA)}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:13px">${fmt(totTotale)}</td>
+            <td colspan="3" style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">
+              Pagato: <strong style="color:var(--attivo)">${fmt(totPagato)}</strong>
+              &nbsp;|&nbsp; Residuo: <strong style="color:var(--cessato)">${fmt(totResiduo)}</strong>
+              &nbsp;|&nbsp; <strong style="color:${accentColor}">${percPagata}% saldato</strong>
+            </td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  if (!spettacoli.length) {
+    container.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text3)">Nessuna fattura nel sistema</div>';
+  }
+}
+
+function esportaCDCCSV() {
+  const fmt = v => (parseFloat(v)||0).toFixed(2).replace('.', ',');
+  const gruppi = {};
+  for (const f of fatture) {
+    const k = f.codice_spett?.trim() || '(non assegnate)';
+    if (!gruppi[k]) gruppi[k] = [];
+    gruppi[k].push(f);
+  }
+  const cols = ['Spettacolo','Fornitore','N° Fattura','Data','Imponibile','IVA','Totale','Stato','Data Pag.','Modalità'];
+  const rows = [];
+  for (const [spett, lista] of Object.entries(gruppi).sort()) {
+    for (const f of lista) {
+      rows.push([spett, f.fornitore, f.numero, f.data_fattura, fmt(f.imponibile), fmt(f.iva), fmt(f.totale), f.stato, f.data_pag, f.modalita_pag].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
+    }
+    const ti   = lista.reduce((s,f)=>s+(parseFloat(f.imponibile)||0),0);
+    const tiva = lista.reduce((s,f)=>s+(parseFloat(f.iva)||0),0);
+    const tt   = lista.reduce((s,f)=>s+(parseFloat(f.totale)||0),0);
+    rows.push([`TOTALE ${spett}`,'','','',fmt(ti),fmt(tiva),fmt(tt),'','',''].map(v=>`"${v}"`));
+    rows.push(Array(10).fill('""'));
+  }
+  const csv = [cols,...rows].map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download = `CentriDiCosto_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function openPagamentoModal(id) {
   fatturaPagamentoId = id;
