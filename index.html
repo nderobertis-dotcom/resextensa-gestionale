@@ -5425,9 +5425,13 @@ async function openModificaAgibModal(id) {
     </div>
     <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
     <div id="agib_righe_wrap"></div>
-    <div style="display:flex;gap:8px;margin-top:10px">
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
       <button class="btn-export" style="font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>
-      <button class="btn-secondary" style="font-size:12px" onclick="ordinaRigheAgib()">⇅ Ordina alfabeticamente</button>
+      <select id="agib-modal-sort" style="font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+        <option value="nome">⇅ Per nominativo</option>
+        <option value="spettacolo">⇅ Per spettacolo</option>
+      </select>
+      <button class="btn-secondary" style="font-size:12px" onclick="ordinaRigheAgib()">⇅ Ordina</button>
     </div>`;
 
   agibRigaCount = 0;
@@ -5494,7 +5498,14 @@ async function openAgibModal() {
     </div>
     <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
     <div id="agib_righe_wrap"></div>
-    <button class="btn-export" style="margin-top:10px;font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn-export" style="font-size:12px" onclick="aggiungiRigaAgib()">+ Aggiungi componente</button>
+      <select id="agib-modal-sort" style="font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+        <option value="nome">⇅ Per nominativo</option>
+        <option value="spettacolo">⇅ Per spettacolo</option>
+      </select>
+      <button class="btn-secondary" style="font-size:12px" onclick="ordinaRigheAgib()">⇅ Ordina</button>
+    </div>
     <div style="font-size:11px;color:var(--text3);margin-top:6px">I dati di prima assunzione (CF, residenza, documento) vengono rilevati automaticamente dalla rubrica.</div>`;
   agibRigaCount = 0;
   aggiungiRigaAgib();
@@ -5542,17 +5553,29 @@ function aggiungiRigaAgib() {
 function ordinaRigheAgib() {
   const wrap = document.getElementById('agib_righe_wrap');
   if (!wrap) return;
+  const criterio = document.getElementById('agib-modal-sort')?.value || 'nome';
   const righe = Array.from(wrap.querySelectorAll('[id^="agib_riga_"]'));
-  // Legge il nome di ogni riga e ordina alfabeticamente
-  const conNomi = righe.map(div => {
+
+  const conDati = righe.map(div => {
     const idx = div.id.replace('agib_riga_','');
-    const nome = document.getElementById(`agib_comp_${idx}`)?.value || '';
-    return { div, nome };
+    const nome     = document.getElementById(`agib_comp_${idx}`)?.value || '';
+    const spettacolo = document.getElementById(`agib_teatro_${idx}`)?.value || '';
+    return { div, nome, spettacolo };
   });
-  conNomi.sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
-  // Riordina nel DOM
-  conNomi.forEach(({ div }) => wrap.appendChild(div));
-  showToast('Componenti ordinati alfabeticamente', 'success');
+
+  if (criterio === 'spettacolo') {
+    conDati.sort((a,b) => {
+      const ts = a.spettacolo.localeCompare(b.spettacolo, 'it');
+      if (ts !== 0) return ts;
+      return a.nome.localeCompare(b.nome, 'it');
+    });
+    showToast('Componenti ordinati per spettacolo', 'success');
+  } else {
+    conDati.sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
+    showToast('Componenti ordinati alfabeticamente', 'success');
+  }
+
+  conDati.forEach(({ div }) => wrap.appendChild(div));
 }
 
 function cercaComponenteAgib(idx) {
