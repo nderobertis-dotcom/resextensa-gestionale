@@ -5311,7 +5311,12 @@ function renderAgibDetail(p) {
       <span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:10px;background:${statoBg};color:${statoColor}">${stato}</span>
       ${p.righe[0]?.destinatari ? `<span style="font-size:11px;color:var(--text3)">→ ${p.righe[0].destinatari}</span>` : ''}
     </div>
-    <div class="topbar-right">
+    <div class="topbar-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="agib-sort-select" style="font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer"
+        onchange="renderAgibDetailSorted('${p.id}')">
+        <option value="nome">⇅ Ordina per Nominativo</option>
+        <option value="spettacolo">⇅ Ordina per Spettacolo</option>
+      </select>
       ${isAdmin && isBozza ? `<button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="openModificaAgibModal('${p.id}')">✎ Modifica</button>` : ''}
       ${isAdmin && isBozza ? `<button class="btn-export" style="font-size:12px;padding:6px 14px" onclick="generaPDFAgib('${p.id}')">📄 Genera PDF</button>` : ''}
       ${isAdmin && isBozza ? `<button class="btn-new" style="font-size:12px;padding:6px 14px" onclick="openInvioAgibModal('${p.id}')">📧 Invia</button>` : ''}
@@ -5320,7 +5325,7 @@ function renderAgibDetail(p) {
       ${isAdmin && !isCancellata ? `<button class="btn-danger" onclick="deletePratica('${p.id}','${stato}')">✕ ${isBozza ? 'Elimina' : 'Cancella'}</button>` : ''}
     </div>
   </div>
-  <div style="padding:20px">
+  <div style="padding:20px" id="agib-detail-body">
     ${legenda ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${legenda}</div>` : ''}
     <table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden">
       <thead>
@@ -5331,9 +5336,76 @@ function renderAgibDetail(p) {
           <th style="padding:10px;text-align:center;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Prima assunzione</th>
         </tr>
       </thead>
-      <tbody>${tableRows}</tbody>
+      <tbody id="agib-tbody">${tableRows}</tbody>
     </table>
   </div>`;
+}
+
+function sortRigheAgib(righe, criterio) {
+  const r = [...righe];
+  if (criterio === 'spettacolo') {
+    r.sort((a,b) => {
+      const ta = (a.teatro||'').localeCompare(b.teatro||'', 'it');
+      if (ta !== 0) return ta;
+      return (a.cognome_nome||'').localeCompare(b.cognome_nome||'', 'it');
+    });
+  } else {
+    r.sort((a,b) => (a.cognome_nome||'').localeCompare(b.cognome_nome||'', 'it'));
+  }
+  return r;
+}
+
+function renderAgibDetailSorted(id) {
+  const p = agibPratiche.find(x => x.id === id);
+  if (!p) return;
+  const criterio = document.getElementById('agib-sort-select')?.value || 'nome';
+
+  const teatriUnici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
+  const teatroColor  = {};
+  const teatroBorder = {};
+  teatriUnici.forEach((t,i) => {
+    teatroColor[t]  = TEATRO_COLORS[i % TEATRO_COLORS.length];
+    teatroBorder[t] = TEATRO_BORDER[i % TEATRO_BORDER.length];
+  });
+
+  const righeOrdinate = sortRigheAgib(p.righe, criterio);
+
+  const tableRows = righeOrdinate.map(r => {
+    const bg     = teatroColor[r.teatro]  || 'var(--surface)';
+    const border = teatroBorder[r.teatro] || 'var(--border)';
+    const fmtD = d => {
+      if (!d) return '—';
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) return d;
+      const m = d.match(/^(\d{1,2})(\d{2})(\d{4})$/);
+      if (m) return `${m[1].padStart(2,'0')}/${m[2]}/${m[3]}`;
+      return d;
+    };
+    const datiExtra = r.prima_assunzione === 'SI' ? `<br><span style="font-size:10px;font-family:'DM Mono',monospace;color:var(--text2)">${r.codice_fiscale||''}</span>` : '';
+    return `<tr style="background:${bg};border-left:5px solid ${border}">
+      <td style="padding:8px 10px;font-size:12px;font-weight:500;border-bottom:1px solid ${border}30">${r.cognome_nome}</td>
+      <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${fmtD(r.data_dal)} → ${fmtD(r.data_al)}</td>
+      <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${r.teatro||'—'}<br><span style="font-size:10px;color:var(--text3)">${r.indirizzo_teatro||''}</span></td>
+      <td style="padding:8px 10px;text-align:center;border-bottom:1px solid ${border}30">
+        <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${r.prima_assunzione==='SI'?'#fce4ec':'#e8f5e9'};color:${r.prima_assunzione==='SI'?'#c62828':'#2e7d32'}">${r.prima_assunzione||'—'}</span>
+        ${datiExtra}
+      </td>
+    </tr>`;
+  }).join('');
+
+  const tbody = document.getElementById('agib-tbody');
+  if (tbody) tbody.innerHTML = tableRows;
+}
+
+async function generaPDFAgib(id) {
+  const p = agibPratiche.find(x => x.id === id);
+  if (!p) return;
+  const criterio = document.getElementById('agib-sort-select')?.value || 'nome';
+  const pOrdinata = { ...p, righe: sortRigheAgib(p.righe, criterio) };
+  const html = buildAgibPDFHtml(pOrdinata);
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.addEventListener('load', () => setTimeout(() => win.print(), 400));
 }
 
 async function openModificaAgibModal(id) {
@@ -5791,7 +5863,8 @@ function buildAgibPDFHtml(p) {
       margin: 72px 12mm 20mm 12mm;
     }
     * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; margin: 0; font-size: 10px; }
+    body { font-family: Arial, sans-serif; margin: 0; font-size: 10px;
+           -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
     .page-header {
       position: running(header);
@@ -5820,6 +5893,10 @@ function buildAgibPDFHtml(p) {
       tbody tr {
         page-break-inside: avoid;
         break-inside: avoid;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
 
