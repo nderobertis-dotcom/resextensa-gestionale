@@ -5280,11 +5280,11 @@ function renderAgibDetail(p) {
       if (m) return `${m[1].padStart(2,'0')}/${m[2]}/${m[3]}`;
       return d;
     };
-    return `<tr style="background:${bg};border-left:3px solid ${border}">
-      <td style="padding:8px 10px;font-size:12px;font-weight:500">${r.cognome_nome}</td>
-      <td style="padding:8px 10px;font-size:11px">${fmtD(r.data_dal)} → ${fmtD(r.data_al)}</td>
-      <td style="padding:8px 10px;font-size:11px">${r.teatro||'—'}<br><span style="font-size:10px;color:var(--text3)">${r.indirizzo_teatro||''}</span></td>
-      <td style="padding:8px 10px;text-align:center">
+    return `<tr style="background:${bg};border-left:5px solid ${border}">
+      <td style="padding:8px 10px;font-size:12px;font-weight:500;border-bottom:1px solid ${border}30">${r.cognome_nome}</td>
+      <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${fmtD(r.data_dal)} → ${fmtD(r.data_al)}</td>
+      <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${r.teatro||'—'}<br><span style="font-size:10px;color:var(--text3)">${r.indirizzo_teatro||''}</span></td>
+      <td style="padding:8px 10px;text-align:center;border-bottom:1px solid ${border}30">
         <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${r.prima_assunzione==='SI'?'#fce4ec':'#e8f5e9'};color:${r.prima_assunzione==='SI'?'#c62828':'#2e7d32'}">${r.prima_assunzione||'—'}</span>
         ${datiExtra}
       </td>
@@ -5747,15 +5747,15 @@ async function inviaAgibilita() {
 
 function buildAgibPDFHtml(p) {
   const teatriUnici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
-  const teatroColor = {};
+  const teatroColor  = {};
   const teatroBorder = {};
   teatriUnici.forEach((t,i) => {
-    teatroColor[t] = TEATRO_COLORS[i % TEATRO_COLORS.length];
+    teatroColor[t]  = TEATRO_COLORS[i % TEATRO_COLORS.length];
     teatroBorder[t] = TEATRO_BORDER[i % TEATRO_BORDER.length];
   });
 
   const righeHtml = p.righe.map(r => {
-    const bg = teatroColor[r.teatro] || '#fff';
+    const bg     = teatroColor[r.teatro]  || '#fff';
     const border = teatroBorder[r.teatro] || '#ccc';
     const fmtD = d => {
       if (!d) return '—';
@@ -5764,13 +5764,21 @@ function buildAgibPDFHtml(p) {
       if (m) return `${m[1].padStart(2,'0')}/${m[2]}/${m[3]}`;
       return d;
     };
-    const dati = r.prima_assunzione === 'SI' ? `<br><small>C.F. ${r.codice_fiscale||'—'}<br>${r.residenza||'—'}<br>N ${r.tipo_doc||''} ${r.num_doc||''}</small>` : '';
-    return `<tr style="border-left:4px solid ${border};background:${bg}">
-      <td style="padding:5px;font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.cognome_nome}</td>
-      <td style="padding:5px;font-size:10px">Dal ${fmtD(r.data_dal)}<br>al ${fmtD(r.data_al)}</td>
-      <td style="padding:5px;font-size:10px">${r.teatro||'—'}<br><small style="color:#666">${r.indirizzo_teatro||''}</small></td>
-      <td style="padding:5px;font-size:10px">${dati}</td>
+    const dati = r.prima_assunzione === 'SI' ? `<small>C.F. ${r.codice_fiscale||'—'}<br>${r.residenza||'—'}<br>N ${r.tipo_doc||''} ${r.num_doc||''}</small>` : '';
+    // Intera riga colorata con bordo sinistro più marcato come accento
+    return `<tr style="background:${bg};border-left:5px solid ${border}">
+      <td style="padding:5px;font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-bottom:1px solid ${border}40">${r.cognome_nome}</td>
+      <td style="padding:5px;font-size:10px;border-bottom:1px solid ${border}40">Dal ${fmtD(r.data_dal)}<br>al ${fmtD(r.data_al)}</td>
+      <td style="padding:5px;font-size:10px;border-bottom:1px solid ${border}40">${r.teatro||'—'}<br><small style="color:#666">${r.indirizzo_teatro||''}</small></td>
+      <td style="padding:5px;font-size:10px;border-bottom:1px solid ${border}40">${dati}</td>
     </tr>`;
+  }).join('');
+
+  // Legenda teatri per il PDF
+  const legendaHtml = teatriUnici.map(t => {
+    const bg  = teatroColor[t];
+    const brd = teatroBorder[t];
+    return `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:10px;margin-bottom:4px;padding:3px 10px;border-radius:12px;background:${bg};border:1px solid ${brd};font-size:9px;font-weight:600;color:${brd}">${t}</span>`;
   }).join('');
 
   const logoUrl = window.location.origin + (window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
@@ -5834,7 +5842,7 @@ function buildAgibPDFHtml(p) {
       letter-spacing:0.04em; white-space:nowrap;
     }
     td {
-      border-bottom:1px solid #eee; vertical-align:top;
+      vertical-align:top;
       padding:5px; font-size:10px;
       overflow:hidden; word-break:break-word;
     }
@@ -5857,6 +5865,7 @@ function buildAgibPDFHtml(p) {
   </div>
 
   <div class="content">
+    ${teatriUnici.length > 1 ? `<div style="margin-bottom:10px;line-height:2">${legendaHtml}</div>` : ''}
     <table>
       <colgroup>
         <col class="col-nome"><col class="col-date"><col class="col-luogo"><col class="col-dati">
