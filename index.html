@@ -455,6 +455,9 @@
     <button class="tab-btn" id="tab-fatture" onclick="switchTab('fatture')">
       🧾 Fatture
     </button>
+    <button class="tab-btn" id="tab-sponsor" onclick="switchTab('sponsor')">
+      🤝 Sponsor
+    </button>
   </div>
 
   <!-- TAB HOME -->
@@ -490,6 +493,10 @@
       <button class="home-nav-btn" onclick="switchTab('fornitori')">
         <span class="home-nav-icon">🛒</span>
         <div><div class="home-nav-label">Fornitori</div><div class="home-nav-sub">Beni e servizi</div></div>
+      </button>
+      <button class="home-nav-btn" onclick="switchTab('sponsor')">
+        <span class="home-nav-icon">🤝</span>
+        <div><div class="home-nav-label">Sponsor</div><div class="home-nav-sub">Anagrafiche e contratti</div></div>
       </button>
     </div>
 
@@ -546,11 +553,16 @@
           <div class="home-card-footer" id="hc-fornitori">— fornitori</div>
         </div>
 
+        <div class="home-card" onclick="switchTab('sponsor')">
+          <div class="home-card-icon">🤝</div>
+          <div class="home-card-title">Sponsor</div>
+          <div class="home-card-desc">Rubrica degli sponsor: anagrafica, categoria, referente, contatti e contratti di sponsorizzazione stipulati con RESEXTENSA.</div>
+          <div class="home-card-footer" id="hc-sponsor">— sponsor</div>
+        </div>
+
       </div>
     </div>
   </div>
-
-  <!-- TAB RUBRICA -->
   <div id="panel-rubrica" class="app" style="flex-direction:column">
     <!-- Topbar statistiche rubrica -->
     <div class="section-stats-bar" id="rubrica-stats-bar">
@@ -811,6 +823,59 @@
     </div>
 
   </div><!-- fine panel-fatture -->
+
+  <!-- TAB SPONSOR -->
+  <div id="panel-sponsor" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
+    <div class="section-stats-bar">
+      <div class="header-stats">
+        <div class="stat"><div class="stat-n" id="stat-spons-tot">—</div><div class="stat-l">Sponsor</div></div>
+        <div class="stat"><div class="stat-n" id="stat-spons-attivi" style="color:var(--attivo)">—</div><div class="stat-l">Attivi</div></div>
+        <div class="stat"><div class="stat-n" id="stat-spons-cat">—</div><div class="stat-l">Categorie</div></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-export" style="font-size:11px;padding:5px 12px" onclick="esportaSponsorCSV()">↓ CSV</button>
+      </div>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
+      <!-- Sidebar lista sponsor -->
+      <div style="width:260px;min-width:260px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0">
+        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="search-wrap" style="flex:1">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input type="search" class="search-input" id="sponsSearchInput" placeholder="Cerca sponsor…" oninput="renderSponsorList()">
+            </div>
+            <button class="btn-new" id="spons-add-btn" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="openSponsorModal()">+ Nuovo</button>
+          </div>
+          <select class="search-input" id="sponsCatFilter" onchange="renderSponsorList()" style="font-size:11px;padding:5px 8px">
+            <option value="">Tutte le categorie</option>
+          </select>
+        </div>
+        <div class="contact-list" id="sponsorList"></div>
+      </div>
+      <!-- Dettaglio sponsor -->
+      <div id="sponsorDetail" style="flex:1;overflow-y:auto;background:var(--bg)">
+        <div class="empty-state">
+          <div class="empty-icon">🤝</div>
+          <div class="empty-title">Seleziona uno sponsor</div>
+          <div class="empty-sub">Oppure crea un nuovo sponsor con il pulsante + Nuovo</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL SPONSOR -->
+  <div class="modal-overlay" id="sponsorModal">
+    <div class="modal" style="width:640px;max-width:95vw">
+      <div class="modal-title" id="sponsorModalTitle">Nuovo Sponsor</div>
+      <div id="sponsorModalBody" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeSponsorModal()">Annulla</button>
+        <button class="btn-new" onclick="salvaSponsor()">Salva su Sheets</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="fatturaUploadModal">
     <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;overflow-y:auto">
       <div class="modal-title">↑ Carica fatture d'acquisto (XML)</div>
@@ -1269,9 +1334,25 @@ window.onload = () => {
   const hash = window.location.hash;
   if (hash && hash.includes('access_token')) {
     const params = new URLSearchParams(hash.substring(1));
-    const token = params.get('access_token');
+    const token    = params.get('access_token');
+    const scope    = params.get('scope') || '';
     const expiresIn = parseInt(params.get('expires_in') || '3600');
+
     if (token) {
+      // Verifica scope — se mancano spreadsheets o drive, forza nuovo login
+      const hasSheets = scope.includes('spreadsheets');
+      const hasDrive  = scope.includes('drive');
+      if (!hasSheets || !hasDrive) {
+        console.warn('Scope insufficienti nel token ricevuto:', scope);
+        history.replaceState(null, '', window.location.pathname);
+        sessionStorage.removeItem('gtoken');
+        sessionStorage.removeItem('gtokenExpiry');
+        // Mostra avviso e forza nuovo login con scope corretti
+        alert('Sessione con permessi insufficienti. Verrà richiesto un nuovo accesso con i permessi corretti.');
+        setTimeout(() => doLogin(), 300);
+        return;
+      }
+
       accessToken = token;
       tokenExpiry = Date.now() + expiresIn * 1000;
       sessionStorage.setItem('gtoken', token);
@@ -2336,6 +2417,7 @@ function switchTab(tab) {
   document.getElementById('panel-contratti').style.display = tab==='contratti' ? 'block' : 'none';
   document.getElementById('panel-teatri').style.display = tab==='teatri' ? 'flex' : 'none';
   document.getElementById('panel-fatture').style.display = tab==='fatture' ? 'flex' : 'none';
+  document.getElementById('panel-sponsor').style.display = tab==='sponsor' ? 'flex' : 'none';
   document.getElementById('panel-fornitori').style.display = tab==='fornitori' ? 'flex' : 'none';
   document.getElementById('panel-agibilita').style.display = tab==='agibilita' ? 'flex' : 'none';
   if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
@@ -2343,6 +2425,7 @@ function switchTab(tab) {
   if (tab==='contratti') loadVerificaContratti();
   if (tab==='teatri') loadTeatri();
   if (tab==='fatture') loadFatture();
+  if (tab==='sponsor') loadSponsor();
   if (tab==='fornitori') loadFornitori();
   if (tab==='agibilita') loadAgibilita();
   if (tab==='home') renderHome();
@@ -3726,6 +3809,358 @@ function esportaFornitoriCSV() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
   a.download = `Fornitori_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── SPONSOR ──────────────────────────────────────────────────────────────────
+// Foglio "Sponsor" — colonne A:N da riga 2
+// A:id  B:ragione_sociale  C:categoria  D:piva  E:cf  F:referente
+// G:telefono  H:email  I:pec  J:indirizzo  K:citta  L:stato  M:spettacolo  N:note
+
+const SPONS_SHEET = 'Sponsor';
+const SPONS_RANGE = 'Sponsor!A2:N';
+const DRIVE_SPONSOR_FOLDER = '1DhLR-WBprZaUoeBRYTT69ALywbaND74e'; // stessa cartella contratti o creane una dedicata
+
+const SPONS_CATEGORIE = [
+  'Main Sponsor','Gold','Silver','Bronze',
+  'Sponsor Tecnico','Media Partner','Istituzionale','Altro'
+];
+
+let sponsor = [];
+let selectedSponsorId = null;
+
+async function loadSponsor() {
+  try {
+    const addBtn = document.getElementById('spons-add-btn');
+    if (addBtn) addBtn.style.display = userRole === 'admin' ? '' : 'none';
+    const r = await sheetsGet(SPONS_RANGE);
+    const rows = r.values || [];
+    sponsor = rows.map(row => ({
+      id:              row[0]  || '',
+      ragione_sociale: row[1]  || '',
+      categoria:       row[2]  || '',
+      piva:            row[3]  || '',
+      cf:              row[4]  || '',
+      referente:       row[5]  || '',
+      telefono:        row[6]  || '',
+      email:           row[7]  || '',
+      pec:             row[8]  || '',
+      indirizzo:       row[9]  || '',
+      citta:           row[10] || '',
+      stato:           row[11] || 'ATTIVO',
+      spettacolo:      row[12] || '',
+      note:            row[13] || '',
+    })).filter(s => s.ragione_sociale);
+    updateSponsorStats();
+    populateSponsorCatFilter();
+    renderSponsorList();
+    document.getElementById('hc-sponsor').textContent = `${sponsor.length} sponsor`;
+  } catch(e) { console.warn('Sponsor non caricati:', e); }
+}
+
+function updateSponsorStats() {
+  const attivi = sponsor.filter(s => s.stato === 'ATTIVO').length;
+  const cats   = new Set(sponsor.map(s => s.categoria).filter(Boolean)).size;
+  document.getElementById('stat-spons-tot').textContent    = sponsor.length;
+  document.getElementById('stat-spons-attivi').textContent = attivi;
+  document.getElementById('stat-spons-cat').textContent    = cats;
+}
+
+function populateSponsorCatFilter() {
+  const sel  = document.getElementById('sponsCatFilter');
+  const curr = sel.value;
+  const cats = [...new Set(sponsor.map(s => s.categoria).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Tutte le categorie</option>' +
+    cats.map(c => `<option value="${c}" ${curr===c?'selected':''}>${c}</option>`).join('');
+}
+
+function renderSponsorList() {
+  const q   = (document.getElementById('sponsSearchInput')?.value||'').toLowerCase();
+  const cat = document.getElementById('sponsCatFilter')?.value || '';
+  const el  = document.getElementById('sponsorList');
+  let list  = sponsor.filter(s => {
+    const match = !q || [s.ragione_sociale,s.referente,s.email,s.citta].some(v=>v.toLowerCase().includes(q));
+    const catOk = !cat || s.categoria === cat;
+    return match && catOk;
+  });
+  list.sort((a,b) => a.ragione_sociale.localeCompare(b.ragione_sociale,'it'));
+
+  // Badge colore per categoria
+  const catColor = { 'Main Sponsor':'#8a6d3b','Gold':'#f59e0b','Silver':'#6b7280','Bronze':'#b45309','Sponsor Tecnico':'#2563eb','Media Partner':'#7c3aed','Istituzionale':'#059669' };
+
+  el.innerHTML = list.map(s => {
+    const isSel  = s.id === selectedSponsorId;
+    const color  = catColor[s.categoria] || 'var(--accent)';
+    const statoColor = s.stato === 'ATTIVO' ? 'var(--attivo)' : 'var(--cessato)';
+    return `<div class="contact-item${isSel?' selected':''}" onclick="selectSponsor('${s.id}')">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="contact-avatar" style="background:${color};color:white;font-size:12px">${(s.ragione_sociale[0]||'?').toUpperCase()}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.ragione_sociale}</div>
+          <div style="font-size:10px;color:${statoColor};font-weight:500">${s.stato} · <span style="color:${color}">${s.categoria||'—'}</span></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Nessuno sponsor trovato</div>';
+}
+
+function selectSponsor(id) {
+  selectedSponsorId = id;
+  renderSponsorList();
+  const s = sponsor.find(x => x.id === id);
+  if (!s) return;
+
+  const statoColor = s.stato === 'ATTIVO' ? 'var(--attivo)' : 'var(--cessato)';
+  const field = (label, val) => val ? `
+    <div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);margin-bottom:4px">${label}</div>
+      <div style="font-size:13px;font-family:'DM Mono',monospace;color:var(--text)">${val}</div>
+    </div>` : '';
+
+  document.getElementById('sponsorDetail').innerHTML = `
+    <div style="padding:32px 40px;max-width:760px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--accent)">${s.ragione_sociale}</div>
+          <div style="font-size:12px;margin-top:4px">
+            <span style="color:${statoColor};font-weight:600">${s.stato}</span>
+            ${s.categoria ? ` · <span style="color:var(--accent)">${s.categoria}</span>` : ''}
+            ${s.spettacolo ? ` · <span style="color:var(--text2)">🎭 ${s.spettacolo}</span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          ${userRole==='admin' ? `
+          <button class="btn-modify" onclick="openSponsorModal(this.dataset.id)" data-id="${s.id}">✎ Modifica</button>
+          <button class="btn-danger" onclick="eliminaSponsor(this.dataset.id)" data-id="${s.id}">✕ Rimuovi</button>` : ''}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:14px">Dati fiscali</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          ${field('Partita IVA', s.piva)}
+          ${field('Codice Fiscale', s.cf)}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:14px">Referente & Contatti</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          ${field('Referente', s.referente)}
+          ${field('Telefono', s.telefono)}
+          ${field('Email', s.email ? `<a href="mailto:${s.email}" style="color:var(--accent)">${s.email}</a>` : '')}
+          ${field('PEC', s.pec ? `<a href="mailto:${s.pec}" style="color:var(--accent)">${s.pec}</a>` : '')}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:14px">Sede</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          ${field('Indirizzo', s.indirizzo)}
+          ${field('Città', s.citta)}
+        </div>
+      </div>
+
+      ${s.note ? `<div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;margin-bottom:10px">Note</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-wrap">${s.note}</div>
+      </div>` : ''}
+
+      <!-- Contratti sponsor -->
+      <div style="border-top:1px solid var(--border);padding-top:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600">Contratti di sponsorizzazione</div>
+          ${userRole==='admin' ? `<div>
+            <input type="file" id="spons-upload-input-${s.id}" multiple accept=".pdf,.doc,.docx" style="display:none" onchange="uploadContrattiSponsor(this,'${s.id}','${s.ragione_sociale.replace(/'/g,"\\'")}')">
+            <button class="btn-new" style="font-size:11px;padding:5px 12px" onclick="document.getElementById('spons-upload-input-${s.id}').click()">↑ Carica contratto</button>
+          </div>` : ''}
+        </div>
+        <div id="spons-contratti-${s.id}"><span style="color:var(--text3);font-size:12px">🔍 Caricamento…</span></div>
+      </div>
+    </div>`;
+
+  caricaContrattiSponsor(s.id, s.ragione_sociale);
+}
+
+function openSponsorModal(id) {
+  const isEdit = !!id;
+  const s = isEdit ? sponsor.find(x=>x.id===id) : {};
+  document.getElementById('sponsorModalTitle').textContent = isEdit ? `✎ Modifica — ${s.ragione_sociale}` : 'Nuovo Sponsor';
+
+  const inp = (key, label, val, type='text', full=false, opts=null) => `
+    <div style="${full?'grid-column:1/-1':''}">
+      <div class="modal-label">${label}</div>
+      ${opts ? `<select class="edit-input" id="sm_${key}">${opts.map(o=>`<option ${(val||'')==o?'selected':''}>${o}</option>`).join('')}</select>`
+             : `<input class="edit-input" id="sm_${key}" type="${type}" value="${val||''}">`}
+    </div>`;
+
+  document.getElementById('sponsorModalBody').innerHTML =
+    inp('ragione_sociale','Ragione Sociale *', s.ragione_sociale, 'text', true) +
+    inp('categoria','Categoria', s.categoria, 'text', false, ['', ...SPONS_CATEGORIE]) +
+    inp('stato','Stato', s.stato||'ATTIVO', 'text', false, ['ATTIVO','INATTIVO']) +
+    inp('piva','Partita IVA', s.piva) +
+    inp('cf','Codice Fiscale', s.cf) +
+    inp('referente','Referente', s.referente) +
+    inp('telefono','Telefono', s.telefono) +
+    inp('email','Email', s.email, 'email') +
+    inp('pec','PEC', s.pec, 'email') +
+    inp('spettacolo','Spettacolo associato', s.spettacolo) +
+    inp('indirizzo','Indirizzo', s.indirizzo, 'text', true) +
+    inp('citta','Città', s.citta) +
+    inp('note','Note', s.note, 'text', true);
+
+  document.getElementById('sponsorModal').dataset.editId = id || '';
+  document.getElementById('sponsorModal').classList.add('open');
+}
+
+function closeSponsorModal() { document.getElementById('sponsorModal').classList.remove('open'); }
+document.getElementById('sponsorModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeSponsorModal(); });
+
+async function salvaSponsor() {
+  const g = id => document.getElementById('sm_'+id)?.value?.trim()||'';
+  if (!g('ragione_sociale')) { showToast('Inserire la ragione sociale', 'error'); return; }
+  const editId = document.getElementById('sponsorModal').dataset.editId;
+  const isEdit = !!editId;
+
+  const row = [
+    isEdit ? editId : 'SP-'+Date.now(),
+    g('ragione_sociale'), g('categoria'), g('piva'), g('cf'),
+    g('referente'), g('telefono'), g('email'), g('pec'),
+    g('indirizzo'), g('citta'), g('stato')||'ATTIVO', g('spettacolo'), g('note')
+  ];
+
+  checkTokenAndRefresh();
+  if (isEdit) {
+    const idx = sponsor.findIndex(s=>s.id===editId);
+    const sheetRow = idx + 2;
+    await sheetsUpdate(`${SPONS_SHEET}!A${sheetRow}:N${sheetRow}`, [row]);
+    showToast('Sponsor aggiornato', 'success');
+  } else {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SPONS_SHEET+'!A:N')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] })
+    });
+    showToast('Sponsor aggiunto', 'success');
+  }
+  closeSponsorModal();
+  await loadSponsor();
+  if (isEdit) selectSponsor(editId); else selectSponsor(row[0]);
+}
+
+async function eliminaSponsor(id) {
+  const s = sponsor.find(x=>x.id===id);
+  if (!s || !confirm(`Eliminare definitivamente "${s.ragione_sociale}"?`)) return;
+  const idx = sponsor.findIndex(x=>x.id===id);
+  const sheetRow = idx + 2;
+  checkTokenAndRefresh();
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SPONS_SHEET}!A${sheetRow}:N${sheetRow}?valueInputOption=RAW`, {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values: [Array(14).fill('')] })
+  });
+  showToast('Sponsor eliminato', 'success');
+  selectedSponsorId = null;
+  document.getElementById('sponsorDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">🤝</div><div class="empty-title">Seleziona uno sponsor</div></div>`;
+  await loadSponsor();
+}
+
+// ── Contratti sponsor su Drive ────────────────────────────────────────────────
+async function trovaCreaCartellaSponsor(sponsId) {
+  const nome = `SPONS_${sponsId}`;
+  const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+    headers: { Authorization: 'Bearer '+accessToken }
+  });
+  const d = await r.json();
+  if (d.files?.length) return d.files[0].id;
+  const r2 = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.folder', parents: [DRIVE_CONTRATTI_FOLDER] })
+  });
+  return (await r2.json()).id;
+}
+
+async function caricaContrattiSponsor(sponsId, ragioneSociale) {
+  const box = document.getElementById(`spons-contratti-${sponsId}`);
+  if (!box) return;
+  try {
+    const nome = `SPONS_${sponsId}`;
+    const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+      headers: { Authorization: 'Bearer '+accessToken }
+    });
+    const d = await r.json();
+    if (!d.files?.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun contratto caricato</span>'; return; }
+    const folderId = d.files[0].id;
+    const q2 = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+    const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,size,modifiedTime,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=name`, {
+      headers: { Authorization: 'Bearer '+accessToken }
+    });
+    const files = (await r2.json()).files || [];
+    if (!files.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun contratto caricato</span>'; return; }
+    box.innerHTML = files.map(file => {
+      const size = file.size ? (parseInt(file.size)/1024).toFixed(0)+' KB' : '';
+      const icon = file.mimeType?.includes('pdf') ? '📄' : '📝';
+      const datamod = new Date(file.modifiedTime).toLocaleDateString('it-IT');
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <span style="font-size:16px">${icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
+          <div style="font-size:10px;color:var(--text3)">${size}${size?' · ':''}${datamod}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <a href="https://drive.google.com/file/d/${file.id}/view" target="_blank" class="btn-export" style="font-size:11px;padding:4px 10px;text-decoration:none">👁</a>
+          <button class="btn-export" style="font-size:11px;padding:4px 10px" onclick="downloadDriveFile('${file.id}','${file.name.replace(/'/g,"\\'")}')">↓</button>
+          ${userRole==='admin' ? `<button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="eliminaContrattoSponsor('${file.id}','${sponsId}','${ragioneSociale.replace(/'/g,"\\'")}')">✕</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { box.innerHTML = `<span style="color:var(--cessato);font-size:12px">Errore: ${e.message}</span>`; }
+}
+
+async function uploadContrattiSponsor(input, sponsId, ragioneSociale) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const box = document.getElementById(`spons-contratti-${sponsId}`);
+  if (box) box.innerHTML = `<span style="color:var(--text2);font-size:12px">⏳ Caricamento ${files.length} file…</span>`;
+  try {
+    const folderId = await trovaCreaCartellaSponsor(sponsId);
+    checkTokenAndRefresh();
+    for (const file of files) {
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify({ name: file.name, parents: [folderId] })], { type: 'application/json' }));
+      form.append('file', file);
+      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+        method: 'POST', headers: { Authorization: 'Bearer '+accessToken }, body: form
+      });
+    }
+    showToast(`${files.length} contratti caricati`, 'success');
+    input.value = '';
+    await caricaContrattiSponsor(sponsId, ragioneSociale);
+  } catch(e) { showToast('Errore upload: '+e.message, 'error'); }
+}
+
+async function eliminaContrattoSponsor(fileId, sponsId, ragioneSociale) {
+  if (!confirm('Eliminare questo contratto?')) return;
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+      method: 'DELETE', headers: { Authorization: 'Bearer '+accessToken }
+    });
+    showToast('Contratto eliminato', 'success');
+    await caricaContrattiSponsor(sponsId, ragioneSociale);
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+function esportaSponsorCSV() {
+  const cols = ['ID','Ragione Sociale','Categoria','P.IVA','C.F.','Referente','Telefono','Email','PEC','Indirizzo','Città','Stato','Spettacolo','Note'];
+  const rows = sponsor.map(s=>[s.id,s.ragione_sociale,s.categoria,s.piva,s.cf,s.referente,s.telefono,s.email,s.pec,s.indirizzo,s.citta,s.stato,s.spettacolo,s.note].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
+  const csv = [cols,...rows].map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download = `Sponsor_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 }
 // ─────────────────────────────────────────────────────────────────────────────
