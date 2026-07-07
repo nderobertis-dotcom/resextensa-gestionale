@@ -1188,6 +1188,41 @@
   </div>
 </div>
 
+<!-- MODAL NUOVO SPETTACOLO -->
+<div class="modal-overlay" id="spettacoloModal">
+  <div class="modal" style="width:480px;max-width:95vw">
+    <div class="modal-title">🎭 Nuovo Spettacolo</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div class="modal-label">Titolo *</div>
+        <input class="edit-input" id="spett-titolo" placeholder="es. WOLF SPIDER" style="text-transform:uppercase">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div class="modal-label">Data inizio</div>
+          <input class="edit-input" id="spett-data-inizio" type="date">
+        </div>
+        <div>
+          <div class="modal-label">Data fine</div>
+          <input class="edit-input" id="spett-data-fine" type="date">
+        </div>
+      </div>
+      <div>
+        <div class="modal-label">Stato</div>
+        <select class="edit-input" id="spett-stato">
+          <option>In produzione</option>
+          <option>In sviluppo</option>
+          <option>Archivio</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeSpettacoloModal()">Annulla</button>
+      <button class="btn-new" onclick="salvaSpettacolo()">Salva spettacolo</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NUOVO -->
 <div class="modal-overlay" id="newModal">
   <div class="modal">
@@ -1213,6 +1248,8 @@ const SHEET_NAME  = 'Componenti';
 const DATA_RANGE  = 'Componenti!B5:W';
 const CAL_SHEET   = 'Calendario';
 const CAL_RANGE   = 'Calendario!A2:H';
+const SPETT_SHEET = 'Spettacoli';
+const SPETT_SHEET_RANGE = 'Spettacoli!A2:D';
 const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets';
 const DRIVE_CU_FOLDER = '1-Pyjd-tKJyNPxaveTAQkvJvcXP0R6dE1';
 const DRIVE_CONTRATTI_FOLDER = '1DhLR-WBprZaUoeBRYTT69ALywbaND74e';
@@ -1374,7 +1411,7 @@ const FIELDS = [
   { key:'nome', label:'Nome', req:true },
   { key:'stato', label:'Stato', type:'select', opts:['ATTIVO','CESSATO',''] },
   { key:'incarico', label:'Incarico', type:'select', opts:['','Amministrativo','Artista','Ballerino/a','Danzatore/trice','Direzione Artistica','Tecnico'] },
-  { key:'spettacoli', label:'Spettacoli 2026', type:'checkboxes', opts:['WOLF SPIDER','MORS','LU BACIU SANTU','PINO','ACQUA MADRE','PUZZLE',"L'ALTRO",'DALET'], full:true },
+  { key:'spettacoli', label:'Spettacoli', type:'checkboxes', opts:[], full:true },
   { key:'email', label:'Email' },
   { key:'telefono', label:'Telefono' },
   { key:'pec', label:'PEC' },
@@ -2313,7 +2350,8 @@ function renderEdit(c) {
     if (f.type==='select') return `<select class="edit-input" id="edit_${f.key}">${f.opts.map(o=>`<option value="${o}"${(c[f.key]||'')=== o?' selected':''}>${o||'(non definito)'}</option>`).join('')}</select>`;
     if (f.type==='checkboxes') {
       const selected = (c[f.key]||'').split(',').map(x=>x.trim()).filter(Boolean);
-      return `<div class="checkboxes-wrap" id="edit_${f.key}_wrap">${f.opts.map(o=>`
+      const opts = f.key==='spettacoli' ? allSpettacoli() : f.opts;
+      return `<div class="checkboxes-wrap" id="edit_${f.key}_wrap">${opts.map(o=>`
         <div class="cb-item">
           <input type="checkbox" id="cb_${f.key}_${o.replace(/\s+/g,'_')}" value="${o}" ${selected.includes(o)?'checked':''}>
           <label for="cb_${f.key}_${o.replace(/\s+/g,'_')}">${o}</label>
@@ -2414,7 +2452,7 @@ function openNewModal() {
       ${f.type==='select'
         ? `<select class="edit-input" id="new_${f.key}">${f.opts.map(o=>`<option value="${o}">${o||'(non definito)'}</option>`).join('')}</select>`
         : f.type==='checkboxes'
-        ? `<div class="checkboxes-wrap" id="new_${f.key}_wrap">${f.opts.map(o=>`<div class="cb-item"><input type="checkbox" id="ncb_${f.key}_${o.replace(/\s+/g,'_')}" value="${o}"><label for="ncb_${f.key}_${o.replace(/\s+/g,'_')}">${o}</label></div>`).join('')}</div>`
+        ? `<div class="checkboxes-wrap" id="new_${f.key}_wrap">${(f.key==='spettacoli'?allSpettacoli():f.opts).map(o=>`<div class="cb-item"><input type="checkbox" id="ncb_${f.key}_${o.replace(/\s+/g,'_')}" value="${o}"><label for="ncb_${f.key}_${o.replace(/\s+/g,'_')}">${o}</label></div>`).join('')}</div>`
         : f.type==='photo'
         ? `<div class="photo-upload-wrap">
             <div class="photo-placeholder" id="new_photo_preview">👤</div>
@@ -2483,7 +2521,31 @@ document.getElementById('newModal').addEventListener('click', e=>{ if(e.target==
 document.getElementById('rappModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeRappModal(); });
 
 // ─── SPETTACOLI & CALENDARIO ──────────────────────────────────────────────────
-const SPETTACOLI_LIST = ['WOLF SPIDER','MORS','LU BACIU SANTU','PINO','ACQUA MADRE','PUZZLE',"L'ALTRO",'DALET'];
+// Lista spettacoli — caricata da foglio Sheets "Spettacoli"
+// Struttura foglio: A=titolo, B=data_inizio, C=data_fine, D=stato
+let spettacoliList = []; // array di oggetti {titolo, data_inizio, data_fine, stato}
+
+function allSpettacoli() {
+  return spettacoliList.map(s => s.titolo).filter(Boolean).sort();
+}
+
+async function loadSpettacoliSheet() {
+  try {
+    const r = await sheetsGet(SPETT_SHEET_RANGE);
+    const rows = r.values || [];
+    spettacoliList = rows
+      .map(row => ({
+        titolo:       row[0]?.trim() || '',
+        data_inizio:  row[1]?.trim() || '',
+        data_fine:    row[2]?.trim() || '',
+        stato:        row[3]?.trim() || 'In produzione',
+      }))
+      .filter(s => s.titolo);
+  } catch(e) {
+    console.warn('Foglio Spettacoli non trovato — lista vuota:', e.message);
+    spettacoliList = [];
+  }
+}
 const MESI_NOMI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 const GIORNI_IT = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
 
@@ -2493,8 +2555,73 @@ let calYear = new Date().getFullYear();
 let rappList = [];
 let editRappId = null;
 
+// ─── GESTIONE SPETTACOLI ─────────────────────────────────────────────────────
+function openSpettacoloModal() {
+  document.getElementById('spett-titolo').value = '';
+  document.getElementById('spett-data-inizio').value = '';
+  document.getElementById('spett-data-fine').value = '';
+  document.getElementById('spett-stato').value = 'In produzione';
+  document.getElementById('spettacoloModal').classList.add('open');
+}
+function closeSpettacoloModal() {
+  document.getElementById('spettacoloModal').classList.remove('open');
+}
+document.getElementById('spettacoloModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSpettacoloModal();
+});
+
+async function salvaSpettacolo() {
+  const titolo = document.getElementById('spett-titolo').value.trim().toUpperCase();
+  if (!titolo) { showToast('Inserisci il titolo', 'error'); return; }
+  if (spettacoliList.find(s => s.titolo === titolo)) {
+    showToast('Spettacolo già presente', 'error'); return;
+  }
+  const dataInizio = document.getElementById('spett-data-inizio').value;
+  const dataFine   = document.getElementById('spett-data-fine').value;
+  const stato      = document.getElementById('spett-stato').value;
+  const row = [titolo, dataInizio, dataFine, stato];
+  checkTokenAndRefresh();
+  try {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SPETT_SHEET+'!A:D')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] })
+    });
+    showToast(`Spettacolo "${titolo}" aggiunto`, 'success');
+    closeSpettacoloModal();
+    await loadCalendario();
+    renderSpettacoli();
+    document.getElementById('stat-spett').textContent = allSpettacoli().length;
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+async function eliminaSpettacolo(titolo) {
+  const rapp = rappList.filter(r => r.spettacolo === titolo);
+  const msg = rapp.length > 0
+    ? `Lo spettacolo "${titolo}" ha ${rapp.length} rappresentazioni nel calendario. Eliminarlo dal foglio Spettacoli lo rimuoverà dalla lista ma non dalle rappresentazioni esistenti. Continuare?`
+    : `Eliminare definitivamente "${titolo}"?`;
+  if (!confirm(msg)) return;
+  const idx = spettacoliList.findIndex(s => s.titolo === titolo);
+  if (idx < 0) return;
+  const sheetRow = idx + 2;
+  checkTokenAndRefresh();
+  try {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SPETT_SHEET}!A${sheetRow}:D${sheetRow}?valueInputOption=RAW`, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [['','','','']] })
+    });
+    showToast(`Spettacolo "${titolo}" eliminato`, 'success');
+    await loadCalendario();
+    renderSpettacoli();
+    document.getElementById('stat-spett').textContent = allSpettacoli().length;
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ─── CALENDARIO SU SHEETS ─────────────────────────────────────────────────────
 async function loadCalendario() {
+  await loadSpettacoliSheet(); // carica sempre la lista spettacoli aggiornata
   try {
     const data = await sheetsGet(CAL_RANGE);
     const rows = data.values || [];
@@ -2620,20 +2747,26 @@ function renderSpettacoli() {
 
   // Costruisce dati spettacoli dai contatti
   const spettData = {};
-  SPETTACOLI_LIST.forEach(s => { spettData[s] = []; });
+  spettacoliList.forEach(s => { spettData[s.titolo] = []; });
   contacts.forEach(c => {
     if (!c.spettacoli) return;
     c.spettacoli.split(',').forEach(s => {
       const t = s.trim();
-      if (spettData[t]) spettData[t].push(`${c.nome} ${c.cognome}`);
+      if (spettData[t] !== undefined) spettData[t].push(`${c.nome} ${c.cognome}`);
+      else if (t) { spettData[t] = [`${c.nome} ${c.cognome}`]; } // spettacolo in rubrica ma non nel foglio
     });
   });
 
-  // Ordina rappresentazioni per data
   const rappSorted = [...rappList].sort((a,b) => new Date(a.data) - new Date(b.data));
   const oggi = new Date(); oggi.setHours(0,0,0,0);
   const future = rappSorted.filter(r => new Date(r.data) >= oggi);
   const passate = rappSorted.filter(r => new Date(r.data) < oggi);
+
+  // Lista titoli da mostrare — unione foglio + rubrica (per retrocompatibilità)
+  const titoliDaMostrare = [...new Set([
+    ...spettacoliList.map(s => s.titolo),
+    ...Object.keys(spettData)
+  ])].filter(Boolean).sort();
 
   el.innerHTML = `
   <div class="spett-container">
@@ -2644,6 +2777,7 @@ function renderSpettacoli() {
           <button class="view-btn${calView==='lista'?' active':''}" onclick="setCalView('lista')">≡ Lista</button>
           <button class="view-btn${calView==='griglia'?' active':''}" onclick="setCalView('griglia')">▦ Griglia</button>
         </div>
+        ${isAdmin ? `<button class="btn-secondary" style="font-size:11px;padding:5px 12px" onclick="openSpettacoloModal()">+ Spettacolo</button>` : ''}
         ${isAdmin ? `<button class="btn-new" onclick="openRappModal()">+ Rappresentazione</button>` : ''}
       </div>
     </div>
@@ -2651,16 +2785,25 @@ function renderSpettacoli() {
     <!-- Spettacoli cards -->
     <div class="section-title" style="margin-bottom:12px">Spettacoli in produzione</div>
     <div class="spett-grid">
-      ${SPETTACOLI_LIST.map(s => {
-        const membri = spettData[s] || [];
-        const rappCount = rappList.filter(r => r.spettacolo === s).length;
-        const prossimaData = rappList.filter(r => r.spettacolo === s && new Date(r.data) >= oggi).sort((a,b)=>new Date(a.data)-new Date(b.data))[0];
+      ${titoliDaMostrare.map(titolo => {
+        const meta = spettacoliList.find(s => s.titolo === titolo);
+        const membri = spettData[titolo] || [];
+        const rappCount = rappList.filter(r => r.spettacolo === titolo).length;
+        const prossimaData = rappList.filter(r => r.spettacolo === titolo && new Date(r.data) >= oggi).sort((a,b)=>new Date(a.data)-new Date(b.data))[0];
+        const periodoHtml = (meta?.data_inizio || meta?.data_fine) ?
+          `<div style="font-size:10px;color:var(--text3);margin-top:2px">${[meta.data_inizio, meta.data_fine].filter(Boolean).join(' → ')}</div>` : '';
+        const statoHtml = meta?.stato ? `<span style="font-size:9px;padding:1px 7px;border-radius:8px;background:var(--surface2);color:var(--text3);font-weight:500">${meta.stato}</span>` : '';
         return `<div class="spett-card">
           <div class="spett-card-header">
-            <div class="spett-name">${s}</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div class="spett-count">${membri.length} componenti · ${rappCount} date</div>
-              ${isAdmin ? `<button class="btn-new" style="font-size:10px;padding:3px 8px" onclick="openRappModalWithSpett('${s}')">+ Data</button>` : ''}
+            <div>
+              <div class="spett-name">${titolo}</div>
+              ${periodoHtml}
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+              ${statoHtml}
+              <div class="spett-count">${membri.length} comp. · ${rappCount} date</div>
+              ${isAdmin ? `<button class="btn-new" style="font-size:10px;padding:3px 8px" onclick="openRappModalWithSpett('${titolo.replace(/'/g,"\\'")}')">+ Data</button>` : ''}
+              ${isAdmin ? `<button class="btn-danger" style="font-size:10px;padding:3px 8px" onclick="eliminaSpettacolo('${titolo.replace(/'/g,"\\'")}')">✕</button>` : ''}
             </div>
           </div>
           <div class="spett-card-body">
@@ -2669,6 +2812,7 @@ function renderSpettacoli() {
           </div>
         </div>`;
       }).join('')}
+      ${titoliDaMostrare.length === 0 ? `<div style="color:var(--text3);font-style:italic;font-size:13px">Nessuno spettacolo. Clicca "+ Spettacolo" per aggiungerne uno.</div>` : ''}
     </div>
 
     <!-- Calendario -->
@@ -2764,39 +2908,40 @@ function openRappModal(id=null) {
 function openRappModalWithSpett(spettacolo=null, id=null) {
   editRappId = id;
   const r = id ? rappList.find(x=>x.id===id) : {};
-  const preSpett = spettacolo || r.spettacolo || SPETTACOLI_LIST[0];
+  const titoli = allSpettacoli();
+  const preSpett = spettacolo || r?.spettacolo || titoli[0] || '';
   const title = id ? 'Modifica rappresentazione' : 'Nuova rappresentazione';
   document.getElementById('rappModalTitle').textContent = title;
   document.getElementById('rappForm').innerHTML = `
     <div class="modal-field full">
       <div class="modal-label">Spettacolo *</div>
       <select class="edit-input" id="rapp_spettacolo">
-        ${SPETTACOLI_LIST.map(s=>`<option value="${s}"${preSpett===s?' selected':''}>${s}</option>`).join('')}
+        ${titoli.map(s=>`<option value="${s}"${preSpett===s?' selected':''}>${s}</option>`).join('')}
       </select>
     </div>
     <div class="modal-field">
-      <div class="modal-label">Data *</div>
-      <input type="date" class="edit-input" id="rapp_data" value="${r.data||''}">
+      <div class="modal-label">Data inizio *</div>
+      <input type="date" class="edit-input" id="rapp_data" value="${r?.data||''}">
     </div>
     <div class="modal-field">
-      <div class="modal-label">Orario</div>
-      <input type="time" class="edit-input" id="rapp_orario" value="${r.orario||''}">
+      <div class="modal-label">Data fine</div>
+      <input type="date" class="edit-input" id="rapp_data_fine" value="${r?.data_fine||''}">
     </div>
     <div class="modal-field">
       <div class="modal-label">Città</div>
-      <input type="text" class="edit-input" id="rapp_citta" value="${r.citta||''}" placeholder="es. Bari">
+      <input type="text" class="edit-input" id="rapp_citta" value="${r?.citta||''}" placeholder="es. Bari">
     </div>
     <div class="modal-field">
       <div class="modal-label">Luogo / Indirizzo *</div>
-      <input type="text" class="edit-input" id="rapp_luogo" value="${r.luogo||''}" placeholder="es. Via Roma, 1">
+      <input type="text" class="edit-input" id="rapp_luogo" value="${r?.luogo||''}" placeholder="es. Via Roma, 1">
     </div>
     <div class="modal-field full">
       <div class="modal-label">Teatro / Venue</div>
-      <input type="text" class="edit-input" id="rapp_teatro" value="${r.teatro||''}" placeholder="es. Teatro Petruzzelli">
+      <input type="text" class="edit-input" id="rapp_teatro" value="${r?.teatro||''}" placeholder="es. Teatro Petruzzelli">
     </div>
     <div class="modal-field full">
       <div class="modal-label">Note</div>
-      <input type="text" class="edit-input" id="rapp_note" value="${r.note||''}" placeholder="Info aggiuntive…">
+      <input type="text" class="edit-input" id="rapp_note" value="${r?.note||''}" placeholder="Info aggiuntive…">
     </div>`;
   document.getElementById('rappModal').classList.add('open');
 }
@@ -2810,10 +2955,12 @@ async function saveRapp() {
   if (!data || !luogo) { showToast('Data e luogo sono obbligatori', 'error'); return; }
   const obj = {
     id: editRappId || Date.now().toString(),
-    spettacolo, data, luogo,
+    spettacolo, data,
+    data_fine: document.getElementById('rapp_data_fine')?.value || '',
+    orario: '',
     citta: document.getElementById('rapp_citta').value.trim(),
+    luogo,
     teatro: document.getElementById('rapp_teatro').value.trim(),
-    orario: document.getElementById('rapp_orario').value,
     note: document.getElementById('rapp_note').value.trim(),
   };
   if (editRappId) {
