@@ -6857,8 +6857,11 @@ async function saveAgib() {
 
   if (!nuoveRighe.length) { showToast('Aggiungi almeno un componente', 'error'); return; }
 
+  console.log('saveAgib — idPratica:', idPratica, 'isModifica:', isModifica, 'nuoveRighe:', nuoveRighe.length, nuoveRighe);
+
   try {
     checkTokenAndRefresh();
+    console.log('Token OK:', accessToken?.slice(0,20));
     if (isModifica) {
       const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).sort((a,b)=>a.rowIdx-b.rowIdx);
       // Sovrascrive le righe esistenti con i nuovi dati
@@ -6885,12 +6888,16 @@ async function saveAgib() {
       }
     } else {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+      console.log('Append URL:', url);
+      console.log('Payload:', JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:nuoveRighe }));
       const r = await fetch(url, {
         method:'POST',
         headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
         body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:nuoveRighe })
       });
-      if (!r.ok) throw new Error('Errore salvataggio ' + r.status);
+      const rBody = await r.json();
+      console.log('Append response:', r.status, rBody);
+      if (!r.ok) throw new Error('Errore salvataggio ' + r.status + ': ' + JSON.stringify(rBody));
     }
     closeAgibModal();
     await loadAgibilita();
