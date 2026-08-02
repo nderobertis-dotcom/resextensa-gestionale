@@ -6853,6 +6853,7 @@ async function saveAgib() {
   if (!nuoveRighe.length) { showToast('Aggiungi almeno un componente', 'error'); return; }
 
   try {
+    checkTokenAndRefresh();
     if (isModifica) {
       const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).sort((a,b)=>a.rowIdx-b.rowIdx);
       // Sovrascrive le righe esistenti con i nuovi dati
@@ -6860,9 +6861,16 @@ async function saveAgib() {
         if (i < righeVecchie.length) {
           await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`, [nuoveRighe[i]]);
         } else {
-          // Più righe nuove che vecchie — append
+          // Più righe nuove che vecchie — append in blocco alla fine
+          const righeNuove = nuoveRighe.slice(righeVecchie.length);
           const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-          await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:[nuoveRighe[i]] }) });
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ range: AGIB_RANGE, majorDimension: 'ROWS', values: righeNuove })
+          });
+          if (!resp.ok) throw new Error('Errore append nuove righe: ' + resp.status);
+          break; // append fatto in blocco, esci dal loop
         }
       }
       // Azzera le righe vecchie in eccesso (righe eliminate)
