@@ -4206,20 +4206,25 @@ function onComponenteChange() {
 // ── Generazione DOCX ──────────────────────────────────────────────────────────
 async function generaContrattoScrittura() {
   const g = id => document.getElementById(id)?.value?.trim()||'';
-  const compId    = g('ct-componente');
-  const qualifica = g('ct-qualifica');
+  const compId     = g('ct-componente');
+  const qualifica  = g('ct-qualifica');
   const spettacolo = g('ct-spettacolo');
-  const periodo   = g('ct-periodo');
-  const compenso  = g('ct-compenso');
+  const periodo    = g('ct-periodo');
+  const compenso   = g('ct-compenso');
 
-  if (!compId)    { showToast('Seleziona lo scritturato', 'error'); return; }
-  if (!qualifica) { showToast('Seleziona la qualifica', 'error'); return; }
-  if (!spettacolo){ showToast('Seleziona lo spettacolo', 'error'); return; }
-  if (!periodo)   { showToast('Inserisci il periodo', 'error'); return; }
-  if (!compenso)  { showToast('Inserisci il compenso', 'error'); return; }
+  if (!compId)     { showToast('Seleziona lo scritturato', 'error'); return; }
+  if (!qualifica)  { showToast('Seleziona la qualifica', 'error'); return; }
+  if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
+  if (!periodo)    { showToast('Inserisci il periodo', 'error'); return; }
+  if (!compenso)   { showToast('Inserisci il compenso', 'error'); return; }
 
   const c = contacts.find(x => x.id === compId);
   if (!c) return;
+
+  // Apre la finestra PRIMA di qualsiasi await — altrimenti i browser bloccano il popup
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Popup bloccato dal browser — consenti i popup per questo sito', 'error'); return; }
+  win.document.write('<html><body style="font-family:Arial;padding:40px;color:#666">⏳ Generazione contratto in corso…</body></html>');
 
   const nomeCognome = `${c.cognome} ${c.nome}`.trim();
   const luogo       = g('ct-luogo-nascita');
@@ -4228,24 +4233,18 @@ async function generaContrattoScrittura() {
   const residenza   = g('ct-residenza');
   const citta       = g('ct-citta');
   const iban        = g('ct-iban');
-  const dataFirma   = g('ct-data-firma') ?
-    new Date(g('ct-data-firma')).toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'}) : '';
+  const dataFirma   = g('ct-data-firma')
+    ? new Date(g('ct-data-firma')).toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})
+    : '';
 
-  showToast('Generazione contratto in corso…', 'info');
-
-  // Genera HTML del contratto e apri finestra stampa
   const logoUrl = window.location.origin +
     (window.location.pathname.endsWith('/') ? window.location.pathname :
     window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
 
-  const ACCENT  = '#8a6d3b';
-  const ACCENT_LIGHT = '#f5f0e8';
+  closeContrattoModal();
 
-  const paragrafo = (num, titolo, testo) => `
-    <div style="margin-bottom:18px">
-      <div style="font-weight:700;color:${ACCENT};margin-bottom:5px">${num}. ${titolo}</div>
-      <div style="text-align:justify;line-height:1.7">${testo}</div>
-    </div>`;
+  const ACCENT       = '#8a6d3b';
+  const ACCENT_LIGHT = '#f5f0e8';
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Contratto di Scrittura — ${nomeCognome}</title>
@@ -4509,8 +4508,7 @@ async function generaContrattoScrittura() {
   <script>window.addEventListener('load', () => setTimeout(() => window.print(), 500));<\/script>
   </body></html>`;
 
-  closeContrattoModal();
-  const win = window.open('', '_blank');
+  win.document.open();
   win.document.write(html);
   win.document.close();
 }
@@ -6309,19 +6307,23 @@ async function loadAgibilita() {
   try {
     const data = await sheetsGet(AGIB_RANGE);
     const rows = data.values || [];
-    agibData = rows.filter(r => r[0]).map((r,i) => {
-      const g = k => (r[AGIB_COL[k]]||'').trim();
-      return {
-        rowIdx: i+2, id_pratica: g('id_pratica'), data_invio: g('data_invio'),
-        cognome_nome: g('cognome_nome'), data_dal: g('data_dal'), data_al: g('data_al'),
-        teatro: g('teatro'), indirizzo_teatro: g('indirizzo_teatro'),
-        prima_assunzione: g('prima_assunzione'),
-        codice_fiscale: g('codice_fiscale'), residenza: g('residenza'),
-        tipo_doc: g('tipo_doc'), num_doc: g('num_doc'),
-        stato: g('stato') || 'BOZZA',
-        destinatari: g('destinatari')
-      };
-    });
+    agibData = rows.map((r,i) => ({
+      rowIdx: i+2,  // indice reale nel foglio (riga 1 = intestazione)
+      id_pratica: (r[0]||'').trim(),
+      data_invio: (r[1]||'').trim(),
+      cognome_nome: (r[2]||'').trim(),
+      data_dal: (r[3]||'').trim(),
+      data_al: (r[4]||'').trim(),
+      teatro: (r[5]||'').trim(),
+      indirizzo_teatro: (r[6]||'').trim(),
+      prima_assunzione: (r[7]||'').trim(),
+      codice_fiscale: (r[8]||'').trim(),
+      residenza: (r[9]||'').trim(),
+      tipo_doc: (r[10]||'').trim(),
+      num_doc: (r[11]||'').trim(),
+      stato: (r[12]||'BOZZA').trim(),
+      destinatari: (r[13]||'').trim(),
+    })).filter(r => r.id_pratica && r.cognome_nome); // escludi righe vuote
 
     // Raggruppa per id_pratica
     const map = {};
@@ -6852,14 +6854,17 @@ async function saveAgib() {
 
   try {
     if (isModifica) {
-      // Sovrascrive le righe esistenti con i nuovi dati
       const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).sort((a,b)=>a.rowIdx-b.rowIdx);
       for (let i = 0; i < Math.max(righeVecchie.length, nuoveRighe.length); i++) {
         if (i < nuoveRighe.length && i < righeVecchie.length) {
+          // Sovrascrive riga esistente con nuovi dati
           await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`, [nuoveRighe[i]]);
         } else if (i < righeVecchie.length) {
-          await sheetsClear(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`);
+          // Riga eliminata — azzeramento con valori vuoti espliciti
+          await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`,
+            [['','','','','','','','','','','','','','','']]);
         } else {
+          // Nuova riga aggiunta — append
           const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
           await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:[nuoveRighe[i]] }) });
         }
