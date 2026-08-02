@@ -6795,7 +6795,7 @@ async function saveAgib() {
     let primaAssunzione = 'NO';
 
     if (compIdEl?.value) {
-      const c = contacts.find(x=>x.id===parseInt(compIdEl.value));
+      const c = contacts.find(x => String(x.id) === String(compIdEl.value));
       if (c) {
         cognomeNome = `${c.cognome} ${c.nome}`;
         if (isModifica) {
@@ -6826,6 +6826,9 @@ async function saveAgib() {
             numDoc = c.doc_num||'';
           }
         }
+      } else {
+        // Contatto non trovato per ID — usa il testo del campo come fallback
+        cognomeNome = compNomeEl.value;
       }
     } else {
       cognomeNome = compNomeEl.value;
@@ -6841,6 +6844,8 @@ async function saveAgib() {
         }
       }
     }
+
+    if (!cognomeNome) return; // skip riga senza nominativo
 
     const dal = document.getElementById(`agib_dal_${idx}`)?.value||'';
     const al = document.getElementById(`agib_al_${idx}`)?.value||'';
