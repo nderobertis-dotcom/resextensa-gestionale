@@ -6887,13 +6887,15 @@ async function saveAgib() {
           [['','','','','','','','','','','','','','','']]);
       }
     } else {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+      // Nuova pratica — append usando colonna A come riferimento per trovare l'ultima riga
+      const appendRange = `${AGIB_SHEET}!A:A`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
       console.log('Append URL:', url);
-      console.log('Payload:', JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:nuoveRighe }));
+      console.log('Payload:', JSON.stringify({ range: appendRange, majorDimension:'ROWS', values:nuoveRighe }));
       const r = await fetch(url, {
         method:'POST',
         headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:nuoveRighe })
+        body: JSON.stringify({ range: appendRange, majorDimension:'ROWS', values:nuoveRighe })
       });
       const rBody = await r.json();
       console.log('Append response:', r.status, rBody);
