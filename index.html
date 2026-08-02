@@ -6855,19 +6855,20 @@ async function saveAgib() {
   try {
     if (isModifica) {
       const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).sort((a,b)=>a.rowIdx-b.rowIdx);
-      for (let i = 0; i < Math.max(righeVecchie.length, nuoveRighe.length); i++) {
-        if (i < nuoveRighe.length && i < righeVecchie.length) {
-          // Sovrascrive riga esistente con nuovi dati
+      // Sovrascrive le righe esistenti con i nuovi dati
+      for (let i = 0; i < nuoveRighe.length; i++) {
+        if (i < righeVecchie.length) {
           await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`, [nuoveRighe[i]]);
-        } else if (i < righeVecchie.length) {
-          // Riga eliminata — azzeramento con valori vuoti espliciti
-          await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`,
-            [['','','','','','','','','','','','','','','']]);
         } else {
-          // Nuova riga aggiunta — append
+          // Più righe nuove che vecchie — append
           const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
           await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:AGIB_RANGE, majorDimension:'ROWS', values:[nuoveRighe[i]] }) });
         }
+      }
+      // Azzera le righe vecchie in eccesso (righe eliminate)
+      for (let i = nuoveRighe.length; i < righeVecchie.length; i++) {
+        await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`,
+          [['','','','','','','','','','','','','','','']]);
       }
     } else {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
