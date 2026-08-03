@@ -6257,6 +6257,116 @@ async function sortAndSaveTeatri() {
 }
 document.getElementById('agibModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeAgibModal(); });
 
+// ─── CALCOLO GIORNATE AGIBILITÀ ───────────────────────────────────────────────
+function parseAgibData(d) {
+  if (!d) return null;
+  d = d.trim();
+  // Formato GGMMAAAA (8 cifre)
+  if (/^\d{8}$/.test(d)) {
+    return new Date(
+      parseInt(d.slice(4,8)),
+      parseInt(d.slice(2,4)) - 1,
+      parseInt(d.slice(0,2))
+    );
+  }
+  // Formato GG/MM/AAAA
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
+    const [dd,mm,yyyy] = d.split('/');
+    return new Date(parseInt(yyyy), parseInt(mm)-1, parseInt(dd));
+  }
+  return null;
+}
+
+function calcolaGiornate(dal, al) {
+  const d1 = parseAgibData(dal);
+  const d2 = parseAgibData(al);
+  if (!d1 || !d2 || d2 < d1) return 0;
+  return Math.round((d2 - d1) / (1000*60*60*24)) + 1;
+}
+
+// Calcola giornate per nominativo nel mese solare (dal 1° del mese)
+// Raggruppa TUTTE le righe agibData per nominativo e somma le giornate
+// che cadono nel mese/anno specificato
+function giornateNelMese(cognomeNome, mese, anno) {
+  const righe = agibData.filter(r =>
+    r.cognome_nome.trim().toUpperCase() === cognomeNome.trim().toUpperCase()
+  );
+  let totale = 0;
+  const primoMese = new Date(anno, mese - 1, 1);
+  const ultimoMese = new Date(anno, mese, 0); // ultimo giorno del mese
+
+  for (const r of righe) {
+    const dal = parseAgibData(r.data_dal);
+    const al  = parseAgibData(r.data_al);
+    if (!dal || !al) continue;
+    // Intersezione tra [dal,al] e [primoMese, ultimoMese]
+    const inizio = dal < primoMese ? primoMese : dal;
+    const fine   = al  > ultimoMese ? ultimoMese : al;
+    if (fine >= inizio) {
+      totale += Math.round((fine - inizio) / (1000*60*60*24)) + 1;
+    }
+  }
+  return totale;
+}
+
+// Controlla sforamenti 26 giorni per tutti i nominativi di una pratica
+// Restituisce array di {nome, mese, anno, giornate} con giornate > 26
+function verificaSforamento26(righe) {
+  const alerte = [];
+  // Raggruppa per nominativo
+  const perNominativo = {};
+  for (const r of righe) {
+    const nome = r.cognome_nome;
+    if (!perNominativo[nome]) perNominativo[nome] = [];
+    perNominativo[nome].push(r);
+  }
+
+  for (const [nome, rs] of Object.entries(perNominativo)) {
+    // Trova tutti i mesi/anni coinvolti
+    const mesiAnni = new Set();
+    for (const r of rs) {
+      const dal = parseAgibData(r.data_dal);
+      const al  = parseAgibData(r.data_al);
+      if (!dal || !al) continue;
+      let cur = new Date(dal.getFullYear(), dal.getMonth(), 1);
+      const fine = new Date(al.getFullYear(), al.getMonth(), 1);
+      while (cur <= fine) {
+        mesiAnni.add(`${cur.getMonth()+1}/${cur.getFullYear()}`);
+        cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+      }
+    }
+    for (const ma of mesiAnni) {
+      const [mm, yyyy] = ma.split('/').map(Number);
+      const tot = giornateNelMese(nome, mm, yyyy);
+      if (tot > 26) alerte.push({ nome, mese: mm, anno: yyyy, giornate: tot });
+    }
+  }
+  return alerte;
+}
+
+const MESI_IT = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                 'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+// ─────────────────────────────────────────────────────────────────────────────
+
+function giornateCell(r) {
+  const gg = calcolaGiornate(r.data_dal, r.data_al);
+  if (!gg) return '<span style="color:var(--text3)">—</span>';
+  const dal = parseAgibData(r.data_dal);
+  if (!dal) return `<span style="font-weight:600">${gg}</span>`;
+  const totMese = giornateNelMese(r.cognome_nome, dal.getMonth()+1, dal.getFullYear());
+  const over = totMese > 26;
+  const warn = totMese > 20 && totMese <= 26;
+  const color = over ? '#c62828' : warn ? '#b8860b' : 'var(--attivo)';
+  const bg    = over ? '#ffebee' : warn ? '#fffbe6' : '#e8f5e9';
+  const title = over
+    ? `⚠ SFORAMENTO: ${totMese} gg totali in ${MESI_IT[dal.getMonth()+1]} (max 26)`
+    : warn ? `Attenzione: ${totMese} gg totali in ${MESI_IT[dal.getMonth()+1]}` : '';
+  return `<span title="${title}" style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;background:${bg};color:${color};cursor:${over||warn?'help':'default'}">
+    ${gg} gg${over?' ⚠':''}
+  </span>
+  ${over ? `<div style="font-size:9px;color:${color};font-weight:600;margin-top:2px">Tot. mese: ${totMese}</div>` : ''}`;
+}
+
 // ─── AGIBILITÀ ────────────────────────────────────────────────────────────────
 const AGIB_SHEET = 'Agibilita';
 const AGIB_RANGE = 'Agibilita!A2:O';
@@ -6423,6 +6533,7 @@ function renderAgibDetail(p) {
     return `<tr style="background:${bg};border-left:5px solid ${border}">
       <td style="padding:8px 10px;font-size:12px;font-weight:500;border-bottom:1px solid ${border}30">${r.cognome_nome}</td>
       <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${fmtD(r.data_dal)} → ${fmtD(r.data_al)}</td>
+      <td style="padding:8px 10px;text-align:center;border-bottom:1px solid ${border}30">${giornateCell(r)}</td>
       <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${r.teatro||'—'}<br><span style="font-size:10px;color:var(--text3)">${r.indirizzo_teatro||''}</span></td>
       <td style="padding:8px 10px;text-align:center;border-bottom:1px solid ${border}30">
         <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${r.prima_assunzione==='SI'?'#fce4ec':'#e8f5e9'};color:${r.prima_assunzione==='SI'?'#c62828':'#2e7d32'}">${r.prima_assunzione||'—'}</span>
@@ -6472,6 +6583,7 @@ function renderAgibDetail(p) {
         <tr style="background:var(--surface);border-bottom:2px solid var(--border)">
           <th style="padding:10px;text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Cognome Nome</th>
           <th style="padding:10px;text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Periodo</th>
+          <th style="padding:10px;text-align:center;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Giornate</th>
           <th style="padding:10px;text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Teatro / Luogo</th>
           <th style="padding:10px;text-align:center;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Prima assunzione</th>
         </tr>
@@ -6524,6 +6636,7 @@ function renderAgibDetailSorted(id) {
     return `<tr style="background:${bg};border-left:5px solid ${border}">
       <td style="padding:8px 10px;font-size:12px;font-weight:500;border-bottom:1px solid ${border}30">${r.cognome_nome}</td>
       <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${fmtD(r.data_dal)} → ${fmtD(r.data_al)}</td>
+      <td style="padding:8px 10px;text-align:center;border-bottom:1px solid ${border}30">${giornateCell(r)}</td>
       <td style="padding:8px 10px;font-size:11px;border-bottom:1px solid ${border}30">${r.teatro||'—'}<br><span style="font-size:10px;color:var(--text3)">${r.indirizzo_teatro||''}</span></td>
       <td style="padding:8px 10px;text-align:center;border-bottom:1px solid ${border}30">
         <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${r.prima_assunzione==='SI'?'#fce4ec':'#e8f5e9'};color:${r.prima_assunzione==='SI'?'#c62828':'#2e7d32'}">${r.prima_assunzione||'—'}</span>
@@ -6856,6 +6969,28 @@ async function saveAgib() {
   });
 
   if (!nuoveRighe.length) { showToast('Aggiungi almeno un componente', 'error'); return; }
+
+  // Controllo 26 giorni nel mese solare
+  const righeTemp = nuoveRighe.map(row => ({
+    cognome_nome: row[2]||'', data_dal: row[3]||'', data_al: row[4]||''
+  }));
+
+  // Simula aggiunta delle nuove righe per il calcolo (esclude righe della pratica corrente)
+  const agibDataTemp = [
+    ...agibData.filter(r => r.id_pratica !== idPratica),
+    ...righeTemp.map(r => ({ ...r, id_pratica: idPratica }))
+  ];
+  const agibDataOriginal = agibData;
+  agibData = agibDataTemp;
+  const sforamenti = verificaSforamento26(righeTemp);
+  agibData = agibDataOriginal; // ripristina
+
+  if (sforamenti.length) {
+    const msg = sforamenti.map(s =>
+      `⚠ ${s.nome}: ${s.giornate} giornate in ${MESI_IT[s.mese]} ${s.anno} (max 26)`
+    ).join('\n');
+    if (!confirm(`ATTENZIONE — Sforamento limite 26 giornate mensili:\n\n${msg}\n\nVuoi salvare comunque?`)) return;
+  }
 
   try {
     checkTokenAndRefresh();
