@@ -6353,18 +6353,20 @@ function giornateCell(r) {
   if (!gg) return '<span style="color:var(--text3)">—</span>';
   const dal = parseAgibData(r.data_dal);
   if (!dal) return `<span style="font-weight:600">${gg}</span>`;
-  const totMese = giornateNelMese(r.cognome_nome, dal.getMonth()+1, dal.getFullYear());
+  const mese = dal.getMonth()+1;
+  const anno = dal.getFullYear();
+  const totMese = giornateNelMese(r.cognome_nome, mese, anno);
   const over = totMese > 26;
   const warn = totMese > 20 && totMese <= 26;
   const color = over ? '#c62828' : warn ? '#b8860b' : 'var(--attivo)';
   const bg    = over ? '#ffebee' : warn ? '#fffbe6' : '#e8f5e9';
+  const label = totMese !== gg
+    ? `${gg} gg <span style="font-size:9px;opacity:0.7">(tot. mese: ${totMese}${over?' ⚠':''})</span>`
+    : `${gg} gg${over?' ⚠':''}`;
   const title = over
-    ? `⚠ SFORAMENTO: ${totMese} gg totali in ${MESI_IT[dal.getMonth()+1]} (max 26)`
-    : warn ? `Attenzione: ${totMese} gg totali in ${MESI_IT[dal.getMonth()+1]}` : '';
-  return `<span title="${title}" style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;background:${bg};color:${color};cursor:${over||warn?'help':'default'}">
-    ${gg} gg${over?' ⚠':''}
-  </span>
-  ${over ? `<div style="font-size:9px;color:${color};font-weight:600;margin-top:2px">Tot. mese: ${totMese}</div>` : ''}`;
+    ? `⚠ SFORAMENTO: ${totMese} gg totali in ${MESI_IT[mese]} ${anno} (max 26)`
+    : warn ? `Attenzione: ${totMese} gg totali in ${MESI_IT[mese]} ${anno}` : `${totMese} gg totali in ${MESI_IT[mese]} ${anno}`;
+  return `<span title="${title}" style="font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;background:${bg};color:${color};cursor:help;white-space:nowrap">${label}</span>`;
 }
 
 // ─── AGIBILITÀ ────────────────────────────────────────────────────────────────
