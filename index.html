@@ -4355,7 +4355,7 @@ function aggiornaLettoreLordo() {
 // F:stato G:file_id_drive H:note I:data_stato
 
 const CTR_SHEET = 'Contratti';
-const CTR_RANGE = 'Contratti!A2:I';
+const CTR_RANGE = 'Contratti!A2:J';
 const DRIVE_CONTRATTI_CTR_FOLDER = DRIVE_CONTRATTI_FOLDER; // stessa cartella Drive
 
 const CTR_STATI = ['BOZZA','INVIATO','RICEVUTO FIRMATO','ARCHIVIATO'];
@@ -4399,6 +4399,7 @@ async function loadContratti() {
       file_id:        row[6]||'',
       note:           row[7]||'',
       data_stato:     row[8]||'',
+      dati_json:      row[9]||'',
     })).filter(c => c.id && c.scritturato);
     updateCtrStats();
     renderArchivioContratti();
@@ -4637,28 +4638,93 @@ async function eliminaAllegatoContratto(fileId, ctrId) {
 }
 
 // ── Salva contratto in archivio (chiamata da generaContrattoScrittura e generaContrattualistica)
-async function salvaContrattoInArchivio(tipo, scritturato, spettacolo) {
+async function salvaContrattoInArchivio(tipo, scritturato, spettacolo, dati) {
   const newId = 'CTR-'+Date.now();
   const oggi  = new Date().toISOString().slice(0,10);
-  const row   = [newId, tipo, scritturato, spettacolo, oggi, 'BOZZA', '', '', ''];
+  const jsonStr = dati ? JSON.stringify(dati) : '';
+  const row   = [newId, tipo, scritturato, spettacolo, oggi, 'BOZZA', '', '', '', jsonStr];
   checkTokenAndRefresh();
   try {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CTR_SHEET+'!A:I')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CTR_SHEET+'!A:J')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
       method: 'POST',
       headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({ values: [row] })
     });
-    showToast(`Contratto salvato in archivio come BOZZA`, 'success');
-  } catch(e) { console.warn('Errore salvataggio archivio:', e); }
+    showToast('Contratto salvato in archivio come BOZZA', 'success');
+    return newId;
+  } catch(e) { console.warn('Errore salvataggio archivio:', e); return null; }
 }
 
 function anteprimaContratto(id) {
-  showToast('Rigenera il contratto dalla sezione "Genera contratto" per visualizzare l\'anteprima PDF', 'info');
+  const c = contratti.find(x=>x.id===id);
+  if (!c || !c.dati_json) { showToast('Dati non disponibili — contratto generato prima dell\'archivio. Rigeneralo dalla sezione Genera.', 'error'); return; }
+  try {
+    const d = JSON.parse(c.dati_json);
+    const win = window.open('', '_blank');
+    if (!win) { showToast('Popup bloccato', 'error'); return; }
+    win.document.write('<html><body style="font-family:Arial;padding:40px;color:#666">⏳ Generazione in corso…</body></html>');
+    const html = d.tipo === 'contrattualistica'
+      ? buildHTMLContrattualistica(d)
+      : buildHTMLContrattoScrittura(d);
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  } catch(e) { showToast('Errore lettura dati: '+e.message, 'error'); }
 }
 
-function modificaContratto(id) {
-  switchModView('genera');
-  showToast('Seleziona il tipo di contratto e reinserisci i dati per modificarlo', 'info');
+async function modificaContratto(id) {
+  const c = contratti.find(x=>x.id===id);
+  if (!c || !c.dati_json) { switchModView('genera'); showToast('Reinserisci i dati nella sezione Genera', 'info'); return; }
+  try {
+    const d = JSON.parse(c.dati_json);
+    if (d.tipo === 'contrattualistica') {
+      if (!spettacoliList.length) await loadSpettacoliSheet();
+      await openContrattualistica();
+      // Pre-compila i campi
+      setTimeout(() => {
+        const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val||''; };
+        set('ctr-nome', d.nome);
+        set('ctr-nascita', d.nascita);
+        set('ctr-cf', d.cf);
+        set('ctr-residenza', d.residenza);
+        set('ctr-doc-tipo', d.docTipo);
+        set('ctr-doc-num', d.docNum);
+        set('ctr-telefono', d.telefono);
+        set('ctr-email', d.email);
+        set('ctr-iban', d.iban);
+        set('ctr-qualifica', d.qualifica);
+        set('ctr-spettacolo', d.spettacolo);
+        set('ctr-netto', d.nettoNum);
+        set('ctr-lordo', d.lordoNum);
+        set('ctr-calendario', d.calendario);
+        set('ctr-data-firma', d.dataFirma);
+        set('ctr-citta-firma', d.cittaFirma);
+        set('ctr-genere', d.genere||'F');
+        aggiornaLettereNetto();
+        aggiornaLettoreLordo();
+        // Elimina vecchio record bozza
+        eliminaContratto(id);
+      }, 300);
+    } else {
+      if (!spettacoliList.length) await loadSpettacoliSheet();
+      await openContrattoModal();
+      setTimeout(() => {
+        const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val||''; };
+        set('ct-luogo-nascita', d.luogo);
+        set('ct-data-nascita', d.dataNascita);
+        set('ct-cf', d.cf);
+        set('ct-residenza', d.residenza);
+        set('ct-citta', d.citta);
+        set('ct-iban', d.iban);
+        set('ct-qualifica', d.qualifica);
+        set('ct-spettacolo', d.spettacolo);
+        set('ct-periodo', d.periodo);
+        set('ct-compenso', d.compenso);
+        set('ct-data-firma', d.dataFirma);
+        eliminaContratto(id);
+      }, 300);
+    }
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4804,14 +4870,39 @@ async function generaContrattualistica() {
 
   closeContrattualistica();
 
-  // Salva in archivio come BOZZA
-  salvaContrattoInArchivio('Contrattualistica', nome, spettacolo);
+  const datiSalvataggio = {
+    tipo: 'contrattualistica',
+    nome, nascita, cf, residenza, docTipo, docNum, telefono, email, iban,
+    genere, qualifica, spettacolo, nettoNum, lordoNum,
+    netto, lordo, calendario, dataFirma, cittaFirma
+  };
+  salvaContrattoInArchivio('Contrattualistica', nome, spettacolo, datiSalvataggio);
 
+  const html = buildHTMLContrattualistica(datiSalvataggio);
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
+function buildHTMLContrattualistica(d) {
+  const { nome, nascita, cf, residenza, docTipo, docNum, telefono, email, iban,
+    genere, qualifica, spettacolo, netto, lordo, calendario, dataFirma, cittaFirma } = d;
+  const S = (genere||'F') === 'F' ? 'a' : 'o';
+  const script = `Scritturat${S}`;
+  const art    = S === 'a' ? 'la' : 'lo';
+  const pron   = S === 'a' ? 'La' : 'Lo';
+  const calLines = (calendario||'').split('\n').filter(l=>l.trim());
+  const calHtml = calLines.map(l=>`<li>${l.trim()}</li>`).join('');
+  const logoUrl = window.location.origin +
+    (window.location.pathname.endsWith('/') ? window.location.pathname :
+    window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
   const ACCENT = '#8a6d3b';
   const ACCENT_LIGHT = '#f5f0e8';
-
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <title>Contratto — ${nome}</title>
+  const dataFirmaFmt = dataFirma
+    ? (dataFirma.includes('-') ? new Date(dataFirma).toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'}) : dataFirma)
+    : '___________________';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Contrattualistica — ${nome}</title>
   <style>
     @page { size: A4 portrait; margin: 16mm 18mm 20mm; }
     * { box-sizing: border-box; }
@@ -4976,7 +5067,7 @@ async function generaContrattualistica() {
   </div>
 
   <div style="margin-top:14px;font-size:11px">
-    <strong>${cittaFirma}, ${dataFirma}</strong>
+    <strong>${cittaFirma||'Bari'}, ${dataFirmaFmt}</strong>
   </div>
 
   <div class="firme">
@@ -4996,10 +5087,7 @@ async function generaContrattualistica() {
   <div class="footer">RESEXTENSA Ass. Culturale — Bari · P.IVA 06024770726 · Generato il ${new Date().toLocaleDateString('it-IT')}</div>
   <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));<\/script>
   </body></html>`;
-
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  return html;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -5162,13 +5250,28 @@ async function generaContrattoScrittura() {
 
   closeContrattoModal();
 
-  // Salva in archivio come BOZZA
-  salvaContrattoInArchivio('Contratto di Scrittura', nomeCognome, spettacolo);
+  const datiSalvataggio = {
+    tipo: 'contratto_scrittura',
+    nomeCognome, luogo, dataNascita, cf, residenza, citta, iban,
+    qualifica, spettacolo, periodo, compenso, dataFirma
+  };
+  salvaContrattoInArchivio('Contratto di Scrittura', nomeCognome, spettacolo, datiSalvataggio);
 
+  const html = buildHTMLContrattoScrittura(datiSalvataggio);
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
+function buildHTMLContrattoScrittura(d) {
+  const { nomeCognome, luogo, dataNascita, cf, residenza, citta, iban,
+    qualifica, spettacolo, periodo, compenso, dataFirma } = d;
+  const logoUrl = window.location.origin +
+    (window.location.pathname.endsWith('/') ? window.location.pathname :
+    window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
   const ACCENT       = '#8a6d3b';
   const ACCENT_LIGHT = '#f5f0e8';
-
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Contratto di Scrittura — ${nomeCognome}</title>
   <style>
     @page { size: A4 portrait; margin: 18mm 18mm 22mm; }
@@ -5429,10 +5532,6 @@ async function generaContrattoScrittura() {
 
   <script>window.addEventListener('load', () => setTimeout(() => window.print(), 500));<\/script>
   </body></html>`;
-
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
