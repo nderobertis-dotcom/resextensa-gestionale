@@ -4201,7 +4201,8 @@ function esportaFornitoriCSV() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── CONTRATTUALISTICA ───────────────────────────────────────────────────────
-function openContrattualistica() {
+async function openContrattualistica() {
+  if (!spettacoliList.length) await loadSpettacoliSheet();
   // Popola qualifiche
   const dl = document.getElementById('ctr-qual-list');
   if (dl) dl.innerHTML = getQualifiche().map(q=>`<option value="${q}">`).join('');
@@ -4579,7 +4580,10 @@ function eliminaQualifica(idx) {
 }
 
 // ── Modal generazione contratto ───────────────────────────────────────────────
-function openContrattoModal() {
+async function openContrattoModal() {
+  // Carica spettacoli se non ancora disponibili
+  if (!spettacoliList.length) await loadSpettacoliSheet();
+
   // Popola componenti dalla rubrica
   const selComp = document.getElementById('ct-componente');
   selComp.innerHTML = '<option value="">— Seleziona dalla rubrica —</option>' +
@@ -4618,7 +4622,7 @@ document.getElementById('contrattoModal').addEventListener('click', e => {
 
 function onComponenteChange() {
   const id = document.getElementById('ct-componente').value;
-  const c = contacts.find(x => x.id === id);
+  const c = contacts.find(x => String(x.id) === String(id));
   if (!c) return;
   const fmtData = v => {
     if (!v) return '';
