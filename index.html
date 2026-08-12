@@ -848,7 +848,7 @@
         <div style="font-size:13px;color:var(--text2)">Genera contratti compilati automaticamente con i dati della rubrica.</div>
       </div>
 
-      <!-- Card contratto di scrittura -->
+      <!-- Cards contratti -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px">
         <div style="border:1px solid var(--border);border-radius:10px;padding:24px;background:var(--surface);cursor:pointer;transition:all 0.2s"
           onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 16px rgba(138,109,59,0.12)'"
@@ -856,8 +856,18 @@
           onclick="openContrattoModal()">
           <div style="font-size:32px;margin-bottom:12px">📄</div>
           <div style="font-family:'DM Serif Display',serif;font-size:18px;color:var(--accent);margin-bottom:6px">Contratto di Scrittura</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px">Contratto di lavoro a tempo determinato per scritturati. Dati anagrafici acquisiti dalla rubrica, spettacolo dalla lista produzioni.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px">Contratto sintetico per scritturati. Dati anagrafici dalla rubrica, spettacolo dalla lista produzioni.</div>
           <div style="font-size:11px;padding:6px 14px;background:var(--accent);color:white;border-radius:6px;display:inline-block;font-weight:600">✦ Genera contratto</div>
+        </div>
+
+        <div style="border:1px solid var(--border);border-radius:10px;padding:24px;background:var(--surface);cursor:pointer;transition:all 0.2s"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 16px rgba(138,109,59,0.12)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'"
+          onclick="openContrattualistica()">
+          <div style="font-size:32px;margin-bottom:12px">📋</div>
+          <div style="font-family:'DM Serif Display',serif;font-size:18px;color:var(--accent);margin-bottom:6px">Contrattualistica</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px">Contratto completo con calendario giornaliero, compenso lordo/netto, trattamento fuori sede e clausole estese.</div>
+          <div style="font-size:11px;padding:6px 14px;background:var(--accent);color:white;border-radius:6px;display:inline-block;font-weight:600">✦ Compila e genera</div>
         </div>
       </div>
 
@@ -988,6 +998,106 @@
           <div class="empty-title">Seleziona uno sponsor</div>
           <div class="empty-sub">Oppure crea un nuovo sponsor con il pulsante + Nuovo</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONTRATTUALISTICA -->
+  <div class="modal-overlay" id="contrattual-modal">
+    <div class="modal" style="width:720px;max-width:96vw;max-height:92vh;overflow-y:auto">
+      <div class="modal-title">📋 Contrattualistica</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <!-- Ricerca scritturato con prime 3 lettere -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div class="modal-label" style="margin-bottom:8px">Cerca scritturato/a dalla rubrica</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="edit-input" id="ctr-search" placeholder="Prime 3 lettere del cognome…" style="width:220px"
+              oninput="cercaScritturatoCtr(this.value)">
+            <span style="font-size:11px;color:var(--text3)">oppure</span>
+            <select class="edit-input" id="ctr-select" style="flex:1" onchange="onScritturatoCtrChange()">
+              <option value="">— Seleziona —</option>
+            </select>
+          </div>
+          <div id="ctr-search-results" style="margin-top:8px"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <!-- Dati anagrafici (readonly) -->
+          <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:4px">Dati anagrafici — compilati dalla rubrica</div>
+            <div>
+              <div class="modal-label">Nome completo</div>
+              <input class="edit-input" id="ctr-nome" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Genere</div>
+              <select class="edit-input" id="ctr-genere">
+                <option value="F">Femminile (Scritturata)</option>
+                <option value="M">Maschile (Scritturato)</option>
+              </select>
+            </div>
+            <div>
+              <div class="modal-label">Data di nascita</div>
+              <input class="edit-input" id="ctr-nascita" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Codice Fiscale</div>
+              <input class="edit-input" id="ctr-cf" readonly style="background:var(--surface)">
+            </div>
+            <div style="grid-column:1/-1">
+              <div class="modal-label">Residenza</div>
+              <input class="edit-input" id="ctr-residenza" readonly style="background:var(--surface)">
+            </div>
+            <div style="grid-column:1/-1">
+              <div class="modal-label">IBAN</div>
+              <input class="edit-input" id="ctr-iban" readonly style="background:var(--surface)">
+            </div>
+          </div>
+
+          <!-- Dati contrattuali -->
+          <div>
+            <div class="modal-label">Qualifica professionale *</div>
+            <input class="edit-input" id="ctr-qualifica" placeholder="es. DANZATRICE" list="ctr-qual-list">
+            <datalist id="ctr-qual-list"></datalist>
+          </div>
+          <div>
+            <div class="modal-label">Spettacolo *</div>
+            <select class="edit-input" id="ctr-spettacolo">
+              <option value="">— Seleziona —</option>
+            </select>
+          </div>
+          <div>
+            <div class="modal-label">Compenso netto a giornata *</div>
+            <input class="edit-input" id="ctr-netto" placeholder="es. euro 56/57 circa (cinquantasei/00)">
+          </div>
+          <div>
+            <div class="modal-label">Compenso lordo a giornata *</div>
+            <input class="edit-input" id="ctr-lordo" placeholder="es. € 96,35 (novantasei,35)">
+          </div>
+          <div>
+            <div class="modal-label">Data firma</div>
+            <input class="edit-input" id="ctr-data-firma" type="date">
+          </div>
+          <div>
+            <div class="modal-label">Città firma</div>
+            <input class="edit-input" id="ctr-citta-firma" value="Bari">
+          </div>
+
+          <!-- Calendario -->
+          <div style="grid-column:1/-1">
+            <div class="modal-label">Calendario attività * <span style="font-size:10px;color:var(--text3);font-weight:400">— una riga per ogni giornata</span></div>
+            <textarea class="edit-input" id="ctr-calendario" rows="8" placeholder="25/08/2026 Viaggio&#10;dal 26/08/2026 al 30/08/2026 prove presso Borgo Acqua Paola in Bracciano (RM)&#10;31/08/2026 Viaggio per Torino&#10;01/09/2026 Prove&#10;02/09/2026 Spettacolo c/o LAVANDERIA A VAPORE in Torino&#10;03/09/2026 Viaggio di rientro" style="font-family:'DM Mono',monospace;font-size:12px;resize:vertical"></textarea>
+          </div>
+        </div>
+
+        <div style="font-size:11px;color:var(--text3);background:var(--surface2);padding:10px 12px;border-radius:6px">
+          ℹ I campi anagrafici sono compilati automaticamente dalla rubrica dopo la selezione dello scritturato.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeContrattualistica()">Annulla</button>
+        <button class="btn-new" onclick="generaContrattualistica()">📋 Genera contratto</button>
       </div>
     </div>
   </div>
@@ -4087,6 +4197,328 @@ function esportaFornitoriCSV() {
   a.href = URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
   a.download = `Fornitori_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── CONTRATTUALISTICA ───────────────────────────────────────────────────────
+function openContrattualistica() {
+  // Popola qualifiche
+  const dl = document.getElementById('ctr-qual-list');
+  if (dl) dl.innerHTML = getQualifiche().map(q=>`<option value="${q}">`).join('');
+
+  // Popola spettacoli
+  const selSpett = document.getElementById('ctr-spettacolo');
+  selSpett.innerHTML = '<option value="">— Seleziona —</option>' +
+    allSpettacoli().map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  // Reset campi
+  ['ctr-nome','ctr-nascita','ctr-cf','ctr-residenza','ctr-iban',
+   'ctr-qualifica','ctr-netto','ctr-lordo','ctr-calendario','ctr-search']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('ctr-data-firma').value = new Date().toISOString().slice(0,10);
+  document.getElementById('ctr-citta-firma').value = 'Bari';
+  document.getElementById('ctr-search-results').innerHTML = '';
+  document.getElementById('ctr-genere').value = 'F';
+
+  // Popola select con tutta la rubrica
+  const sel = document.getElementById('ctr-select');
+  sel.innerHTML = '<option value="">— Seleziona —</option>' +
+    [...contacts]
+      .filter(c => c.stato==='ATTIVO' || !c.stato)
+      .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
+      .map(c => `<option value="${c.id}">${c.cognome} ${c.nome}</option>`)
+      .join('');
+
+  document.getElementById('contrattual-modal').classList.add('open');
+}
+
+function closeContrattualistica() {
+  document.getElementById('contrattual-modal').classList.remove('open');
+}
+document.getElementById('contrattual-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeContrattualistica();
+});
+
+function cercaScritturatoCtr(q) {
+  const box = document.getElementById('ctr-search-results');
+  if (!q || q.length < 3) { box.innerHTML = ''; return; }
+  const risultati = contacts
+    .filter(c => c.cognome.toLowerCase().startsWith(q.toLowerCase()))
+    .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
+    .slice(0, 8);
+  if (!risultati.length) { box.innerHTML = '<span style="font-size:11px;color:var(--text3)">Nessun risultato</span>'; return; }
+  box.innerHTML = risultati.map(c =>
+    `<div onclick="selezionaScritturatoCtr('${c.id}')" style="padding:6px 10px;cursor:pointer;border-radius:5px;font-size:12px;background:var(--surface);border:1px solid var(--border);margin-bottom:4px;hover:background:var(--surface2)">
+      <strong>${c.cognome} ${c.nome}</strong>
+      <span style="color:var(--text3);margin-left:8px">${c.citta_residenza||''}</span>
+    </div>`
+  ).join('');
+}
+
+function selezionaScritturatoCtr(id) {
+  document.getElementById('ctr-select').value = id;
+  document.getElementById('ctr-search-results').innerHTML = '';
+  document.getElementById('ctr-search').value = '';
+  onScritturatoCtrChange();
+}
+
+function onScritturatoCtrChange() {
+  const id = document.getElementById('ctr-select').value;
+  const c = contacts.find(x => String(x.id) === String(id));
+  if (!c) return;
+  const fmtData = v => {
+    if (!v) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v.split('-').reverse().join('/');
+    return v;
+  };
+  document.getElementById('ctr-nome').value = `${c.nome} ${c.cognome}`.toUpperCase();
+  document.getElementById('ctr-nascita').value = fmtData(c.data_nascita);
+  document.getElementById('ctr-cf').value = c.codice_fiscale||'';
+  const res = [c.indirizzo, c.citta_residenza].filter(Boolean).join(', ');
+  document.getElementById('ctr-residenza').value = res;
+  document.getElementById('ctr-iban').value = c.iban||'';
+  // Tenta di rilevare il genere dal nome
+  const nomeL = (c.nome||'').toLowerCase();
+  const femminile = ['a','ella','ina','essa','etta','ina'].some(s => nomeL.endsWith(s));
+  document.getElementById('ctr-genere').value = femminile ? 'F' : 'M';
+}
+
+async function generaContrattualistica() {
+  const g = id => document.getElementById(id)?.value?.trim()||'';
+  const nome      = g('ctr-nome');
+  const qualifica = g('ctr-qualifica').toUpperCase();
+  const spettacolo = g('ctr-spettacolo');
+  const netto     = g('ctr-netto');
+  const lordo     = g('ctr-lordo');
+  const calendario = g('ctr-calendario');
+
+  if (!nome)       { showToast('Seleziona lo scritturato', 'error'); return; }
+  if (!qualifica)  { showToast('Inserisci la qualifica', 'error'); return; }
+  if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
+  if (!netto)      { showToast('Inserisci il compenso netto', 'error'); return; }
+  if (!lordo)      { showToast('Inserisci il compenso lordo', 'error'); return; }
+  if (!calendario) { showToast('Inserisci il calendario attività', 'error'); return; }
+
+  // Apri finestra subito (prima di qualsiasi async)
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Popup bloccato — consenti i popup per questo sito', 'error'); return; }
+  win.document.write('<html><body style="font-family:Arial;padding:40px;color:#666">⏳ Generazione in corso…</body></html>');
+
+  const nascita    = g('ctr-nascita');
+  const cf         = g('ctr-cf');
+  const residenza  = g('ctr-residenza');
+  const iban       = g('ctr-iban');
+  const genere     = g('ctr-genere');
+  const dataFirma  = g('ctr-data-firma')
+    ? new Date(g('ctr-data-firma')).toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})
+    : '___________________';
+  const cittaFirma = g('ctr-citta-firma') || 'Bari';
+
+  const S = genere === 'F' ? 'a' : 'o'; // Scritturata/o
+  const script = `Scritturat${S}`;
+  const art    = genere === 'F' ? 'la' : 'lo';
+  const pron   = genere === 'F' ? 'La' : 'Lo';
+
+  // Calendario in lista HTML
+  const calLines = calendario.split('\n').filter(l=>l.trim());
+  const calHtml = calLines.map(l => `<li>${l.trim()}</li>`).join('');
+
+  const logoUrl = window.location.origin +
+    (window.location.pathname.endsWith('/') ? window.location.pathname :
+    window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
+
+  closeContrattualistica();
+
+  const ACCENT = '#8a6d3b';
+  const ACCENT_LIGHT = '#f5f0e8';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Contratto — ${nome}</title>
+  <style>
+    @page { size: A4 portrait; margin: 16mm 18mm 20mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin:0;
+           -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .intestazione { border-bottom:3px solid ${ACCENT}; padding-bottom:12px; margin-bottom:18px;
+      display:flex; align-items:center; justify-content:space-between; gap:20px; }
+    .intestazione img { height:50px; }
+    .int-testo h1 { font-family:Georgia,serif; font-size:17px; color:${ACCENT}; margin:0 0 2px; }
+    .int-testo p  { font-size:9px; color:#666; margin:0; line-height:1.5; }
+    .titolo { text-align:center; margin:16px 0 20px; }
+    .titolo h2 { font-family:Georgia,serif; font-size:15px; text-transform:uppercase;
+      letter-spacing:0.1em; color:${ACCENT}; display:inline-block;
+      border-bottom:1px solid ${ACCENT}; padding-bottom:3px; }
+    .parti { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; }
+    .parte { background:${ACCENT_LIGHT}; border-left:4px solid ${ACCENT}; padding:10px 13px; border-radius:0 5px 5px 0; }
+    .parte-label { font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:${ACCENT}; font-weight:700; margin-bottom:5px; }
+    .parte-riga { font-size:10px; margin-bottom:2px; color:#333; }
+    .conviene { text-align:center; font-size:11px; font-weight:700; text-transform:uppercase;
+      letter-spacing:0.08em; color:${ACCENT}; padding:7px 0; margin:0 0 16px;
+      border-top:1px solid #ddd; border-bottom:1px solid #ddd; }
+    .oggetto { background:${ACCENT_LIGHT}; border:1px solid ${ACCENT}30; border-radius:6px;
+      padding:12px 15px; margin-bottom:18px; font-size:11px; }
+    .oggetto-row { margin-bottom:4px; }
+    .oggetto-lbl { font-size:9px; text-transform:uppercase; color:${ACCENT}; font-weight:700; }
+    .art { margin-bottom:13px; page-break-inside:avoid; break-inside:avoid; }
+    .art-tit { font-weight:700; color:${ACCENT}; margin-bottom:4px; font-size:11px; }
+    .art-body { line-height:1.7; text-align:justify; font-size:11px; }
+    .art-body ul { margin:5px 0 5px 18px; padding:0; }
+    .art-body ul li { margin-bottom:2px; }
+    .firme { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:28px; }
+    .firma-box { border-top:1px solid #999; padding-top:6px; }
+    .firma-lbl { font-size:10px; color:#555; margin-bottom:1px; }
+    .firma-nome { font-size:11px; font-weight:600; }
+    .footer { margin-top:20px; font-size:9px; color:#aaa; text-align:center;
+      border-top:1px solid #eee; padding-top:6px; }
+    @media print {
+      .art { page-break-inside:avoid; break-inside:avoid; }
+      * { -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+    }
+  </style></head><body>
+
+  <div class="intestazione">
+    <img src="${logoUrl}" onerror="this.style.display='none'">
+    <div class="int-testo">
+      <h1>RESEXTENSA Ass. Culturale</h1>
+      <p>Centro Nazionale di Produzione della Danza "Porta d'Oriente"<br>
+      Via Giovan Battista Trevisani, 90/92 — 70122 Bari (BA) · P.IVA: 06024770726</p>
+    </div>
+  </div>
+
+  <div class="titolo"><h2>Contratto di Scrittura</h2></div>
+
+  <div class="parti">
+    <div class="parte">
+      <div class="parte-label">Centro di Produzione</div>
+      <div class="parte-riga"><strong>Associazione Culturale ResExtensa</strong></div>
+      <div class="parte-riga">Centro Naz. di Produzione della Danza "Porta d'Oriente"</div>
+      <div class="parte-riga">Sede: Via G.B. Trevisani, 90/92 — 70122 Bari (BA)</div>
+      <div class="parte-riga">P.IVA / C.F.: 06024770726</div>
+      <div class="parte-riga">L.R.: Dott.ssa Elisa Barucchieri</div>
+    </div>
+    <div class="parte">
+      <div class="parte-label">${script}</div>
+      <div class="parte-riga"><strong>${nome}</strong></div>
+      <div class="parte-riga">Data di nascita: ${nascita} &nbsp;·&nbsp; C.F.: ${cf}</div>
+      <div class="parte-riga">Residente in: ${residenza}</div>
+      <div class="parte-riga">nel seguito dett${S} ${script}</div>
+    </div>
+  </div>
+
+  <div class="conviene">si conviene e si stipula quanto segue</div>
+
+  <div class="oggetto">
+    <div class="oggetto-row"><span class="oggetto-lbl">${script}: </span><strong>${nome}</strong></div>
+    <div class="oggetto-row"><span class="oggetto-lbl">Qualifica professionale: </span><strong>${qualifica}</strong></div>
+    <div class="oggetto-row"><span class="oggetto-lbl">Spettacolo: </span><strong>${spettacolo}</strong></div>
+    <div class="oggetto-row" style="margin-top:6px"><span class="oggetto-lbl">Calendario:</span>
+      <ul style="margin:4px 0 0 16px;padding:0">${calHtml}</ul>
+    </div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">1. Rapporto di lavoro</div>
+    <div class="art-body">Il rapporto di lavoro dipendente a tempo determinato avrà validità per i giorni indicati precedentemente definiti.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">2. Compenso</div>
+    <div class="art-body">Il compenso netto spettante viene stabilito in <strong>${netto}</strong> a giornata lavorativa di 7 ore cumulabili (in caso di mezza giornata lavorativa verrà conteggiata la giornata al 50%). L'importo del compenso lordo è di <strong>${lordo}</strong> per giornata lavorativa.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">3. Pagamento</div>
+    <div class="art-body">Tale compenso sarà corrisposto a${art} ${script}, entro e non oltre 60 giorni lavorativi dall'ultimo giorno di attività (prove o spettacolo), per mezzo di bonifico bancario: <strong>${iban||'_______________________________'}</strong>.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">4. Trattamento fuori sede</div>
+    <div class="art-body">
+      4.a Le spese di alloggio e di viaggio saranno sostenute dal Centro di Produzione per l'attività di prove e/o spettacolo.<br>
+      4.b Le spese di vitto sono a carico della compagnia o, in alternativa, rimborsate tramite una diaria di 40 EUR al giorno.<br>
+      4.c I viaggi saranno concordati e accordati preventivamente con l'amministrazione della compagnia.
+    </div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">5. Trasferimenti</div>
+    <div class="art-body">
+      5.a Nei trasferimenti da piazza a piazza, ${art} ${script} dovrà attenersi scrupolosamente alle disposizioni impartite dal Datore di lavoro, sia per quanto riguarda gli orari di partenza, che per quanto attiene ai mezzi di trasporto.<br>
+      5.b ${pron} ${script} ha l'obbligo di premunirsi della tessera di identità, di passaporto in caso di tournée all'estero, e di consegnarli all'amministratore della Compagnia ad ogni richiesta.
+    </div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">6. Code of Conduct</div>
+    <div class="art-body">Le parti si impegnano a mantenere un clima di rispetto reciproco, collaborazione e professionalità, favorendo un ambiente di lavoro sereno, responsabile e orientato alla buona riuscita delle attività artistiche e produttive della compagnia.<br><br>
+    ${pron} ${script} è tenut${S} a rispettare gli orari di lavoro, prove, spettacoli, trasferimenti e ogni altra attività prevista dal calendario concordato, nonché ad attenersi alle indicazioni artistiche, organizzative e tecniche fornite dalla Direzione Artistica e dalla Produzione per la corretta realizzazione delle attività.<br><br>
+    ${pron} ${script} si impegna inoltre a mantenere un comportamento corretto e rispettoso nei confronti dei colleghi, dei tecnici, del personale organizzativo e degli spazi di lavoro, nonché dei teatri, delle strutture ospitanti e dei luoghi in cui si svolgono le attività artistiche.<br><br>
+    Le parti condividono l'impegno a garantire un ambiente di lavoro fondato sul rispetto della persona, libero da comportamenti offensivi, discriminatori o lesivi della dignità individuale. Eventuali esigenze, difficoltà o impedimenti dovranno essere tempestivamente comunicati alla Produzione.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">7. Costumi e Materiale Scenico</div>
+    <div class="art-body">I costumi e il materiale scenico della produzione sono affidati a${art} ${script} per la durata delle attività artistiche. ${pron} ${script} è pertanto tenut${S} ad assumere responsabilità personale per la corretta gestione dei propri costumi e a collaborare con la compagnia nella cura, conservazione e gestione dei materiali. In particolare:
+      <ul>
+        <li>Prendersi cura dei propri costumi durante tutto il periodo di prove, spettacoli e tournée;</li>
+        <li>Collaborare al corretto posizionamento dei costumi all'ingresso nei teatri;</li>
+        <li>Provvedere al corretto riordino, piegatura e riposizionamento dei costumi al termine delle attività;</li>
+        <li>Collaborare alla preparazione dei costumi per il trasporto.</li>
+      </ul>
+      Eventuali danni imputabili a negligenza potranno comportare una richiesta di risarcimento proporzionata al danno arrecato.
+    </div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">8. Extra</div>
+    <div class="art-body">Qualora particolari esigenze organizzative e/o produttive lo richiedano, a${art} ${script} potrà essere richiesto di svolgere mansioni ausiliarie connesse alla realizzazione degli spettacoli. Qualora tali attività richiedano prestazioni specifiche ulteriori, esse saranno concordate tra le parti con eventuale compenso aggiuntivo.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">9. Utilizzo dell'immagine e materiale audiovisivo</div>
+    <div class="art-body">${pron} ${script} autorizza la Compagnia a utilizzare immagini, fotografie e riprese video realizzate nell'ambito delle prove e degli spettacoli ai fini di documentazione, promozione e comunicazione istituzionale, senza ulteriori compensi. ${pron} ${script} si impegna a non diffondere autonomamente materiale video o fotografico relativo allo spettacolo senza preventiva autorizzazione della Produzione.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">10. Riservatezza</div>
+    <div class="art-body">${pron} ${script} si impegna a mantenere riservate informazioni artistiche, organizzative e produttive apprese nell'ambito del presente rapporto, nonché materiale coreografico o creativo non ancora reso pubblico, salvo autorizzazione della Direzione Artistica.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">11. Idoneità fisica e sicurezza</div>
+    <div class="art-body">${pron} ${script} dichiara di essere in condizioni psicofisiche idonee allo svolgimento dell'attività artistica prevista e si impegna a comunicare tempestivamente eventuali infortuni o impedimenti. La Compagnia si impegna a garantire condizioni di lavoro conformi alle normative vigenti in materia di sicurezza.</div>
+  </div>
+
+  <div class="art">
+    <div class="art-tit">12. Validità della scrittura</div>
+    <div class="art-body">La presente scrittura è valida a tutti gli effetti di legge. La firma del presente contratto di lavoro comporta l'annullamento di ogni precedente accordo verbale o scritto.</div>
+  </div>
+
+  <div style="margin-top:14px;font-size:11px">
+    <strong>${cittaFirma}, ${dataFirma}</strong>
+  </div>
+
+  <div class="firme">
+    <div class="firma-box">
+      <div class="firma-lbl">Firma dell${S} ${script}</div>
+      <div style="height:36px"></div>
+      <div class="firma-nome">${nome}</div>
+    </div>
+    <div class="firma-box">
+      <div class="firma-lbl">Per ResExtensa — Centro di Produzione</div>
+      <div style="height:36px"></div>
+      <div class="firma-nome">Elisa Barucchieri</div>
+      <div style="font-size:10px;color:#666">L.R., Direzione Artistica</div>
+    </div>
+  </div>
+
+  <div class="footer">RESEXTENSA Ass. Culturale — Bari · P.IVA 06024770726 · Generato il ${new Date().toLocaleDateString('it-IT')}</div>
+  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));<\/script>
+  </body></html>`;
+
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
