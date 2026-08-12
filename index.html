@@ -1093,6 +1093,22 @@
               <div class="modal-label">Residenza</div>
               <input class="edit-input" id="ctr-residenza" readonly style="background:var(--surface)">
             </div>
+            <div>
+              <div class="modal-label">Tipo documento</div>
+              <input class="edit-input" id="ctr-doc-tipo" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Numero documento</div>
+              <input class="edit-input" id="ctr-doc-num" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Nr. cellulare</div>
+              <input class="edit-input" id="ctr-telefono" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Email</div>
+              <input class="edit-input" id="ctr-email" readonly style="background:var(--surface)">
+            </div>
             <div style="grid-column:1/-1">
               <div class="modal-label">IBAN</div>
               <input class="edit-input" id="ctr-iban" readonly style="background:var(--surface)">
@@ -4570,6 +4586,7 @@ async function openContrattualistica() {
 
   // Reset campi
   ['ctr-nome','ctr-nascita','ctr-cf','ctr-residenza','ctr-iban',
+   'ctr-doc-tipo','ctr-doc-num','ctr-telefono','ctr-email',
    'ctr-qualifica','ctr-netto','ctr-lordo','ctr-calendario','ctr-search']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('ctr-data-firma').value = new Date().toISOString().slice(0,10);
@@ -4633,6 +4650,10 @@ function onScritturatoCtrChange() {
   document.getElementById('ctr-cf').value = c.codice_fiscale||'';
   const res = [c.indirizzo, c.citta_residenza].filter(Boolean).join(', ');
   document.getElementById('ctr-residenza').value = res;
+  document.getElementById('ctr-doc-tipo').value  = c.doc_tipo||'';
+  document.getElementById('ctr-doc-num').value   = c.doc_num||'';
+  document.getElementById('ctr-telefono').value  = c.telefono||'';
+  document.getElementById('ctr-email').value     = c.email||'';
   document.getElementById('ctr-iban').value = c.iban||'';
   // Tenta di rilevare il genere dal nome
   const nomeL = (c.nome||'').toLowerCase();
@@ -4664,6 +4685,10 @@ async function generaContrattualistica() {
   const nascita    = g('ctr-nascita');
   const cf         = g('ctr-cf');
   const residenza  = g('ctr-residenza');
+  const docTipo    = g('ctr-doc-tipo');
+  const docNum     = g('ctr-doc-num');
+  const telefono   = g('ctr-telefono');
+  const email      = g('ctr-email');
   const iban       = g('ctr-iban');
   const genere     = g('ctr-genere');
   const dataFirma  = g('ctr-data-firma')
@@ -4761,6 +4786,9 @@ async function generaContrattualistica() {
       <div class="parte-riga"><strong>${nome}</strong></div>
       <div class="parte-riga">Data di nascita: ${nascita} &nbsp;·&nbsp; C.F.: ${cf}</div>
       <div class="parte-riga">Residente in: ${residenza}</div>
+      ${docTipo||docNum ? `<div class="parte-riga">Doc.: ${docTipo}${docNum?' n° '+docNum:''}</div>` : ''}
+      ${telefono ? `<div class="parte-riga">Tel.: ${telefono}</div>` : ''}
+      ${email ? `<div class="parte-riga">Email: ${email}</div>` : ''}
       <div class="parte-riga">nel seguito dett${S} ${script}</div>
     </div>
   </div>
