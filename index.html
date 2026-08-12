@@ -839,51 +839,95 @@
   </div><!-- fine panel-fatture -->
 
   <!-- TAB MODULISTICA -->
-  <div id="panel-modulistica" style="display:none;height:calc(100vh - 128px);overflow-y:auto;flex-direction:column">
-    <div style="max-width:900px;margin:0 auto;padding:32px 24px">
+  <div id="panel-modulistica" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
 
-      <!-- Header -->
-      <div style="margin-bottom:32px">
-        <div style="font-family:'DM Serif Display',serif;font-size:28px;color:var(--accent);margin-bottom:6px">Modulistica</div>
-        <div style="font-size:13px;color:var(--text2)">Genera contratti compilati automaticamente con i dati della rubrica.</div>
-      </div>
-
-      <!-- Cards contratti -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px">
-        <div style="border:1px solid var(--border);border-radius:10px;padding:24px;background:var(--surface);cursor:pointer;transition:all 0.2s"
-          onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 16px rgba(138,109,59,0.12)'"
-          onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'"
-          onclick="openContrattoModal()">
-          <div style="font-size:32px;margin-bottom:12px">📄</div>
-          <div style="font-family:'DM Serif Display',serif;font-size:18px;color:var(--accent);margin-bottom:6px">Contratto di Scrittura</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px">Contratto sintetico per scritturati. Dati anagrafici dalla rubrica, spettacolo dalla lista produzioni.</div>
-          <div style="font-size:11px;padding:6px 14px;background:var(--accent);color:white;border-radius:6px;display:inline-block;font-weight:600">✦ Genera contratto</div>
-        </div>
-
-        <div style="border:1px solid var(--border);border-radius:10px;padding:24px;background:var(--surface);cursor:pointer;transition:all 0.2s"
-          onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 16px rgba(138,109,59,0.12)'"
-          onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'"
-          onclick="openContrattualistica()">
-          <div style="font-size:32px;margin-bottom:12px">📋</div>
-          <div style="font-family:'DM Serif Display',serif;font-size:18px;color:var(--accent);margin-bottom:6px">Contrattualistica</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px">Contratto completo con calendario giornaliero, compenso lordo/netto, trattamento fuori sede e clausole estese.</div>
-          <div style="font-size:11px;padding:6px 14px;background:var(--accent);color:white;border-radius:6px;display:inline-block;font-weight:600">✦ Compila e genera</div>
-        </div>
-      </div>
-
-      <!-- Gestione qualifiche -->
-      <div style="margin-top:40px;border-top:1px solid var(--border);padding-top:32px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <div>
-            <div style="font-size:14px;font-weight:600;color:var(--text)">Qualifiche professionali</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:2px">Voci disponibili nel menu a tendina del contratto di scrittura</div>
-          </div>
-          <button class="btn-new" style="font-size:11px;padding:6px 14px" onclick="aggiungiQualifica()">+ Aggiungi</button>
-        </div>
-        <div id="qualifiche-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-      </div>
-
+    <!-- Sub-navigazione -->
+    <div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface)">
+      <button id="mod-view-genera" onclick="switchModView('genera')"
+        style="padding:10px 20px;font-size:12px;font-family:inherit;border:none;border-bottom:2px solid var(--accent);background:none;color:var(--accent);font-weight:600;cursor:pointer">
+        📝 Genera contratto
+      </button>
+      <button id="mod-view-archivio" onclick="switchModView('archivio')"
+        style="padding:10px 20px;font-size:12px;font-family:inherit;border:none;border-bottom:2px solid transparent;background:none;color:var(--text3);cursor:pointer">
+        🗂 Archivio contratti
+      </button>
     </div>
+
+    <!-- VISTA: GENERA -->
+    <div id="mod-panel-genera" style="flex:1;overflow-y:auto">
+      <div style="max-width:900px;margin:0 auto;padding:32px 24px">
+        <div style="margin-bottom:28px">
+          <div style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--accent);margin-bottom:4px">Modulistica</div>
+          <div style="font-size:12px;color:var(--text2)">Genera contratti compilati automaticamente con i dati della rubrica.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px">
+          <div style="border:1px solid var(--border);border-radius:10px;padding:24px;background:var(--surface);cursor:pointer;transition:all 0.2s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 16px rgba(138,109,59,0.12)'"
+            onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'"
+            onclick="openContrattoModal()">
+            <div style="font-size:30px;margin-bottom:10px">📄</div>
+            <div style="font-family:'DM Serif Display',serif;font-size:17px;color:var(--accent);margin-bottom:5px">Contratto di Scrittura</div>
+            <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:14px">Contratto sintetico per scritturati. Dati anagrafici dalla rubrica.</div>
+            <div style="font-size:11px;padding:5px 12px;background:var(--accent);color:white;border-radius:6px;display:inline-block;font-weight:600">✦ Genera</div>
+          </div>
+          <div style="border:1px solid var(--border);border-radius:10px;padding:24px;background:var(--surface);cursor:pointer;transition:all 0.2s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 16px rgba(138,109,59,0.12)'"
+            onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'"
+            onclick="openContrattualistica()">
+            <div style="font-size:30px;margin-bottom:10px">📋</div>
+            <div style="font-family:'DM Serif Display',serif;font-size:17px;color:var(--accent);margin-bottom:5px">Contrattualistica</div>
+            <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:14px">Contratto completo con calendario giornaliero, compenso lordo/netto e clausole estese.</div>
+            <div style="font-size:11px;padding:5px 12px;background:var(--accent);color:white;border-radius:6px;display:inline-block;font-weight:600">✦ Compila e genera</div>
+          </div>
+        </div>
+        <div style="margin-top:36px;border-top:1px solid var(--border);padding-top:28px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--text)">Qualifiche professionali</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">Voci disponibili nel menu a tendina</div>
+            </div>
+            <button class="btn-new" style="font-size:11px;padding:5px 12px" onclick="aggiungiQualifica()">+ Aggiungi</button>
+          </div>
+          <div id="qualifiche-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA: ARCHIVIO -->
+    <div id="mod-panel-archivio" style="display:none;flex:1;overflow:hidden;flex-direction:column">
+      <div class="section-stats-bar">
+        <div class="header-stats">
+          <div class="stat"><div class="stat-n" id="ctr-stat-tot">—</div><div class="stat-l">Contratti</div></div>
+          <div class="stat"><div class="stat-n" id="ctr-stat-bozza" style="color:var(--accent)">—</div><div class="stat-l">Bozza</div></div>
+          <div class="stat"><div class="stat-n" id="ctr-stat-inviato" style="color:#2563eb">—</div><div class="stat-l">Inviati</div></div>
+          <div class="stat"><div class="stat-n" id="ctr-stat-ricevuto" style="color:#7c3aed">—</div><div class="stat-l">Ricevuti firmati</div></div>
+          <div class="stat"><div class="stat-n" id="ctr-stat-archiv" style="color:var(--attivo)">—</div><div class="stat-l">Archiviati</div></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" class="search-input" id="ctrSearchInput" placeholder="Cerca scritturato…" style="width:180px;font-size:11px" oninput="renderArchivioContratti()">
+          <select class="search-input" id="ctrStatoFilter" style="font-size:11px;padding:5px 8px" onchange="renderArchivioContratti()">
+            <option value="">Tutti gli stati</option>
+            <option value="BOZZA">Bozza</option>
+            <option value="INVIATO">Inviato</option>
+            <option value="RICEVUTO FIRMATO">Ricevuto firmato</option>
+            <option value="ARCHIVIATO">Archiviato</option>
+          </select>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;overflow:hidden">
+        <!-- Lista contratti -->
+        <div style="width:280px;min-width:280px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto" id="ctr-list"></div>
+        <!-- Dettaglio contratto -->
+        <div id="ctr-detail" style="flex:1;overflow-y:auto;background:var(--bg)">
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <div class="empty-title">Seleziona un contratto</div>
+            <div class="empty-sub">oppure genera un nuovo contratto dalla sezione "Genera contratto"</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- MODAL CONTRATTO DI SCRITTURA -->
@@ -4200,6 +4244,318 @@ function esportaFornitoriCSV() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── ARCHIVIO CONTRATTI ────────────────────────────────────────────────────────
+// Foglio "Contratti" — A:id B:tipo C:scritturato D:spettacolo E:data_creazione
+// F:stato G:file_id_drive H:note I:data_stato
+
+const CTR_SHEET = 'Contratti';
+const CTR_RANGE = 'Contratti!A2:I';
+const DRIVE_CONTRATTI_CTR_FOLDER = DRIVE_CONTRATTI_FOLDER; // stessa cartella Drive
+
+const CTR_STATI = ['BOZZA','INVIATO','RICEVUTO FIRMATO','ARCHIVIATO'];
+const CTR_STATI_COLOR = {
+  'BOZZA':            { bg:'#fff8e1', color:'#856404' },
+  'INVIATO':          { bg:'#e3f2fd', color:'#1565c0' },
+  'RICEVUTO FIRMATO': { bg:'#f3e5f5', color:'#6a1b9a' },
+  'ARCHIVIATO':       { bg:'#e8f5e9', color:'#2e7d32' },
+};
+
+let contratti = [];
+let selectedCtrId = null;
+
+function switchModView(view) {
+  const isGenera = view === 'genera';
+  document.getElementById('mod-panel-genera').style.display   = isGenera ? 'flex' : 'none';
+  document.getElementById('mod-panel-archivio').style.display = isGenera ? 'none' : 'flex';
+  const btnG = document.getElementById('mod-view-genera');
+  const btnA = document.getElementById('mod-view-archivio');
+  btnG.style.borderBottomColor = isGenera ? 'var(--accent)' : 'transparent';
+  btnG.style.color = isGenera ? 'var(--accent)' : 'var(--text3)';
+  btnG.style.fontWeight = isGenera ? '600' : '400';
+  btnA.style.borderBottomColor = !isGenera ? 'var(--accent)' : 'transparent';
+  btnA.style.color = !isGenera ? 'var(--accent)' : 'var(--text3)';
+  btnA.style.fontWeight = !isGenera ? '600' : '400';
+  if (!isGenera) loadContratti();
+}
+
+async function loadContratti() {
+  try {
+    const r = await sheetsGet(CTR_RANGE);
+    const rows = r.values || [];
+    contratti = rows.map((row,i) => ({
+      rowIdx:         i+2,
+      id:             row[0]||'',
+      tipo:           row[1]||'',
+      scritturato:    row[2]||'',
+      spettacolo:     row[3]||'',
+      data_creazione: row[4]||'',
+      stato:          row[5]||'BOZZA',
+      file_id:        row[6]||'',
+      note:           row[7]||'',
+      data_stato:     row[8]||'',
+    })).filter(c => c.id && c.scritturato);
+    updateCtrStats();
+    renderArchivioContratti();
+  } catch(e) { console.warn('Contratti non caricati:', e); }
+}
+
+function updateCtrStats() {
+  document.getElementById('ctr-stat-tot').textContent     = contratti.length;
+  document.getElementById('ctr-stat-bozza').textContent   = contratti.filter(c=>c.stato==='BOZZA').length;
+  document.getElementById('ctr-stat-inviato').textContent = contratti.filter(c=>c.stato==='INVIATO').length;
+  document.getElementById('ctr-stat-ricevuto').textContent= contratti.filter(c=>c.stato==='RICEVUTO FIRMATO').length;
+  document.getElementById('ctr-stat-archiv').textContent  = contratti.filter(c=>c.stato==='ARCHIVIATO').length;
+}
+
+function renderArchivioContratti() {
+  const q     = (document.getElementById('ctrSearchInput')?.value||'').toLowerCase();
+  const stato = document.getElementById('ctrStatoFilter')?.value||'';
+  const list  = contratti.filter(c => {
+    const mq = !q || c.scritturato.toLowerCase().includes(q) || c.spettacolo.toLowerCase().includes(q);
+    const ms = !stato || c.stato === stato;
+    return mq && ms;
+  }).sort((a,b) => b.id.localeCompare(a.id));
+
+  const el = document.getElementById('ctr-list');
+  el.innerHTML = list.map(c => {
+    const sc = CTR_STATI_COLOR[c.stato]||{bg:'#eee',color:'#333'};
+    const isSel = c.id === selectedCtrId;
+    const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
+    return `<div class="contact-item${isSel?' selected':''}" onclick="selectContratto('${c.id}')">
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:12px;font-weight:600;color:var(--text)">${c.scritturato}</div>
+        <div style="font-size:10px;color:var(--text2)">${c.spettacolo||'—'} · ${c.tipo}</div>
+        <div style="font-size:10px;color:var(--text3)">${fmtD(c.data_creazione)}</div>
+        <span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px;display:inline-block;background:${sc.bg};color:${sc.color};width:fit-content">${c.stato}</span>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Nessun contratto</div>';
+}
+
+function selectContratto(id) {
+  selectedCtrId = id;
+  renderArchivioContratti();
+  const c = contratti.find(x=>x.id===id);
+  if (!c) return;
+  const sc = CTR_STATI_COLOR[c.stato]||{bg:'#eee',color:'#333'};
+  const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
+  const isBozza    = c.stato === 'BOZZA';
+  const isInviato  = c.stato === 'INVIATO';
+  const isRicevuto = c.stato === 'RICEVUTO FIRMATO';
+  const isArchiv   = c.stato === 'ARCHIVIATO';
+  const prossimoStato = CTR_STATI[CTR_STATI.indexOf(c.stato)+1];
+
+  const statoLabel = (s) => {
+    const sc2 = CTR_STATI_COLOR[s]||{bg:'#eee',color:'#333'};
+    return `<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;background:${sc2.bg};color:${sc2.color}">${s}</span>`;
+  };
+
+  document.getElementById('ctr-detail').innerHTML = `
+    <div style="padding:28px 36px;max-width:700px">
+      <!-- Header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;gap:12px">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--accent)">${c.scritturato}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:3px">${c.tipo} · ${c.spettacolo||'—'} · Creato il ${fmtD(c.data_creazione)}</div>
+          <div style="margin-top:6px">${statoLabel(c.stato)}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${isBozza ? `<button class="btn-secondary" style="font-size:11px;padding:5px 12px" onclick="modificaContratto('${c.id}')">✎ Modifica</button>` : ''}
+          ${isBozza ? `<button class="btn-export" style="font-size:11px;padding:5px 12px" onclick="anteprimaContratto('${c.id}')">👁 Anteprima PDF</button>` : ''}
+          ${prossimoStato && !isArchiv ? `<button class="btn-new" style="font-size:11px;padding:5px 12px" onclick="avanzaStatoContratto('${c.id}')">→ Segna come ${prossimoStato}</button>` : ''}
+          ${userRole==='admin' ? `<button class="btn-danger" style="font-size:11px;padding:5px 10px" onclick="eliminaContratto('${c.id}')">✕</button>` : ''}
+        </div>
+      </div>
+
+      <!-- Workflow stati -->
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;padding:12px 16px">
+        ${CTR_STATI.map((s,i) => {
+          const sc2 = CTR_STATI_COLOR[s];
+          const attivo = c.stato === s;
+          const passato = CTR_STATI.indexOf(c.stato) > i;
+          const col = attivo ? sc2.color : passato ? '#aaa' : '#ddd';
+          const fw = attivo ? '700' : '400';
+          return `<div style="display:flex;align-items:center;flex:1">
+            <div style="flex:1;text-align:center">
+              <div style="font-size:16px">${passato?'✓':attivo?'●':'○'}</div>
+              <div style="font-size:9px;font-weight:${fw};color:${col};margin-top:2px;text-align:center">${s}</div>
+            </div>
+            ${i<3?`<div style="color:#ddd;font-size:16px">›</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Dati -->
+      <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px">
+          <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Scritturato/a</div><div>${c.scritturato}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Tipo contratto</div><div>${c.tipo}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Spettacolo</div><div>${c.spettacolo||'—'}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Data creazione</div><div>${fmtD(c.data_creazione)}</div></div>
+          ${c.data_stato ? `<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Ultimo aggiornamento stato</div><div>${fmtD(c.data_stato)}</div></div>` : ''}
+          ${c.note ? `<div style="grid-column:1/-1"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Note</div><div>${c.note}</div></div>` : ''}
+        </div>
+      </div>
+
+      <!-- Allegati (contratto con doppia firma) -->
+      <div style="border-top:1px solid var(--border);padding-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3)">
+            Documenti allegati ${isArchiv?'(contratto con doppia firma)':''}
+          </div>
+          ${(isRicevuto||isArchiv)&&userRole==='admin' ? `
+          <div>
+            <input type="file" id="ctr-upload-${c.id}" multiple accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadAllegatoContratto(this,'${c.id}')">
+            <button class="btn-new" style="font-size:11px;padding:4px 10px" onclick="document.getElementById('ctr-upload-${c.id}').click()">↑ Allega documento</button>
+          </div>` : ''}
+        </div>
+        <div id="ctr-allegati-${c.id}"><span style="color:var(--text3);font-size:12px">🔍 Caricamento…</span></div>
+      </div>
+    </div>`;
+
+  caricaAllegatiContratto(c.id);
+}
+
+async function avanzaStatoContratto(id) {
+  const c = contratti.find(x=>x.id===id);
+  if (!c) return;
+  const idx = CTR_STATI.indexOf(c.stato);
+  if (idx >= CTR_STATI.length-1) return;
+  const nuovoStato = CTR_STATI[idx+1];
+  if (!confirm(`Segnare il contratto di ${c.scritturato} come "${nuovoStato}"?`)) return;
+  const oggi = new Date().toISOString().slice(0,10);
+  const sheetRow = c.rowIdx;
+  checkTokenAndRefresh();
+  try {
+    await sheetsUpdate(`${CTR_SHEET}!F${sheetRow}:I${sheetRow}`, [[nuovoStato,'','',oggi]]);
+    showToast(`Stato aggiornato: ${nuovoStato}`, 'success');
+    await loadContratti();
+    selectContratto(id);
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+async function eliminaContratto(id) {
+  const c = contratti.find(x=>x.id===id);
+  if (!c||!confirm(`Eliminare il contratto di ${c.scritturato}?`)) return;
+  checkTokenAndRefresh();
+  try {
+    await sheetsUpdate(`${CTR_SHEET}!A${c.rowIdx}:I${c.rowIdx}`, [['','','','','','','','','']]);
+    showToast('Contratto eliminato', 'success');
+    selectedCtrId = null;
+    document.getElementById('ctr-detail').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Seleziona un contratto</div></div>`;
+    await loadContratti();
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+// ── Allegati contratto su Drive ───────────────────────────────────────────────
+async function trovaCreaCartellaContratto(ctrId) {
+  const nome = `CTR_${ctrId}`;
+  const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+    headers: { Authorization: 'Bearer '+accessToken }
+  });
+  const d = await r.json();
+  if (d.files?.length) return d.files[0].id;
+  const r2 = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.folder', parents: [DRIVE_CONTRATTI_FOLDER] })
+  });
+  return (await r2.json()).id;
+}
+
+async function caricaAllegatiContratto(ctrId) {
+  const box = document.getElementById(`ctr-allegati-${ctrId}`);
+  if (!box) return;
+  try {
+    const nome = `CTR_${ctrId}`;
+    const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+      headers: { Authorization: 'Bearer '+accessToken }
+    });
+    const d = await r.json();
+    if (!d.files?.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun documento allegato</span>'; return; }
+    const folderId = d.files[0].id;
+    const q2 = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+    const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,size,modifiedTime,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=name`, {
+      headers: { Authorization: 'Bearer '+accessToken }
+    });
+    const files = (await r2.json()).files || [];
+    if (!files.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun documento allegato</span>'; return; }
+    box.innerHTML = files.map(file => {
+      const icon = file.mimeType?.includes('pdf') ? '📄' : '🖼';
+      const size = file.size ? (parseInt(file.size)/1024).toFixed(0)+' KB' : '';
+      const data = new Date(file.modifiedTime).toLocaleDateString('it-IT');
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+        <span>${icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
+          <div style="font-size:10px;color:var(--text3)">${size}${size?' · ':''}${data}</div>
+        </div>
+        <a href="https://drive.google.com/file/d/${file.id}/view" target="_blank" class="btn-export" style="font-size:11px;padding:3px 9px;text-decoration:none">👁</a>
+        ${userRole==='admin'?`<button class="btn-danger" style="font-size:11px;padding:3px 7px" onclick="eliminaAllegatoContratto('${file.id}','${ctrId}')">✕</button>`:''}
+      </div>`;
+    }).join('');
+  } catch(e) { box.innerHTML = `<span style="color:var(--cessato);font-size:12px">Errore: ${e.message}</span>`; }
+}
+
+async function uploadAllegatoContratto(input, ctrId) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  try {
+    const folderId = await trovaCreaCartellaContratto(ctrId);
+    checkTokenAndRefresh();
+    for (const file of files) {
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify({ name: file.name, parents: [folderId] })], { type: 'application/json' }));
+      form.append('file', file);
+      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+        method: 'POST', headers: { Authorization: 'Bearer '+accessToken }, body: form
+      });
+    }
+    showToast(`${files.length} documento/i allegato/i`, 'success');
+    input.value = '';
+    await caricaAllegatiContratto(ctrId);
+  } catch(e) { showToast('Errore upload: '+e.message, 'error'); }
+}
+
+async function eliminaAllegatoContratto(fileId, ctrId) {
+  if (!confirm('Eliminare questo documento?')) return;
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+      method: 'DELETE', headers: { Authorization: 'Bearer '+accessToken }
+    });
+    showToast('Documento eliminato', 'success');
+    await caricaAllegatiContratto(ctrId);
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+// ── Salva contratto in archivio (chiamata da generaContrattoScrittura e generaContrattualistica)
+async function salvaContrattoInArchivio(tipo, scritturato, spettacolo) {
+  const newId = 'CTR-'+Date.now();
+  const oggi  = new Date().toISOString().slice(0,10);
+  const row   = [newId, tipo, scritturato, spettacolo, oggi, 'BOZZA', '', '', ''];
+  checkTokenAndRefresh();
+  try {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CTR_SHEET+'!A:I')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] })
+    });
+    showToast(`Contratto salvato in archivio come BOZZA`, 'success');
+  } catch(e) { console.warn('Errore salvataggio archivio:', e); }
+}
+
+function anteprimaContratto(id) {
+  showToast('Rigenera il contratto dalla sezione "Genera contratto" per visualizzare l\'anteprima PDF', 'info');
+}
+
+function modificaContratto(id) {
+  switchModView('genera');
+  showToast('Seleziona il tipo di contratto e reinserisci i dati per modificarlo', 'info');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ─── CONTRATTUALISTICA ───────────────────────────────────────────────────────
 async function openContrattualistica() {
   if (!spettacoliList.length) await loadSpettacoliSheet();
@@ -4329,6 +4685,9 @@ async function generaContrattualistica() {
     window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
 
   closeContrattualistica();
+
+  // Salva in archivio come BOZZA
+  salvaContrattoInArchivio('Contrattualistica', nome, spettacolo);
 
   const ACCENT = '#8a6d3b';
   const ACCENT_LIGHT = '#f5f0e8';
@@ -4546,6 +4905,9 @@ function saveQualifiche(list) {
 
 function initModulistica() {
   renderQualifiche();
+  // Assicura vista corretta
+  document.getElementById('mod-panel-genera').style.display = 'flex';
+  document.getElementById('mod-panel-archivio').style.display = 'none';
 }
 
 function renderQualifiche() {
@@ -4678,6 +5040,9 @@ async function generaContrattoScrittura() {
     window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
 
   closeContrattoModal();
+
+  // Salva in archivio come BOZZA
+  salvaContrattoInArchivio('Contratto di Scrittura', nomeCognome, spettacolo);
 
   const ACCENT       = '#8a6d3b';
   const ACCENT_LIGHT = '#f5f0e8';
