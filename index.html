@@ -1127,13 +1127,30 @@
               <option value="">— Seleziona —</option>
             </select>
           </div>
-          <div>
-            <div class="modal-label">Compenso netto a giornata *</div>
-            <input class="edit-input" id="ctr-netto" placeholder="es. euro 56/57 circa (cinquantasei/00)">
-          </div>
-          <div>
-            <div class="modal-label">Compenso lordo a giornata *</div>
-            <input class="edit-input" id="ctr-lordo" placeholder="es. € 96,35 (novantasei,35)">
+          <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:2px">Compensi</div>
+            <div>
+              <div class="modal-label">Compenso netto a giornata *</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-weight:600;color:var(--accent)">€</span>
+                <input class="edit-input" id="ctr-netto" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettereNetto()">
+              </div>
+            </div>
+            <div>
+              <div class="modal-label">Compenso lordo a giornata *</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-weight:600;color:var(--accent)">€</span>
+                <input class="edit-input" id="ctr-lordo" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettoreLordo()">
+              </div>
+            </div>
+            <div>
+              <div class="modal-label" style="color:var(--text3)">Netto in lettere <span style="font-size:10px">(auto)</span></div>
+              <input class="edit-input" id="ctr-netto-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+            </div>
+            <div>
+              <div class="modal-label" style="color:var(--text3)">Lordo in lettere <span style="font-size:10px">(auto)</span></div>
+              <input class="edit-input" id="ctr-lordo-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+            </div>
           </div>
           <div>
             <div class="modal-label">Data firma</div>
@@ -4260,6 +4277,79 @@ function esportaFornitoriCSV() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── CONVERSIONE NUMERO IN LETTERE (Italiano) ─────────────────────────────────
+function numeroInLettere(n) {
+  if (isNaN(n) || n === '') return '';
+  const num = Math.abs(parseFloat(n));
+  const interi = Math.floor(num);
+  const centesimi = Math.round((num - interi) * 100);
+
+  const uni = ['','uno','due','tre','quattro','cinque','sei','sette','otto','nove',
+    'dieci','undici','dodici','tredici','quattordici','quindici','sedici',
+    'diciassette','diciotto','diciannove'];
+  const dec = ['','','venti','trenta','quaranta','cinquanta',
+    'sessanta','settanta','ottanta','novanta'];
+
+  function centinaia(n) {
+    if (n === 0) return '';
+    if (n < 20) return uni[n];
+    const d = Math.floor(n / 10);
+    const u = n % 10;
+    // Elisione: venti/trenta + uno/otto → ventuno/ventotto
+    const base = dec[d];
+    const suffix = u === 0 ? '' : (u === 1 || u === 8) ? uni[u] : uni[u];
+    const baseAdj = (u === 1 || u === 8) ? base.slice(0,-1) : base;
+    return baseAdj + suffix;
+  }
+
+  function migliaia(n) {
+    if (n === 0) return '';
+    if (n < 100) return centinaia(n);
+    const c = Math.floor(n / 100);
+    const r = n % 100;
+    const centPart = c === 1 ? 'cento' : uni[c] + 'cento';
+    return centPart + centinaia(r);
+  }
+
+  function interoInLettere(n) {
+    if (n === 0) return 'zero';
+    if (n < 1000) return migliaia(n);
+    const mig = Math.floor(n / 1000);
+    const r   = n % 1000;
+    const migPart = mig === 1 ? 'mille' : migliaia(mig) + 'mila';
+    return migPart + (r > 0 ? migliaia(r) : '');
+  }
+
+  const parteInteri = interoInLettere(interi);
+  if (centesimi === 0) {
+    return `${parteInteri}/00`;
+  }
+  const parteCent = centesimi < 10 ? `0${centesimi}` : `${centesimi}`;
+  return `${parteInteri}/${parteCent}`;
+}
+
+function fmtEuro(n) {
+  if (!n) return '';
+  return parseFloat(n).toFixed(2).replace('.', ',');
+}
+
+function aggiornaLettereNetto() {
+  const val = document.getElementById('ctr-netto')?.value;
+  const el  = document.getElementById('ctr-netto-lettere');
+  if (!el) return;
+  if (!val || isNaN(parseFloat(val))) { el.value = ''; return; }
+  el.value = numeroInLettere(val);
+}
+
+function aggiornaLettoreLordo() {
+  const val = document.getElementById('ctr-lordo')?.value;
+  const el  = document.getElementById('ctr-lordo-lettere');
+  if (!el) return;
+  if (!val || isNaN(parseFloat(val))) { el.value = ''; return; }
+  el.value = numeroInLettere(val);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ─── ARCHIVIO CONTRATTI ────────────────────────────────────────────────────────
 // Foglio "Contratti" — A:id B:tipo C:scritturato D:spettacolo E:data_creazione
 // F:stato G:file_id_drive H:note I:data_stato
@@ -4587,7 +4677,8 @@ async function openContrattualistica() {
   // Reset campi
   ['ctr-nome','ctr-nascita','ctr-cf','ctr-residenza','ctr-iban',
    'ctr-doc-tipo','ctr-doc-num','ctr-telefono','ctr-email',
-   'ctr-qualifica','ctr-netto','ctr-lordo','ctr-calendario','ctr-search']
+   'ctr-qualifica','ctr-netto','ctr-netto-lettere','ctr-lordo','ctr-lordo-lettere',
+   'ctr-calendario','ctr-search']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('ctr-data-firma').value = new Date().toISOString().slice(0,10);
   document.getElementById('ctr-citta-firma').value = 'Bari';
@@ -4663,18 +4754,20 @@ function onScritturatoCtrChange() {
 
 async function generaContrattualistica() {
   const g = id => document.getElementById(id)?.value?.trim()||'';
-  const nome      = g('ctr-nome');
-  const qualifica = g('ctr-qualifica').toUpperCase();
+  const nome       = g('ctr-nome');
+  const qualifica  = g('ctr-qualifica').toUpperCase();
   const spettacolo = g('ctr-spettacolo');
-  const netto     = g('ctr-netto');
-  const lordo     = g('ctr-lordo');
+  const nettoNum   = g('ctr-netto');
+  const lordoNum   = g('ctr-lordo');
+  const netto      = nettoNum ? `€ ${fmtEuro(nettoNum)} (${numeroInLettere(nettoNum)})` : '';
+  const lordo      = lordoNum ? `€ ${fmtEuro(lordoNum)} (${numeroInLettere(lordoNum)})` : '';
   const calendario = g('ctr-calendario');
 
   if (!nome)       { showToast('Seleziona lo scritturato', 'error'); return; }
   if (!qualifica)  { showToast('Inserisci la qualifica', 'error'); return; }
   if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
-  if (!netto)      { showToast('Inserisci il compenso netto', 'error'); return; }
-  if (!lordo)      { showToast('Inserisci il compenso lordo', 'error'); return; }
+  if (!nettoNum)   { showToast('Inserisci il compenso netto', 'error'); return; }
+  if (!lordoNum)   { showToast('Inserisci il compenso lordo', 'error'); return; }
   if (!calendario) { showToast('Inserisci il calendario attività', 'error'); return; }
 
   // Apri finestra subito (prima di qualsiasi async)
