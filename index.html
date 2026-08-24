@@ -4900,7 +4900,6 @@ async function generaContrattualistica() {
   if (!qualifica)  { showToast('Inserisci la qualifica', 'error'); return; }
   if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
   if (!nettoNum)   { showToast('Inserisci il compenso netto', 'error'); return; }
-  if (!lordoNum)   { showToast('Inserisci il compenso lordo', 'error'); return; }
   if (!calendario) { showToast('Inserisci il calendario attività', 'error'); return; }
 
   // Apri finestra subito (prima di qualsiasi async)
@@ -5333,7 +5332,6 @@ async function generaContrattoScrittura() {
   if (!spettacolo)  { showToast('Seleziona lo spettacolo', 'error'); return; }
   if (!periodo)     { showToast('Inserisci il periodo', 'error'); return; }
   if (!compensoNum) { showToast('Inserisci il compenso netto', 'error'); return; }
-  if (!lordoNum)    { showToast('Inserisci il compenso lordo', 'error'); return; }
 
   const c = contacts.find(x => String(x.id) === String(compId));
   if (!c) return;
@@ -5513,7 +5511,7 @@ function buildHTMLContrattoScrittura(d) {
 
     <div class="art">
       <div class="art-titolo">2. Compenso</div>
-      <div class="art-testo">Il compenso netto totale spettante viene stabilito in <strong>${compenso}</strong>. L'importo del compenso lordo totale è di <strong>${d.lordo||lordo||'—'}</strong>.</div>
+      <div class="art-testo">Il compenso netto totale spettante viene stabilito in <strong>${compenso}</strong>.${(d.lordo||lordo) ? ` L'importo del compenso lordo totale è di <strong>${d.lordo||lordo}</strong>.` : ''}</div>
     </div>
 
     <div class="art">
