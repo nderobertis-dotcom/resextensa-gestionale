@@ -932,40 +932,75 @@
 
   <!-- MODAL CONTRATTO DI SCRITTURA -->
   <div class="modal-overlay" id="contrattoModal">
-    <div class="modal" style="width:680px;max-width:96vw;max-height:90vh;overflow-y:auto">
+    <div class="modal" style="width:720px;max-width:96vw;max-height:92vh;overflow-y:auto">
       <div class="modal-title">📄 Contratto di Scrittura</div>
-      <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;flex-direction:column;gap:14px">
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <!-- Scritturato -->
-          <div style="grid-column:1/-1">
-            <div class="modal-label">Scritturato/a *</div>
-            <select class="edit-input" id="ct-componente" onchange="onComponenteChange()">
-              <option value="">— Seleziona dalla rubrica —</option>
+        <!-- Ricerca con prime 3 lettere -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div class="modal-label" style="margin-bottom:8px">Cerca scritturato/a dalla rubrica</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="edit-input" id="ct-search" placeholder="Prime 3 lettere del cognome…" style="width:220px"
+              oninput="cercaScritturatoCt(this.value)">
+            <span style="font-size:11px;color:var(--text3)">oppure</span>
+            <select class="edit-input" id="ct-componente" style="flex:1" onchange="onComponenteChange()">
+              <option value="">— Seleziona —</option>
             </select>
           </div>
-          <!-- Dati auto-compilati (readonly) -->
-          <div>
-            <div class="modal-label">Luogo di nascita</div>
-            <input class="edit-input" id="ct-luogo-nascita" readonly style="background:var(--surface2);color:var(--text2)">
+          <div id="ct-search-results" style="margin-top:8px"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <!-- Dati anagrafici readonly -->
+          <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:4px">Dati anagrafici — dalla rubrica</div>
+            <div>
+              <div class="modal-label">Nome completo</div>
+              <input class="edit-input" id="ct-nome-display" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Luogo di nascita</div>
+              <input class="edit-input" id="ct-luogo-nascita" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Data di nascita</div>
+              <input class="edit-input" id="ct-data-nascita" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Codice Fiscale</div>
+              <input class="edit-input" id="ct-cf" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Tipo documento</div>
+              <input class="edit-input" id="ct-doc-tipo" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Numero documento</div>
+              <input class="edit-input" id="ct-doc-num" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Nr. cellulare</div>
+              <input class="edit-input" id="ct-telefono" readonly style="background:var(--surface)">
+            </div>
+            <div>
+              <div class="modal-label">Email</div>
+              <input class="edit-input" id="ct-email" readonly style="background:var(--surface)">
+            </div>
+            <div style="grid-column:1/-1">
+              <div class="modal-label">Residenza</div>
+              <input class="edit-input" id="ct-residenza" readonly style="background:var(--surface)">
+            </div>
+            <div style="grid-column:1/-1">
+              <div class="modal-label">Città</div>
+              <input class="edit-input" id="ct-citta" readonly style="background:var(--surface)">
+            </div>
+            <div style="grid-column:1/-1">
+              <div class="modal-label">IBAN</div>
+              <input class="edit-input" id="ct-iban" readonly style="background:var(--surface)">
+            </div>
           </div>
-          <div>
-            <div class="modal-label">Data di nascita</div>
-            <input class="edit-input" id="ct-data-nascita" readonly style="background:var(--surface2);color:var(--text2)">
-          </div>
-          <div>
-            <div class="modal-label">Codice Fiscale</div>
-            <input class="edit-input" id="ct-cf" readonly style="background:var(--surface2);color:var(--text2)">
-          </div>
-          <div>
-            <div class="modal-label">Residenza</div>
-            <input class="edit-input" id="ct-residenza" readonly style="background:var(--surface2);color:var(--text2)">
-          </div>
-          <div style="grid-column:1/-1">
-            <div class="modal-label">Città</div>
-            <input class="edit-input" id="ct-citta" readonly style="background:var(--surface2);color:var(--text2)">
-          </div>
-          <!-- Campi da compilare -->
+
+          <!-- Dati contrattuali -->
           <div style="grid-column:1/-1">
             <div class="modal-label">Qualifica professionale *</div>
             <select class="edit-input" id="ct-qualifica">
@@ -982,26 +1017,50 @@
             <div class="modal-label">Periodo di scrittura *</div>
             <input class="edit-input" id="ct-periodo" placeholder="es. dal 10/09/2026 al 20/09/2026">
           </div>
-          <div style="grid-column:1/-1">
-            <div class="modal-label">Compenso netto *</div>
-            <input class="edit-input" id="ct-compenso" placeholder="es. € 1.500,00 (millecinquecento/00) — incluse le festività">
+
+          <!-- Compenso totale con lettere -->
+          <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:2px">Compenso totale</div>
+            <div>
+              <div class="modal-label">Compenso netto totale *</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-weight:600;color:var(--accent)">€</span>
+                <input class="edit-input" id="ct-compenso-num" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettereCtNetto()">
+              </div>
+            </div>
+            <div>
+              <div class="modal-label">Compenso lordo totale *</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-weight:600;color:var(--accent)">€</span>
+                <input class="edit-input" id="ct-lordo-num" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettereCtLordo()">
+              </div>
+            </div>
+            <div>
+              <div class="modal-label" style="color:var(--text3)">Netto in lettere <span style="font-size:10px">(auto)</span></div>
+              <input class="edit-input" id="ct-compenso-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+            </div>
+            <div>
+              <div class="modal-label" style="color:var(--text3)">Lordo in lettere <span style="font-size:10px">(auto)</span></div>
+              <input class="edit-input" id="ct-lordo-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+            </div>
           </div>
-          <div>
-            <div class="modal-label">IBAN (per bonifico)</div>
-            <input class="edit-input" id="ct-iban" readonly style="background:var(--surface2);color:var(--text2)">
-          </div>
+
           <div>
             <div class="modal-label">Data firma</div>
-            <input class="edit-input" id="ct-data-firma" type="date" value="${new Date().toISOString().slice(0,10)}">
+            <input class="edit-input" id="ct-data-firma" type="date">
+          </div>
+          <div>
+            <div class="modal-label">Città firma</div>
+            <input class="edit-input" id="ct-citta-firma" value="Bari">
           </div>
         </div>
         <div style="font-size:11px;color:var(--text3);background:var(--surface2);padding:10px 12px;border-radius:6px">
-          ℹ I campi in grigio vengono compilati automaticamente dalla rubrica. Dopo aver generato il contratto, potrai modificarlo in Word prima della firma.
+          ℹ I campi in grigio vengono compilati automaticamente dalla rubrica.
         </div>
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeContrattoModal()">Annulla</button>
-        <button class="btn-new" onclick="generaContrattoScrittura()">📄 Genera .docx</button>
+        <button class="btn-new" onclick="generaContrattoScrittura()">📄 Genera PDF</button>
       </div>
     </div>
   </div>
@@ -4710,17 +4769,25 @@ async function modificaContratto(id) {
       await openContrattoModal();
       setTimeout(() => {
         const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val||''; };
-        set('ct-luogo-nascita', d.luogo);
-        set('ct-data-nascita', d.dataNascita);
-        set('ct-cf', d.cf);
-        set('ct-residenza', d.residenza);
-        set('ct-citta', d.citta);
-        set('ct-iban', d.iban);
-        set('ct-qualifica', d.qualifica);
-        set('ct-spettacolo', d.spettacolo);
-        set('ct-periodo', d.periodo);
-        set('ct-compenso', d.compenso);
-        set('ct-data-firma', d.dataFirma);
+        set('ct-luogo-nascita',     d.luogo);
+        set('ct-data-nascita',      d.dataNascita);
+        set('ct-cf',                d.cf);
+        set('ct-residenza',         d.residenza);
+        set('ct-citta',             d.citta);
+        set('ct-iban',              d.iban);
+        set('ct-doc-tipo',          d.docTipo);
+        set('ct-doc-num',           d.docNum);
+        set('ct-telefono',          d.telefono);
+        set('ct-email',             d.email);
+        set('ct-qualifica',         d.qualifica);
+        set('ct-spettacolo',        d.spettacolo);
+        set('ct-periodo',           d.periodo);
+        set('ct-compenso-num',      d.compensoNum || '');
+        set('ct-lordo-num',         d.lordoNum || '');
+        set('ct-data-firma',        d.dataFirma);
+        set('ct-citta-firma',       d.cittaFirma||'Bari');
+        aggiornaLettereCtNetto();
+        aggiornaLettereCtLordo();
         eliminaContratto(id);
       }, 300);
     }
@@ -5152,36 +5219,69 @@ function eliminaQualifica(idx) {
 
 // ── Modal generazione contratto ───────────────────────────────────────────────
 async function openContrattoModal() {
-  // Carica spettacoli se non ancora disponibili
   if (!spettacoliList.length) await loadSpettacoliSheet();
 
-  // Popola componenti dalla rubrica
   const selComp = document.getElementById('ct-componente');
-  selComp.innerHTML = '<option value="">— Seleziona dalla rubrica —</option>' +
+  selComp.innerHTML = '<option value="">— Seleziona —</option>' +
     [...contacts]
       .filter(c => c.stato === 'ATTIVO' || !c.stato)
-      .sort((a,b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`,'it'))
+      .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
       .map(c => `<option value="${c.id}">${c.cognome} ${c.nome}</option>`)
       .join('');
 
-  // Popola qualifiche
   const selQual = document.getElementById('ct-qualifica');
   selQual.innerHTML = '<option value="">— Seleziona qualifica —</option>' +
     getQualifiche().map(q => `<option value="${q}">${q}</option>`).join('');
 
-  // Popola spettacoli
   const selSpett = document.getElementById('ct-spettacolo');
   selSpett.innerHTML = '<option value="">— Seleziona spettacolo —</option>' +
     allSpettacoli().map(s => `<option value="${s}">${s}</option>`).join('');
 
-  // Reset campi
-  ['ct-luogo-nascita','ct-data-nascita','ct-cf','ct-residenza','ct-citta','ct-iban',
-   'ct-periodo','ct-compenso'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
+  ['ct-nome-display','ct-luogo-nascita','ct-data-nascita','ct-cf','ct-residenza','ct-citta',
+   'ct-iban','ct-doc-tipo','ct-doc-num','ct-telefono','ct-email',
+   'ct-periodo','ct-compenso-num','ct-compenso-lettere','ct-lordo-num','ct-lordo-lettere',
+   'ct-search'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('ct-search-results').innerHTML = '';
   document.getElementById('ct-data-firma').value = new Date().toISOString().slice(0,10);
+  document.getElementById('ct-citta-firma').value = 'Bari';
   document.getElementById('contrattoModal').classList.add('open');
+}
+
+function cercaScritturatoCt(q) {
+  const box = document.getElementById('ct-search-results');
+  if (!q || q.length < 3) { box.innerHTML = ''; return; }
+  const risultati = contacts
+    .filter(c => c.cognome.toLowerCase().startsWith(q.toLowerCase()))
+    .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
+    .slice(0, 8);
+  if (!risultati.length) { box.innerHTML = '<span style="font-size:11px;color:var(--text3)">Nessun risultato</span>'; return; }
+  box.innerHTML = risultati.map(c =>
+    `<div onclick="selezionaScritturatoCt('${c.id}')" style="padding:6px 10px;cursor:pointer;border-radius:5px;font-size:12px;background:var(--surface);border:1px solid var(--border);margin-bottom:4px">
+      <strong>${c.cognome} ${c.nome}</strong>
+      <span style="color:var(--text3);margin-left:8px">${c.citta_residenza||''}</span>
+    </div>`
+  ).join('');
+}
+
+function selezionaScritturatoCt(id) {
+  document.getElementById('ct-componente').value = id;
+  document.getElementById('ct-search-results').innerHTML = '';
+  document.getElementById('ct-search').value = '';
+  onComponenteChange();
+}
+
+function aggiornaLettereCtNetto() {
+  const val = document.getElementById('ct-compenso-num')?.value;
+  const el  = document.getElementById('ct-compenso-lettere');
+  if (!el) return;
+  el.value = (val && !isNaN(parseFloat(val))) ? numeroInLettere(val) : '';
+}
+
+function aggiornaLettereCtLordo() {
+  const val = document.getElementById('ct-lordo-num')?.value;
+  const el  = document.getElementById('ct-lordo-lettere');
+  if (!el) return;
+  el.value = (val && !isNaN(parseFloat(val))) ? numeroInLettere(val) : '';
 }
 
 function closeContrattoModal() {
@@ -5198,37 +5298,46 @@ function onComponenteChange() {
   const fmtData = v => {
     if (!v) return '';
     if (v instanceof Date) return v.toLocaleDateString('it-IT');
-    // gestisce YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v.split('-').reverse().join('/');
     return v;
   };
-  document.getElementById('ct-luogo-nascita').value = c.luogo_nascita || '';
-  document.getElementById('ct-data-nascita').value  = fmtData(c.data_nascita);
-  document.getElementById('ct-cf').value            = c.codice_fiscale || '';
-  document.getElementById('ct-residenza').value     = c.indirizzo || '';
-  document.getElementById('ct-citta').value         = c.citta_residenza || '';
-  document.getElementById('ct-iban').value          = c.iban || '';
+  const set = (fid, val) => { const el = document.getElementById(fid); if(el) el.value = val||''; };
+  set('ct-nome-display', `${c.nome} ${c.cognome}`.toUpperCase());
+  set('ct-luogo-nascita', c.luogo_nascita);
+  set('ct-data-nascita',  fmtData(c.data_nascita));
+  set('ct-cf',            c.codice_fiscale);
+  set('ct-residenza',     c.indirizzo);
+  set('ct-citta',         c.citta_residenza);
+  set('ct-iban',          c.iban);
+  set('ct-doc-tipo',      c.doc_tipo);
+  set('ct-doc-num',       c.doc_num);
+  set('ct-telefono',      c.telefono);
+  set('ct-email',         c.email);
 }
 
 // ── Generazione DOCX ──────────────────────────────────────────────────────────
 async function generaContrattoScrittura() {
   const g = id => document.getElementById(id)?.value?.trim()||'';
-  const compId     = g('ct-componente');
-  const qualifica  = g('ct-qualifica');
-  const spettacolo = g('ct-spettacolo');
-  const periodo    = g('ct-periodo');
-  const compenso   = g('ct-compenso');
+  const compId      = g('ct-componente');
+  const qualifica   = g('ct-qualifica');
+  const spettacolo  = g('ct-spettacolo');
+  const periodo     = g('ct-periodo');
+  const compensoNum = g('ct-compenso-num');
+  const lordoNum    = g('ct-lordo-num');
+  const compenso    = compensoNum ? `€ ${fmtEuro(compensoNum)} (${numeroInLettere(compensoNum)})` : '';
+  const lordo       = lordoNum   ? `€ ${fmtEuro(lordoNum)} (${numeroInLettere(lordoNum)})` : '';
+  const cittaFirma  = g('ct-citta-firma') || 'Bari';
 
-  if (!compId)     { showToast('Seleziona lo scritturato', 'error'); return; }
-  if (!qualifica)  { showToast('Seleziona la qualifica', 'error'); return; }
-  if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
-  if (!periodo)    { showToast('Inserisci il periodo', 'error'); return; }
-  if (!compenso)   { showToast('Inserisci il compenso', 'error'); return; }
+  if (!compId)      { showToast('Seleziona lo scritturato', 'error'); return; }
+  if (!qualifica)   { showToast('Seleziona la qualifica', 'error'); return; }
+  if (!spettacolo)  { showToast('Seleziona lo spettacolo', 'error'); return; }
+  if (!periodo)     { showToast('Inserisci il periodo', 'error'); return; }
+  if (!compensoNum) { showToast('Inserisci il compenso netto', 'error'); return; }
+  if (!lordoNum)    { showToast('Inserisci il compenso lordo', 'error'); return; }
 
-  const c = contacts.find(x => x.id === compId);
+  const c = contacts.find(x => String(x.id) === String(compId));
   if (!c) return;
 
-  // Apre la finestra PRIMA di qualsiasi await — altrimenti i browser bloccano il popup
   const win = window.open('', '_blank');
   if (!win) { showToast('Popup bloccato dal browser — consenti i popup per questo sito', 'error'); return; }
   win.document.write('<html><body style="font-family:Arial;padding:40px;color:#666">⏳ Generazione contratto in corso…</body></html>');
@@ -5240,20 +5349,21 @@ async function generaContrattoScrittura() {
   const residenza   = g('ct-residenza');
   const citta       = g('ct-citta');
   const iban        = g('ct-iban');
+  const docTipo     = g('ct-doc-tipo');
+  const docNum      = g('ct-doc-num');
+  const telefono    = g('ct-telefono');
+  const email       = g('ct-email');
   const dataFirma   = g('ct-data-firma')
     ? new Date(g('ct-data-firma')).toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})
     : '';
-
-  const logoUrl = window.location.origin +
-    (window.location.pathname.endsWith('/') ? window.location.pathname :
-    window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
 
   closeContrattoModal();
 
   const datiSalvataggio = {
     tipo: 'contratto_scrittura',
     nomeCognome, luogo, dataNascita, cf, residenza, citta, iban,
-    qualifica, spettacolo, periodo, compenso, dataFirma
+    docTipo, docNum, telefono, email,
+    qualifica, spettacolo, periodo, compenso, lordo, cittaFirma, dataFirma
   };
   salvaContrattoInArchivio('Contratto di Scrittura', nomeCognome, spettacolo, datiSalvataggio);
 
@@ -5265,7 +5375,8 @@ async function generaContrattoScrittura() {
 
 function buildHTMLContrattoScrittura(d) {
   const { nomeCognome, luogo, dataNascita, cf, residenza, citta, iban,
-    qualifica, spettacolo, periodo, compenso, dataFirma } = d;
+    docTipo, docNum, telefono, email,
+    qualifica, spettacolo, periodo, compenso, lordo, cittaFirma, dataFirma } = d;
   const logoUrl = window.location.origin +
     (window.location.pathname.endsWith('/') ? window.location.pathname :
     window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
@@ -5363,6 +5474,9 @@ function buildHTMLContrattoScrittura(d) {
       <div class="parte-riga"><span>Data di nascita: </span>${dataNascita}</div>
       <div class="parte-riga"><span>C.F.: </span>${cf}</div>
       <div class="parte-riga"><span>Residente in: </span>${residenza}${citta ? ', ' + citta : ''}</div>
+      ${(d.docTipo||d.docNum)?`<div class="parte-riga"><span>Doc.: </span>${d.docTipo||''}${d.docNum?' n° '+d.docNum:''}</div>`:''}
+      ${d.telefono?`<div class="parte-riga"><span>Tel.: </span>${d.telefono}</div>`:''}
+      ${d.email?`<div class="parte-riga"><span>Email: </span>${d.email}</div>`:''}
     </div>
   </div>
 
@@ -5399,7 +5513,7 @@ function buildHTMLContrattoScrittura(d) {
 
     <div class="art">
       <div class="art-titolo">2. Compenso</div>
-      <div class="art-testo">Il compenso netto spettante viene stabilito in <strong>${compenso}</strong>.</div>
+      <div class="art-testo">Il compenso netto totale spettante viene stabilito in <strong>${compenso}</strong>. L'importo del compenso lordo totale è di <strong>${d.lordo||lordo||'—'}</strong>.</div>
     </div>
 
     <div class="art">
@@ -5511,7 +5625,7 @@ function buildHTMLContrattoScrittura(d) {
   <div style="margin-top:16px;font-size:11px">
     Il presente contratto di scrittura è composto di n. 3 (tre) pagine.<br>
     Letto, accettato e sottoscritto dalle parti.<br><br>
-    <strong>Bari, lì ${dataFirma}</strong>
+    <strong>${d.cittaFirma||'Bari'}, lì ${dataFirma}</strong>
   </div>
 
   <div class="firme" style="margin-top:32px">
