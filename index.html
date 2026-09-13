@@ -7962,14 +7962,15 @@ function cercaTeatroAgibComune() {
     (t.citta||'').toLowerCase().includes(q)
   ).slice(0, 8);
   if (!risultati.length) { drop.style.display='none'; return; }
-  drop.innerHTML = risultati.map(t =>
-    `<div onclick="selezionaTeatroAgibComune('${t.nome_struttura.replace(/'/g,"\\'")}','${(t.indirizzo_esteso||'').replace(/'/g,"\\'")}','${t.id}')"
+  drop.innerHTML = risultati.map(t => {
+    const indirizzoCompleto = [t.indirizzo, t.cap, t.citta, t.pr].filter(Boolean).join(', ');
+    return `<div onclick="selezionaTeatroAgibComune('${t.nome_struttura.replace(/'/g,"\\'")}','${indirizzoCompleto.replace(/'/g,"\\'")}','${t.id}')"
       style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"
       onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <strong>${t.nome_struttura}</strong><br>
-      <span style="font-size:10px;color:var(--text3)">${t.indirizzo_esteso||''}</span>
-    </div>`
-  ).join('');
+      <span style="font-size:10px;color:var(--text3)">${indirizzoCompleto}</span>
+    </div>`;
+  }).join('');
   drop.style.display = 'block';
 }
 function selezionaTeatroAgibComune(nome, indirizzo, id) {
@@ -8394,7 +8395,7 @@ function buildAgibPDFHtml(p) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Agibilità ${p.id}</title>
   <style>
-    @page { size: A4 portrait; margin: 80px 12mm 20mm 12mm; }
+    @page { size: A4 portrait; margin: 10mm 12mm 20mm 12mm; }
     * { box-sizing: border-box; }
     body { font-family: Arial, sans-serif; margin: 0; font-size: 10px;
            -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -8417,21 +8418,22 @@ function buildAgibPDFHtml(p) {
     .hdr-top p  { font-size:9px; color:#666; margin:2px 0 0; }
     .hdr-info {
       display:grid; grid-template-columns:1fr 1fr;
-      gap:6px 20px;
+      gap:4px 20px;
       background:#f5f0e8; border:1px solid #d4c4a0;
-      border-radius:6px; padding:8px 12px; font-size:10px;
+      border-radius:6px; padding:6px 12px; font-size:10px;
     }
     .hdr-info-row { display:flex; gap:6px; align-items:baseline; }
     .hdr-info-lbl { font-size:8px; text-transform:uppercase; letter-spacing:0.08em; color:#8a6d3b; font-weight:700; min-width:50px; }
     .hdr-info-val { font-weight:600; color:#222; }
-    .content { padding: 10px 0 20mm; }
+    /* Spazio sufficiente per l'intestazione fissa — calcolato generosamente */
+    .content { padding-top: 120px; padding-bottom: 20mm; }
     table { width:100%; border-collapse:collapse; }
     thead { display:table-header-group; }
     th { background:#8a6d3b; color:white; padding:6px 8px; font-size:9px;
          text-align:left; text-transform:uppercase; letter-spacing:0.04em; }
     th.c { text-align:center; }
-    td { vertical-align:top; padding:5px; font-size:10px; overflow:hidden; word-break:break-word; }
-    small { color:#555; font-size:8px; line-height:1.3; }
+    td { vertical-align:top; padding:5px 8px; font-size:10px; overflow:hidden; word-break:break-word; }
+    small { color:#555; font-size:8px; line-height:1.4; }
     col.col-nome { width:52%; }
     col.col-gg   { width:12%; }
     col.col-dati { width:36%; }
@@ -8473,7 +8475,17 @@ function buildAgibPDFHtml(p) {
       <tbody>${righeHtml}</tbody>
     </table>
   </div>
-  <script>window.addEventListener('load', () => setTimeout(() => window.print(), 400));<\/script>
+  <script>
+    window.addEventListener('load', () => {
+      // Calcola altezza reale intestazione e applica al content
+      const hdr = document.querySelector('.page-header-fixed');
+      const content = document.querySelector('.content');
+      if (hdr && content) {
+        content.style.paddingTop = (hdr.offsetHeight + 10) + 'px';
+      }
+      setTimeout(() => window.print(), 600);
+    });
+  <\/script>
   </body></html>`;
 }
 
