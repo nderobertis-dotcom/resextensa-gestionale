@@ -7811,13 +7811,36 @@ async function openModificaAgibModal(id) {
   if (!teatri.length) await loadTeatri();
 
   document.getElementById('agibModalTitle').textContent = `Modifica Pratica — ${id}`;
+  // Prende teatro e date dalla prima riga (sono uguali per tutti)
+  const primaRiga = p.righe[0] || {};
   document.getElementById('agibModalBody').innerHTML = `
     <input type="hidden" id="agib_id" value="${id}">
     <input type="hidden" id="agib_modifica_mode" value="1">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-      <div class="modal-field">
-        <div class="modal-label">Data invio</div>
-        <input type="text" class="edit-input" id="agib_data_invio" value="${fmtDataInvio(p.data_invio)}" placeholder="GG/MM/AAAA">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:10px">Dati comuni a tutti i componenti</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="modal-field">
+          <div class="modal-label">Data invio</div>
+          <input type="text" class="edit-input" id="agib_data_invio" value="${fmtDataInvio(p.data_invio)}" placeholder="GG/MM/AAAA">
+        </div>
+        <div></div>
+        <div class="modal-field" style="position:relative">
+          <div class="modal-label">Teatro / Luogo *</div>
+          <input type="text" class="edit-input" id="agib_teatro_comune" value="${primaRiga.teatro||''}" placeholder="Cerca teatro…" oninput="cercaTeatroAgibComune()" autocomplete="off">
+          <div id="agib_teatro_comune_drop" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Indirizzo teatro</div>
+          <input type="text" class="edit-input" id="agib_indirizzo_comune" value="${primaRiga.indirizzo_teatro||''}" placeholder="Compilato automaticamente">
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Dal *</div>
+          <input type="text" class="edit-input" id="agib_dal_comune" value="${primaRiga.data_dal||''}" placeholder="GG/MM/AAAA">
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Al *</div>
+          <input type="text" class="edit-input" id="agib_al_comune" value="${primaRiga.data_al||''}" placeholder="GG/MM/AAAA">
+        </div>
       </div>
     </div>
     <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
@@ -7832,42 +7855,22 @@ async function openModificaAgibModal(id) {
     </div>`;
 
   agibRigaCount = 0;
-  // Pre-popola le righe esistenti
+  // Pre-popola le righe esistenti — solo il nominativo
   p.righe.forEach(r => {
     agibRigaCount++;
     const idx = agibRigaCount;
     const wrap = document.getElementById('agib_righe_wrap');
     const div = document.createElement('div');
     div.id = `agib_riga_${idx}`;
-    div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;position:relative';
-    // Trova il contatto corrispondente
+    div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;position:relative';
     const c = contacts.find(x => `${x.cognome} ${x.nome}` === r.cognome_nome);
     div.innerHTML = `
       <button onclick="document.getElementById('agib_riga_${idx}').remove()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>
       <input type="hidden" id="agib_comp_id_${idx}" value="${c?.id||''}">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div class="modal-field full" style="grid-column:1/-1;position:relative">
-          <div class="modal-label">Componente</div>
-          <input type="text" class="edit-input" id="agib_comp_${idx}" value="${r.cognome_nome}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
-          <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Data dal</div>
-          <input type="text" class="edit-input" id="agib_dal_${idx}" value="${r.data_dal}" placeholder="GG/MM/AAAA">
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Data al</div>
-          <input type="text" class="edit-input" id="agib_al_${idx}" value="${r.data_al}" placeholder="GG/MM/AAAA">
-        </div>
-        <div class="modal-field" style="position:relative">
-          <div class="modal-label">Teatro</div>
-          <input type="text" class="edit-input" id="agib_teatro_${idx}" value="${r.teatro}" placeholder="Cerca teatro…" oninput="cercaTeatroAgib(${idx})" autocomplete="off">
-          <div id="agib_teatro_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
-        </div>
-        <div class="modal-field full" style="grid-column:2/-1">
-          <div class="modal-label">Indirizzo teatro</div>
-          <input type="text" class="edit-input" id="agib_indirizzo_${idx}" value="${r.indirizzo_teatro}" placeholder="Compilato automaticamente">
-        </div>
+      <div style="position:relative">
+        <div class="modal-label">Componente</div>
+        <input type="text" class="edit-input" id="agib_comp_${idx}" value="${r.cognome_nome}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
+        <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
       </div>`;
     wrap.appendChild(div);
   });
@@ -7887,10 +7890,31 @@ async function openAgibModal() {
   document.getElementById('agibModalTitle').textContent = `Nuova Pratica — ${idPratica}`;
   document.getElementById('agibModalBody').innerHTML = `
     <input type="hidden" id="agib_id" value="${idPratica}">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-      <div class="modal-field">
-        <div class="modal-label">Data invio</div>
-        <input type="text" class="edit-input" id="agib_data_invio" value="${oggi}" placeholder="GG/MM/AAAA">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:10px">Dati comuni a tutti i componenti</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="modal-field">
+          <div class="modal-label">Data invio</div>
+          <input type="text" class="edit-input" id="agib_data_invio" value="${oggi}" placeholder="GG/MM/AAAA">
+        </div>
+        <div></div>
+        <div class="modal-field" style="position:relative">
+          <div class="modal-label">Teatro / Luogo *</div>
+          <input type="text" class="edit-input" id="agib_teatro_comune" placeholder="Cerca teatro…" oninput="cercaTeatroAgibComune()" autocomplete="off">
+          <div id="agib_teatro_comune_drop" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Indirizzo teatro</div>
+          <input type="text" class="edit-input" id="agib_indirizzo_comune" placeholder="Compilato automaticamente">
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Dal *</div>
+          <input type="text" class="edit-input" id="agib_dal_comune" placeholder="GG/MM/AAAA">
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Al *</div>
+          <input type="text" class="edit-input" id="agib_al_comune" placeholder="GG/MM/AAAA">
+        </div>
       </div>
     </div>
     <div class="modal-label" style="margin-bottom:8px;font-weight:600">Componenti</div>
@@ -7916,35 +7940,42 @@ function aggiungiRigaAgib() {
   const wrap = document.getElementById('agib_righe_wrap');
   const div = document.createElement('div');
   div.id = `agib_riga_${idx}`;
-  div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;position:relative';
+  div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;position:relative';
   div.innerHTML = `
     <button onclick="document.getElementById('agib_riga_${idx}').remove()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>
     <input type="hidden" id="agib_comp_id_${idx}" value="">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-      <div class="modal-field full" style="grid-column:1/-1;position:relative">
-        <div class="modal-label">Componente (digita almeno 3 lettere)</div>
-        <input type="text" class="edit-input" id="agib_comp_${idx}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
-        <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
-      </div>
-      <div class="modal-field">
-        <div class="modal-label">Data dal</div>
-        <input type="text" class="edit-input" id="agib_dal_${idx}" placeholder="GG/MM/AAAA">
-      </div>
-      <div class="modal-field">
-        <div class="modal-label">Data al</div>
-        <input type="text" class="edit-input" id="agib_al_${idx}" placeholder="GG/MM/AAAA">
-      </div>
-      <div class="modal-field" style="position:relative">
-        <div class="modal-label">Teatro (digita almeno 3 lettere)</div>
-        <input type="text" class="edit-input" id="agib_teatro_${idx}" placeholder="Cerca teatro…" oninput="cercaTeatroAgib(${idx})" autocomplete="off">
-        <div id="agib_teatro_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
-      </div>
-      <div class="modal-field full" style="grid-column:2/-1">
-        <div class="modal-label">Indirizzo teatro</div>
-        <input type="text" class="edit-input" id="agib_indirizzo_${idx}" placeholder="Compilato automaticamente">
-      </div>
+    <div style="position:relative">
+      <div class="modal-label">Componente (digita almeno 3 lettere)</div>
+      <input type="text" class="edit-input" id="agib_comp_${idx}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
+      <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
     </div>`;
   wrap.appendChild(div);
+}
+
+function cercaTeatroAgibComune() {
+  const input = document.getElementById('agib_teatro_comune');
+  const drop  = document.getElementById('agib_teatro_comune_drop');
+  const q = input.value.trim().toLowerCase();
+  if (q.length < 3) { drop.style.display='none'; return; }
+  const risultati = teatri.filter(t =>
+    t.nome_struttura.toLowerCase().includes(q) ||
+    (t.citta||'').toLowerCase().includes(q)
+  ).slice(0, 8);
+  if (!risultati.length) { drop.style.display='none'; return; }
+  drop.innerHTML = risultati.map(t =>
+    `<div onclick="selezionaTeatroAgibComune('${t.nome_struttura.replace(/'/g,"\\'")}','${(t.indirizzo_esteso||'').replace(/'/g,"\\'")}','${t.id}')"
+      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <strong>${t.nome_struttura}</strong><br>
+      <span style="font-size:10px;color:var(--text3)">${t.indirizzo_esteso||''}</span>
+    </div>`
+  ).join('');
+  drop.style.display = 'block';
+}
+function selezionaTeatroAgibComune(nome, indirizzo, id) {
+  document.getElementById('agib_teatro_comune').value = nome;
+  document.getElementById('agib_indirizzo_comune').value = indirizzo;
+  document.getElementById('agib_teatro_comune_drop').style.display = 'none';
 }
 
 function ordinaRigheAgib() {
@@ -8036,7 +8067,16 @@ async function saveAgib() {
   const idPratica = document.getElementById('agib_id').value;
   const dataInvio = document.getElementById('agib_data_invio').value.trim();
   const isModifica = document.getElementById('agib_modifica_mode')?.value === '1';
-  if (!dataInvio) { showToast('Inserisci la data di invio', 'error'); return; }
+
+  // Legge i campi comuni (teatro e periodo)
+  const dalComune       = document.getElementById('agib_dal_comune')?.value?.trim() || '';
+  const alComune        = document.getElementById('agib_al_comune')?.value?.trim() || '';
+  const teatroComune    = document.getElementById('agib_teatro_comune')?.value?.trim() || '';
+  const indirizzoComune = document.getElementById('agib_indirizzo_comune')?.value?.trim() || '';
+
+  if (!dataInvio)  { showToast('Inserisci la data di invio', 'error'); return; }
+  if (!dalComune || !alComune) { showToast('Inserisci il periodo DAL e AL', 'error'); return; }
+  if (!teatroComune) { showToast('Inserisci il teatro/luogo', 'error'); return; }
 
   const nuoveRighe = [];
   const wrap = document.getElementById('agib_righe_wrap');
@@ -8104,10 +8144,11 @@ async function saveAgib() {
 
     if (!cognomeNome) return; // skip riga senza nominativo
 
-    const dal = document.getElementById(`agib_dal_${idx}`)?.value||'';
-    const al = document.getElementById(`agib_al_${idx}`)?.value||'';
-    const teatro = document.getElementById(`agib_teatro_${idx}`)?.value||'';
-    const indirizzoTeatro = document.getElementById(`agib_indirizzo_${idx}`)?.value||'';
+    // Usa sempre teatro e date comuni dall'intestazione
+    const dal = dalComune;
+    const al  = alComune;
+    const teatro = teatroComune;
+    const indirizzoTeatro = indirizzoComune;
 
     nuoveRighe.push([idPratica, "'" + dataInvio, cognomeNome, "'" + dal, "'" + al, teatro, indirizzoTeatro, primaAssunzione, cf, residenza, tipoDoc, numDoc, 'BOZZA']);
   });
@@ -8281,6 +8322,22 @@ async function inviaAgibilita() {
 }
 
 function buildAgibPDFHtml(p) {
+  const fmtD = d => {
+    if (!d) return '—';
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) return d;
+    const m = d.match(/^(\d{1,2})(\d{2})(\d{4})$/);
+    if (m) return `${m[1].padStart(2,'0')}/${m[2]}/${m[3]}`;
+    return d;
+  };
+
+  // Teatro e periodo comuni — presi dalla prima riga valida
+  const primaRiga = p.righe[0] || {};
+  const teatroComune   = primaRiga.teatro || '—';
+  const indirizzoComune = primaRiga.indirizzo_teatro || '';
+  const dalComune      = fmtD(primaRiga.data_dal);
+  const alComune       = fmtD(primaRiga.data_al);
+
+  // Teatri unici per colori (se ci sono più teatri)
   const teatriUnici = [...new Set(p.righe.map(r=>r.teatro).filter(Boolean))];
   const teatroColor  = {};
   const teatroBorder = {};
@@ -8288,129 +8345,131 @@ function buildAgibPDFHtml(p) {
     teatroColor[t]  = TEATRO_COLORS[i % TEATRO_COLORS.length];
     teatroBorder[t] = TEATRO_BORDER[i % TEATRO_BORDER.length];
   });
+  const multiTeatro = teatriUnici.length > 1;
 
-  const righeHtml = p.righe.map(r => {
-    const bg     = teatroColor[r.teatro]  || '#fff';
-    const border = teatroBorder[r.teatro] || '#ccc';
-    const fmtD = d => {
-      if (!d) return '—';
-      if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) return d;
-      const m = d.match(/^(\d{1,2})(\d{2})(\d{4})$/);
-      if (m) return `${m[1].padStart(2,'0')}/${m[2]}/${m[3]}`;
-      return d;
-    };
-    const dati = r.prima_assunzione === 'SI' ? `<small>C.F. ${r.codice_fiscale||'—'}<br>${r.residenza||'—'}<br>N ${r.tipo_doc||''} ${r.num_doc||''}</small>` : '';
-    // Intera riga colorata con bordo sinistro più marcato come accento
-    return `<tr style="background:${bg};border-left:5px solid ${border}">
-      <td style="padding:5px;font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-bottom:1px solid ${border}40">${r.cognome_nome}</td>
-      <td style="padding:5px;font-size:10px;border-bottom:1px solid ${border}40">Dal ${fmtD(r.data_dal)}<br>al ${fmtD(r.data_al)}</td>
-      <td style="padding:5px;font-size:10px;border-bottom:1px solid ${border}40">${r.teatro||'—'}<br><small style="color:#666">${r.indirizzo_teatro||''}</small></td>
-      <td style="padding:5px;font-size:10px;border-bottom:1px solid ${border}40">${dati}</td>
+  const righeHtml = p.righe.map((r,idx) => {
+    const bg     = multiTeatro ? (teatroColor[r.teatro]  || '#fff') : (idx%2===0 ? '#fafafa' : '#fff');
+    const border = multiTeatro ? (teatroBorder[r.teatro] || '#ccc') : '#8a6d3b';
+    const gg     = calcolaGiornate(r.data_dal, r.data_al);
+    const dal_r  = parseAgibData(r.data_dal);
+    const totMese = dal_r ? giornateNelMese(r.cognome_nome, dal_r.getMonth()+1, dal_r.getFullYear()) : 0;
+    const over   = totMese > 26;
+    const ggColor = over ? '#c62828' : '#2e7d32';
+
+    // Dati anagrafici solo se prima assunzione
+    const dati = r.prima_assunzione === 'SI'
+      ? `<small style="line-height:1.5">
+          C.F.: ${r.codice_fiscale||'—'}<br>
+          ${r.residenza||''}<br>
+          ${r.tipo_doc||''} ${r.num_doc ? 'N° '+r.num_doc : ''}
+        </small>`
+      : '';
+
+    // Date per riga solo se diversi dal comune
+    const dateDiverse = (fmtD(r.data_dal) !== dalComune || fmtD(r.data_al) !== alComune);
+    const dateHtml = dateDiverse && multiTeatro
+      ? `<br><small style="color:#555">Dal ${fmtD(r.data_dal)} al ${fmtD(r.data_al)}</small>`
+      : '';
+
+    return `<tr style="background:${bg};${multiTeatro?'border-left:4px solid '+border:''}">
+      <td style="padding:6px 8px;font-size:10px;font-weight:600;border-bottom:1px solid #eee">${r.cognome_nome}${dateHtml}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:10px;font-weight:700;color:${ggColor};border-bottom:1px solid #eee">
+        ${gg}${over?` <span style="color:#c62828;font-size:8px">⚠${totMese}gg</span>`:''}
+      </td>
+      <td style="padding:6px 8px;font-size:10px;border-bottom:1px solid #eee;text-align:center">
+        <span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px;background:${r.prima_assunzione==='SI'?'#fce4ec':'#e8f5e9'};color:${r.prima_assunzione==='SI'?'#c62828':'#2e7d32'}">${r.prima_assunzione||'—'}</span>
+        ${dati}
+      </td>
     </tr>`;
   }).join('');
 
-  // Legenda teatri per il PDF
-  const legendaHtml = teatriUnici.map(t => {
+  const legendaHtml = multiTeatro ? teatriUnici.map(t => {
     const bg  = teatroColor[t];
     const brd = teatroBorder[t];
     return `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:10px;margin-bottom:4px;padding:3px 10px;border-radius:12px;background:${bg};border:1px solid ${brd};font-size:9px;font-weight:600;color:${brd}">${t}</span>`;
-  }).join('');
+  }).join('') : '';
 
   const logoUrl = window.location.origin + (window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Agibilità ${p.id}</title>
   <style>
-    @page {
-      size: A4 portrait;
-      margin: 72px 12mm 20mm 12mm;
-    }
+    @page { size: A4 portrait; margin: 80px 12mm 20mm 12mm; }
     * { box-sizing: border-box; }
     body { font-family: Arial, sans-serif; margin: 0; font-size: 10px;
            -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-    .page-header {
-      position: running(header);
-      display:flex; align-items:center; gap:12px;
-      border-bottom:2px solid #8a6d3b; padding-bottom:8px;
-      background: white; width: 100%;
-    }
-    @page { @top-left { content: element(header); vertical-align: bottom; } }
-
-    /* Fallback position:fixed per Chrome/Safari */
     @media print {
       body { margin: 0; }
-      .page-header-fixed {
-        position: fixed;
-        top: 0; left: 0; right: 0;
-        display:flex; align-items:center; gap:12px;
-        border-bottom:2px solid #8a6d3b; padding: 8px 12mm 8px;
-        background: white;
-        z-index: 1000;
-      }
-      .content { margin-top: 70px; }
-      tr {
-        page-break-inside: avoid;
-        break-inside: avoid;
-      }
-      tbody tr {
-        page-break-inside: avoid;
-        break-inside: avoid;
-      }
-      * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
+      .page-header-fixed { position: fixed; top: 0; left: 0; right: 0; background: white; z-index: 1000; }
+      .content { margin-top: 0; }
+      tr { page-break-inside: avoid; break-inside: avoid; }
+      tbody tr { page-break-inside: avoid; break-inside: avoid; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
-
     .page-header-fixed {
-      display:flex; align-items:center; gap:12px;
-      border-bottom:2px solid #8a6d3b; padding: 8px 12mm 8px;
+      border-bottom: 2px solid #8a6d3b;
       background: white;
+      padding: 8px 12mm 10px;
     }
-    .page-header-fixed img { height:40px; }
-    .page-header-fixed h1 { font-size:13px; color:#8a6d3b; margin:0; font-weight:bold; }
-    .page-header-fixed p  { font-size:9px; color:#666; margin:2px 0 0; }
-
-    .content { padding: 8px 0 20mm; }
-
-    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .hdr-top { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+    .hdr-top img { height:38px; }
+    .hdr-top h1 { font-size:13px; color:#8a6d3b; margin:0; font-weight:bold; }
+    .hdr-top p  { font-size:9px; color:#666; margin:2px 0 0; }
+    .hdr-info {
+      display:grid; grid-template-columns:1fr 1fr;
+      gap:6px 20px;
+      background:#f5f0e8; border:1px solid #d4c4a0;
+      border-radius:6px; padding:8px 12px; font-size:10px;
+    }
+    .hdr-info-row { display:flex; gap:6px; align-items:baseline; }
+    .hdr-info-lbl { font-size:8px; text-transform:uppercase; letter-spacing:0.08em; color:#8a6d3b; font-weight:700; min-width:50px; }
+    .hdr-info-val { font-weight:600; color:#222; }
+    .content { padding: 10px 0 20mm; }
+    table { width:100%; border-collapse:collapse; }
     thead { display:table-header-group; }
-    th {
-      background:#8a6d3b; color:white; padding:6px 5px;
-      font-size:9px; text-align:left; text-transform:uppercase;
-      letter-spacing:0.04em; white-space:nowrap;
-    }
-    td {
-      vertical-align:top;
-      padding:5px; font-size:10px;
-      overflow:hidden; word-break:break-word;
-    }
+    th { background:#8a6d3b; color:white; padding:6px 8px; font-size:9px;
+         text-align:left; text-transform:uppercase; letter-spacing:0.04em; }
+    th.c { text-align:center; }
+    td { vertical-align:top; padding:5px; font-size:10px; overflow:hidden; word-break:break-word; }
     small { color:#555; font-size:8px; line-height:1.3; }
-
-    col.col-nome  { width: 28%; }
-    col.col-date  { width: 17%; }
-    col.col-luogo { width: 27%; }
-    col.col-dati  { width: 28%; }
-
-    td:first-child { white-space: nowrap; font-weight: 500; }
+    col.col-nome { width:52%; }
+    col.col-gg   { width:12%; }
+    col.col-dati { width:36%; }
   </style></head><body>
 
   <div class="page-header-fixed">
-    <img src="${logoUrl}" onerror="this.style.display='none'">
-    <div>
-      <h1>RESEXTENSA Ass. Culturale — Bari</h1>
-      <p>Comunicazione Agibilità — ${p.id} &nbsp;·&nbsp; Data invio: ${fmtDataInvio(p.data_invio)} &nbsp;·&nbsp; Componenti: ${p.righe.length}</p>
+    <div class="hdr-top">
+      <img src="${logoUrl}" onerror="this.style.display='none'">
+      <div>
+        <h1>RESEXTENSA Ass. Culturale — Bari</h1>
+        <p>Comunicazione Agibilità — ${p.id} &nbsp;·&nbsp; Data invio: ${fmtDataInvio(p.data_invio)} &nbsp;·&nbsp; Componenti: ${p.righe.length}</p>
+      </div>
+    </div>
+    <div class="hdr-info">
+      <div class="hdr-info-row">
+        <span class="hdr-info-lbl">Teatro</span>
+        <span class="hdr-info-val">${teatroComune}</span>
+      </div>
+      <div class="hdr-info-row">
+        <span class="hdr-info-lbl">Periodo</span>
+        <span class="hdr-info-val">Dal ${dalComune} al ${alComune}</span>
+      </div>
+      ${indirizzoComune ? `<div class="hdr-info-row" style="grid-column:1/-1">
+        <span class="hdr-info-lbl">Indirizzo</span>
+        <span class="hdr-info-val">${indirizzoComune}</span>
+      </div>` : ''}
     </div>
   </div>
 
   <div class="content">
-    ${teatriUnici.length > 1 ? `<div style="margin-bottom:10px;line-height:2">${legendaHtml}</div>` : ''}
+    ${legendaHtml ? `<div style="margin-bottom:8px;line-height:2">${legendaHtml}</div>` : ''}
     <table>
-      <colgroup>
-        <col class="col-nome"><col class="col-date"><col class="col-luogo"><col class="col-dati">
-      </colgroup>
-      <thead><tr><th>Cognome Nome</th><th>Date</th><th>Luogo</th><th>Dati</th></tr></thead>
+      <colgroup><col class="col-nome"><col class="col-gg"><col class="col-dati"></colgroup>
+      <thead><tr>
+        <th>Cognome Nome</th>
+        <th class="c">Giornate</th>
+        <th>Prima ass. / Dati anagrafici</th>
+      </tr></thead>
       <tbody>${righeHtml}</tbody>
     </table>
   </div>
