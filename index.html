@@ -392,6 +392,8 @@
     .comp-detail-tre { grid-template-columns: 1fr !important; }
   }
 </style>
+<!-- config.js: file locale con GEMINI_KEY_CONFIG, non presente su GitHub -->
+<script src="config.js" onerror="console.info('config.js non trovato — scansione documento richiederà chiave manuale')"></script>
 </head>
 <body>
 
@@ -1514,6 +1516,9 @@
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const CLIENT_ID   = '776857472395-r7e9kvoh3rdr4ll57j2rob9j51n8ha07.apps.googleusercontent.com';
 const API_KEY     = 'AIzaSyCq6KY5scQOw1YCndFF_HS6VIl5PWtcUv8';
+// GEMINI_API_KEY viene caricata da config.js (file locale, non in repository)
+// Se config.js non è presente, la scansione documento chiederà la chiave manualmente
+const GEMINI_API_KEY = (typeof GEMINI_KEY_CONFIG !== 'undefined') ? GEMINI_KEY_CONFIG : null;
 const SHEET_ID    = '1G57PEEHP8WuMMEdrwmPI7BfcOQiuonp5xIrzkjpW3ac';
 const SHEET_NAME  = 'Componenti';
 const DATA_RANGE  = 'Componenti!B5:W';
@@ -2769,10 +2774,8 @@ async function saveNew() {
 // ─── SCAN DOCUMENTO CON GEMINI VISION ────────────────────────────────────────
 let ocrExtracted = {};
 
-// Gemini API key: usa la stessa API_KEY del progetto GCP se Gemini API è abilitata,
-// altrimenti l'utente può inserirne una dedicata salvata in sessionStorage
 function getGeminiKey() {
-  return sessionStorage.getItem('gemini_api_key') || API_KEY;
+  return GEMINI_API_KEY || sessionStorage.getItem('gemini_api_key');
 }
 function geminiEndpoint() {
   return `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${getGeminiKey()}`;
@@ -2807,6 +2810,18 @@ async function scanDocumento(input) {
   const status = document.getElementById('docScanStatus');
   const label  = document.getElementById('docScanLabel');
   const preview = document.getElementById('docOcrPreview');
+
+  if (!getGeminiKey()) {
+    status.style.display = 'block';
+    status.innerHTML = `⚠️ Chiave Gemini non configurata.<br>
+      <span style="font-size:10px">Inserisci la chiave dal file <strong>config.js</strong> o incollala qui:</span><br>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input id="geminiKeyInput" type="text" placeholder="AIzaSy..." style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:var(--bg1);color:var(--text1)">
+        <button onclick="salvaGeminiKey()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:12px;cursor:pointer">Salva e riprova</button>
+      </div>`;
+    input.value = '';
+    return;
+  }
 
   status.style.display = 'block';
   status.textContent = '⏳ Analisi documento in corso…';
@@ -2886,9 +2901,9 @@ async function scanDocumento(input) {
 
 function salvaGeminiKey() {
   const key = document.getElementById('geminiKeyInput')?.value?.trim();
-  if (!key || !key.startsWith('AIza')) { showToast('Chiave non valida', 'error'); return; }
+  if (!key) { showToast('Chiave non valida', 'error'); return; }
   sessionStorage.setItem('gemini_api_key', key);
-  document.getElementById('docScanStatus').textContent = '✓ Chiave salvata — ora carica di nuovo il documento';
+  document.getElementById('docScanStatus').textContent = '✓ Chiave salvata — carica il documento';
   document.getElementById('docScanLabel').textContent = '📷 Carica documento';
   showToast('Chiave Gemini salvata per questa sessione', 'success');
 }
