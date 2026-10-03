@@ -392,6 +392,8 @@
     .comp-detail-tre { grid-template-columns: 1fr !important; }
   }
 </style>
+<!-- Tesseract.js per OCR documenti -->
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 
@@ -1477,6 +1479,27 @@
 <div class="modal-overlay" id="newModal">
   <div class="modal">
     <div class="modal-title">Nuovo componente</div>
+    <!-- Scan documento -->
+    <div id="docScanBar" style="background:var(--bg2);border:1.5px dashed var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <div style="font-weight:600;font-size:13px;color:var(--text1);margin-bottom:2px">📄 Compila da documento</div>
+        <div style="font-size:11px;color:var(--text3)">Carica foto o scansione di CI/Passaporto per compilare automaticamente i campi anagrafici</div>
+      </div>
+      <label id="docScanLabel" style="cursor:pointer;background:var(--accent);color:#fff;border:none;border-radius:7px;padding:8px 14px;font-size:12px;font-weight:600;white-space:nowrap;display:inline-block" for="docScanInput">
+        📷 Carica documento
+      </label>
+      <input type="file" id="docScanInput" accept="image/*,application/pdf" style="display:none" onchange="scanDocumento(this)">
+      <div id="docScanStatus" style="font-size:11px;color:var(--text3);width:100%;display:none"></div>
+    </div>
+    <!-- Preview risultati OCR -->
+    <div id="docOcrPreview" style="display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px 16px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:12px;color:#166534;margin-bottom:8px">✅ Dati estratti dal documento — verifica e correggi se necessario</div>
+      <div id="docOcrFields" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:12px"></div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button onclick="applicaOcr()" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">✓ Applica ai campi</button>
+        <button onclick="document.getElementById('docOcrPreview').style.display='none'" style="background:var(--bg2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer">✕ Ignora</button>
+      </div>
+    </div>
     <div class="modal-grid" id="newForm"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal()">Annulla</button>
@@ -2743,6 +2766,253 @@ async function saveNew() {
   await loadFromSheets();
   loadFornitori();
   selectContact(c.id);
+}
+
+// ─── OCR DOCUMENTI ────────────────────────────────────────────────────────────
+let ocrExtracted = {}; // dati estratti dall'OCR in attesa di essere applicati
+
+async function scanDocumento(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const status = document.getElementById('docScanStatus');
+  const label = document.getElementById('docScanLabel');
+  const preview = document.getElementById('docOcrPreview');
+
+  status.style.display = 'block';
+  status.textContent = '⏳ Lettura documento in corso… (potrebbe richiedere 20–40 secondi)';
+  label.textContent = '⏳ Scansione…';
+  preview.style.display = 'none';
+  ocrExtracted = {};
+
+  try {
+    // Converti PDF in immagine se necessario
+    let imageUrl;
+    if (file.type === 'application/pdf') {
+      // Per PDF usiamo direttamente l'URL object — Tesseract gestisce PDF base
+      imageUrl = URL.createObjectURL(file);
+    } else {
+      imageUrl = URL.createObjectURL(file);
+    }
+
+    // OCR con Tesseract.js — ita + eng per documenti italiani
+    const result = await Tesseract.recognize(imageUrl, 'ita+eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round((m.progress || 0) * 100);
+          status.textContent = `⏳ Riconoscimento testo: ${pct}%`;
+        }
+      }
+    });
+
+    URL.revokeObjectURL(imageUrl);
+    const testo = result.data.text || '';
+    console.log('[OCR raw]', testo);
+
+    // Parser intelligente per documenti italiani
+    ocrExtracted = parseDocumentoItaliano(testo);
+
+    if (Object.keys(ocrExtracted).length === 0) {
+      status.textContent = '⚠️ Nessun dato riconosciuto. Prova con un\'immagine più nitida.';
+      label.textContent = '📷 Riprova';
+      return;
+    }
+
+    // Mostra preview
+    mostraPreviewOcr(ocrExtracted);
+    status.style.display = 'none';
+    label.textContent = '📷 Nuovo documento';
+
+  } catch(e) {
+    console.error('[OCR error]', e);
+    status.textContent = '❌ Errore durante la scansione: ' + e.message;
+    label.textContent = '📷 Riprova';
+  }
+
+  // Reset input per permettere di caricare di nuovo lo stesso file
+  input.value = '';
+}
+
+function parseDocumentoItaliano(testo) {
+  const t = testo.toUpperCase().replace(/\r/g, '\n');
+  const linee = t.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+  const estratti = {};
+
+  // ── Tipo documento ──────────────────────────────────────────────────────────
+  if (/PASSAPORTO|PASSPORT/.test(t)) {
+    estratti.doc_tipo = "PASSAPORTO";
+  } else if (/CARTA\s*D[''']?\s*IDENTIT[AÀ]|IDENTITY\s*CARD/.test(t)) {
+    estratti.doc_tipo = "CARTA D'IDENTITÀ";
+  } else if (/PATENTE/.test(t)) {
+    estratti.doc_tipo = "PATENTE";
+  }
+
+  // ── Numero documento ─────────────────────────────────────────────────────────
+  // CI elettronica: AA 12345 AB  /  Passaporto: AA0000000
+  const numDocPatterns = [
+    /\b([A-Z]{2}\s?\d{5}\s?[A-Z]{2})\b/,         // CI elettronica
+    /\b([A-Z]{2}\d{7})\b/,                          // Passaporto italiano
+    /\bN[°.]?\s*([A-Z0-9]{5,12})\b/,               // generico "N. XXXXX"
+    /NUMERO\s*DOCUMENTO[:\s]+([A-Z0-9\s]{5,15})/,
+  ];
+  for (const p of numDocPatterns) {
+    const m = t.match(p);
+    if (m) { estratti.doc_num = m[1].replace(/\s+/g,' ').trim(); break; }
+  }
+
+  // ── Codice Fiscale ──────────────────────────────────────────────────────────
+  const cfMatch = t.match(/\b([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])\b/);
+  if (cfMatch) estratti.codice_fiscale = cfMatch[1];
+
+  // ── Cognome e Nome ──────────────────────────────────────────────────────────
+  // CI/Passaporto italiano: COGNOME su una riga, NOME sulla successiva
+  // oppure: COGNOME / SURNAME  poi  NOME / GIVEN NAMES
+  const cognomeIdx = linee.findIndex(l => /^COGNOME$|^SURNAME$|^NOM$/.test(l));
+  if (cognomeIdx >= 0 && linee[cognomeIdx+1]) {
+    const val = linee[cognomeIdx+1].replace(/[^A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞŸ '\-]/g,'').trim();
+    if (val.length > 1 && !/COGNOME|SURNAME|NOME|NAME/.test(val)) estratti.cognome = capitalize(val);
+  }
+  const nomeIdx = linee.findIndex(l => /^NOME$|^GIVEN\s*NAMES?$|^PRÉNOMS?$/.test(l));
+  if (nomeIdx >= 0 && linee[nomeIdx+1]) {
+    const val = linee[nomeIdx+1].replace(/[^A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞŸ '\-]/g,'').trim();
+    if (val.length > 1 && !/COGNOME|SURNAME|NOME|NAME/.test(val)) estratti.nome = capitalize(val);
+  }
+
+  // Fallback: cerca MRZ (Machine Readable Zone) per passaporto
+  // MRZ line 1: P<ITA<COGNOME<<NOME<<<<<<...
+  const mrzMatch = t.match(/P[<O]ITA([A-Z<]{39})/);
+  if (mrzMatch && !estratti.cognome) {
+    const mrzNome = mrzMatch[1].split('<<');
+    if (mrzNome[0]) estratti.cognome = capitalize(mrzNome[0].replace(/</g,' ').trim());
+    if (mrzNome[1]) estratti.nome = capitalize(mrzNome[1].replace(/</g,' ').trim());
+  }
+
+  // ── Data di nascita ─────────────────────────────────────────────────────────
+  // Formati: GG/MM/AAAA  GG-MM-AAAA  GG.MM.AAAA
+  // Cerca vicino a "NASCITA" / "BIRTH" / "DATE OF BIRTH"
+  const nascitaCtx = t.match(/(?:DATA\s*DI\s*NASCITA|DATE\s*OF\s*BIRTH|GEBOREN|NATO\s*IL|NATA\s*IL)[:\s]*(\d{2}[\/.\-]\d{2}[\/.\-]\d{4})/);
+  if (nascitaCtx) {
+    estratti.data_nascita = nascitaCtx[1].replace(/[.\-]/g,'/');
+  } else {
+    // Dal CF: posizioni 7-8=anno, 9=mese, 10-11=giorno
+    if (estratti.codice_fiscale) {
+      const cf = estratti.codice_fiscale;
+      const meseMap = {A:'01',B:'02',C:'03',D:'04',E:'05',H:'06',L:'07',M:'08',P:'09',R:'10',S:'11',T:'12'};
+      const gg = cf.substring(9,11);
+      const mm = meseMap[cf[8]] || '??';
+      const aaRaw = parseInt(cf.substring(6,8));
+      // Anno: se >25 probabilmente 19xx, altrimenti 20xx
+      const aa = aaRaw > 25 ? '19'+String(aaRaw).padStart(2,'0') : '20'+String(aaRaw).padStart(2,'0');
+      const giorno = parseInt(gg) > 40 ? String(parseInt(gg)-40).padStart(2,'0') : gg; // donne +40
+      estratti.data_nascita = `${giorno}/${mm}/${aa}`;
+    }
+    // Cerca data generica vicino a parole chiave
+    if (!estratti.data_nascita) {
+      const dateMatch = t.match(/\b(\d{2}[\/.\-]\d{2}[\/.\-]\d{4})\b/g);
+      if (dateMatch) estratti.data_nascita = dateMatch[0].replace(/[.\-]/g,'/');
+    }
+  }
+
+  // ── Luogo di nascita ────────────────────────────────────────────────────────
+  const luogoCtx = t.match(/(?:COMUNE\s*DI\s*NASCITA|LUOGO\s*DI\s*NASCITA|PLACE\s*OF\s*BIRTH|NATO\s*A|NATA\s*A)[:\s]+([A-ZÀÁÂÈÉÌÍÒÓÙÚ \-']+?)(?:\n|$)/);
+  if (luogoCtx) {
+    const lv = luogoCtx[1].replace(/[^A-ZÀÁÂÈÉÌÍÒÓÙÚ '\-]/g,'').trim();
+    if (lv.length > 1) estratti.luogo_nascita = capitalize(lv);
+  }
+  // Dal CF: luogo nascita codificato nei caratteri 11-14
+  if (!estratti.luogo_nascita && estratti.codice_fiscale) {
+    // Non decodifichiamo il codice catastale qui (richiederebbe lookup)
+    // Skip — già estratto dal testo o usiamo comune_cf se disponibile
+  }
+
+  // ── Indirizzo residenza ─────────────────────────────────────────────────────
+  const indirizzoCtx = t.match(/(?:RESIDENZA|INDIRIZZO|RESIDENTE\s*IN|VIA|CORSO|PIAZZA|VIALE|LARGO)[:\s]*([A-Z0-9ÀÁÂÈÉÌÍÒÓÙÚ ,.'\/\-]+?)(?:\n|$)/);
+  if (indirizzoCtx) {
+    const iv = indirizzoCtx[1].trim();
+    if (iv.length > 3) estratti.indirizzo = capitalize(iv);
+  }
+
+  // ── Comune di residenza ─────────────────────────────────────────────────────
+  const cittaCtx = t.match(/(?:COMUNE\s*DI\s*RESIDENZA|CITTÁ\s*DI\s*RESIDENZA)[:\s]+([A-ZÀÁÂÈÉÌÍÒÓÙÚ \-']+?)(?:\n|$)/);
+  if (cittaCtx) {
+    const cv = cittaCtx[1].replace(/[^A-ZÀÁÂÈÉÌÍÒÓÙÚ '\-]/g,'').trim();
+    if (cv.length > 1) estratti.citta_residenza = capitalize(cv);
+  }
+
+  return estratti;
+}
+
+function capitalize(str) {
+  return str.toLowerCase().replace(/(?:^|\s|'|-)(\S)/g, c => c.toUpperCase());
+}
+
+const OCR_FIELD_LABELS = {
+  cognome: 'Cognome',
+  nome: 'Nome',
+  codice_fiscale: 'Codice Fiscale',
+  data_nascita: 'Data di nascita',
+  luogo_nascita: 'Luogo di nascita',
+  citta_residenza: 'Città di residenza',
+  indirizzo: 'Indirizzo',
+  doc_tipo: 'Tipo documento',
+  doc_num: 'Numero documento',
+};
+
+function mostraPreviewOcr(dati) {
+  const container = document.getElementById('docOcrFields');
+  container.innerHTML = Object.entries(dati).map(([k, v]) => {
+    const label = OCR_FIELD_LABELS[k] || k;
+    return `<div style="display:flex;flex-direction:column;gap:2px">
+      <span style="font-size:10px;color:#166534;font-weight:700;text-transform:uppercase;letter-spacing:0.06em">${label}</span>
+      <span style="font-weight:600;color:#14532d">${v}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('docOcrPreview').style.display = 'block';
+}
+
+function applicaOcr() {
+  // Mappa nome_campo_ocr → id_elemento_form
+  const mappaCampi = {
+    cognome:        'new_cognome',
+    nome:           'new_nome',
+    codice_fiscale: 'new_codice_fiscale',
+    data_nascita:   'new_data_nascita',
+    luogo_nascita:  'new_luogo_nascita',
+    citta_residenza:'new_citta_residenza',
+    indirizzo:      'new_indirizzo',
+    doc_tipo:       'new_doc_tipo',
+    doc_num:        'new_doc_num',
+  };
+
+  let applicati = 0;
+  for (const [campo, elId] of Object.entries(mappaCampi)) {
+    if (!ocrExtracted[campo]) continue;
+    const el = document.getElementById(elId);
+    if (!el) continue;
+
+    if (el.tagName === 'SELECT') {
+      // Cerca opzione corrispondente
+      const val = ocrExtracted[campo].toUpperCase();
+      for (const opt of el.options) {
+        if (opt.value.toUpperCase() === val || opt.text.toUpperCase() === val) {
+          el.value = opt.value;
+          break;
+        }
+      }
+    } else if (el.type === 'date') {
+      // Converti GG/MM/AAAA → AAAA-MM-GG per input[type=date]
+      const m = ocrExtracted[campo].match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (m) el.value = `${m[3]}-${m[2]}-${m[1]}`;
+      else el.value = ocrExtracted[campo];
+    } else {
+      el.value = ocrExtracted[campo];
+    }
+    applicati++;
+  }
+
+  document.getElementById('docOcrPreview').style.display = 'none';
+  showToast(`✓ ${applicati} campi compilati dal documento`, 'success');
+  ocrExtracted = {};
 }
 
 function exportCSV() {
