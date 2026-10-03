@@ -2781,27 +2781,10 @@ function geminiEndpoint() {
   return `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${getGeminiKey()}`;
 }
 
-const GEMINI_PROMPT = `Sei un sistema di lettura di documenti di identità italiani (Carta d'Identità, Passaporto, Patente).
-Analizza l'immagine e restituisci SOLO un oggetto JSON valido (senza markdown, senza backtick) con questi campi (usa null se non presente):
-{
-  "cognome": "...",
-  "nome": "...",
-  "codice_fiscale": "...",
-  "data_nascita": "GG/MM/AAAA",
-  "luogo_nascita": "...",
-  "citta_residenza": "...",
-  "indirizzo": "...",
-  "doc_tipo": "CARTA D'IDENTITÀ" oppure "PASSAPORTO" oppure "PATENTE",
-  "doc_num": "..."
-}
-Regole:
-- cognome e nome: solo il valore, in Title Case (es. "Rossi", "Mario")
-- data_nascita: formato GG/MM/AAAA
-- codice_fiscale: 16 caratteri alfanumerici maiuscoli
-- doc_num: il numero stampato sul documento
-- indirizzo: via/corso/piazza + numero civico se presente
-- citta_residenza: solo il comune, senza provincia
-- Se il campo non è leggibile o non è presente nel documento, metti null`;
+const GEMINI_PROMPT = `Leggi questo documento di identità italiano ed estrai i dati anagrafici.
+Rispondi SOLO con JSON, nessun altro testo:
+{"cognome":"","nome":"","codice_fiscale":"","data_nascita":"GG/MM/AAAA","luogo_nascita":"","citta_residenza":"","indirizzo":"","doc_tipo":"CARTA D'IDENTITÀ o PASSAPORTO o PATENTE","doc_num":""}
+Usa null per i campi assenti. cognome/nome in Title Case. data_nascita formato GG/MM/AAAA. codice_fiscale 16 caratteri maiuscoli.`;
 
 async function scanDocumento(input) {
   const file = input.files[0];
@@ -2843,7 +2826,11 @@ async function scanDocumento(input) {
           { inline_data: { mime_type: mimeType, data: base64 } }
         ]
       }],
-      generationConfig: { temperature: 0, maxOutputTokens: 1024 }
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json'
+      }
     };
 
     const resp = await fetch(geminiEndpoint(), {
