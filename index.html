@@ -392,8 +392,6 @@
     .comp-detail-tre { grid-template-columns: 1fr !important; }
   }
 </style>
-<!-- Tesseract.js per OCR documenti -->
-<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 
@@ -2768,194 +2766,156 @@ async function saveNew() {
   selectContact(c.id);
 }
 
-// ─── OCR DOCUMENTI ────────────────────────────────────────────────────────────
-let ocrExtracted = {}; // dati estratti dall'OCR in attesa di essere applicati
+// ─── SCAN DOCUMENTO CON GEMINI VISION ────────────────────────────────────────
+let ocrExtracted = {};
+
+// Gemini API key: usa la stessa API_KEY del progetto GCP se Gemini API è abilitata,
+// altrimenti l'utente può inserirne una dedicata salvata in sessionStorage
+function getGeminiKey() {
+  return sessionStorage.getItem('gemini_api_key') || API_KEY;
+}
+function geminiEndpoint() {
+  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${getGeminiKey()}`;
+}
+
+const GEMINI_PROMPT = `Sei un sistema di lettura di documenti di identità italiani (Carta d'Identità, Passaporto, Patente).
+Analizza l'immagine e restituisci SOLO un oggetto JSON valido (senza markdown, senza backtick) con questi campi (usa null se non presente):
+{
+  "cognome": "...",
+  "nome": "...",
+  "codice_fiscale": "...",
+  "data_nascita": "GG/MM/AAAA",
+  "luogo_nascita": "...",
+  "citta_residenza": "...",
+  "indirizzo": "...",
+  "doc_tipo": "CARTA D'IDENTITÀ" oppure "PASSAPORTO" oppure "PATENTE",
+  "doc_num": "..."
+}
+Regole:
+- cognome e nome: solo il valore, in Title Case (es. "Rossi", "Mario")
+- data_nascita: formato GG/MM/AAAA
+- codice_fiscale: 16 caratteri alfanumerici maiuscoli
+- doc_num: il numero stampato sul documento
+- indirizzo: via/corso/piazza + numero civico se presente
+- citta_residenza: solo il comune, senza provincia
+- Se il campo non è leggibile o non è presente nel documento, metti null`;
 
 async function scanDocumento(input) {
   const file = input.files[0];
   if (!file) return;
 
   const status = document.getElementById('docScanStatus');
-  const label = document.getElementById('docScanLabel');
+  const label  = document.getElementById('docScanLabel');
   const preview = document.getElementById('docOcrPreview');
 
   status.style.display = 'block';
-  status.textContent = '⏳ Lettura documento in corso… (potrebbe richiedere 20–40 secondi)';
-  label.textContent = '⏳ Scansione…';
+  status.textContent = '⏳ Analisi documento in corso…';
+  label.textContent = '⏳ Analisi…';
   preview.style.display = 'none';
   ocrExtracted = {};
+  input.value = '';
 
   try {
-    // Converti PDF in immagine se necessario
-    let imageUrl;
-    if (file.type === 'application/pdf') {
-      // Per PDF usiamo direttamente l'URL object — Tesseract gestisce PDF base
-      imageUrl = URL.createObjectURL(file);
-    } else {
-      imageUrl = URL.createObjectURL(file);
-    }
+    // Converti file in base64
+    const base64 = await fileToBase64(file);
+    const mimeType = file.type || 'image/jpeg';
 
-    // OCR con Tesseract.js — ita + eng per documenti italiani
-    const result = await Tesseract.recognize(imageUrl, 'ita+eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          const pct = Math.round((m.progress || 0) * 100);
-          status.textContent = `⏳ Riconoscimento testo: ${pct}%`;
-        }
-      }
+    // Chiama Gemini Vision
+    const body = {
+      contents: [{
+        parts: [
+          { text: GEMINI_PROMPT },
+          { inline_data: { mime_type: mimeType, data: base64 } }
+        ]
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 512 }
+    };
+
+    const resp = await fetch(geminiEndpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
 
-    URL.revokeObjectURL(imageUrl);
-    const testo = result.data.text || '';
-    console.log('[OCR raw]', testo);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const msg = err?.error?.message || '';
+      // Se errore 403 o API non abilitata, mostra campo per inserire chiave Gemini dedicata
+      if (resp.status === 400 || resp.status === 403 || msg.includes('API_KEY') || msg.includes('not enabled') || msg.includes('disabled')) {
+        status.innerHTML = `⚠️ L'API Gemini non è abilitata per questa chiave.<br>
+          <span style="font-size:10px">Inserisci una <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">Gemini API key</a> dedicata (gratuita):</span><br>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <input id="geminiKeyInput" type="text" placeholder="AIzaSy..." style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:var(--bg1);color:var(--text1)">
+            <button onclick="salvaGeminiKey()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:12px;cursor:pointer">Salva e riprova</button>
+          </div>`;
+        label.textContent = '📷 Carica documento';
+        return;
+      }
+      throw new Error(msg || `Errore API ${resp.status}`);
+    }
 
-    // Parser intelligente per documenti italiani
-    ocrExtracted = parseDocumentoItaliano(testo);
+    const data = await resp.json();
+    const testo = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log('[Gemini raw]', testo);
+
+    // Pulisci ed estrai JSON
+    const jsonStr = testo.replace(/```json|```/g, '').trim();
+    const estratti = JSON.parse(jsonStr);
+
+    // Filtra null e valori vuoti
+    ocrExtracted = Object.fromEntries(
+      Object.entries(estratti).filter(([, v]) => v && v !== 'null')
+    );
 
     if (Object.keys(ocrExtracted).length === 0) {
-      status.textContent = '⚠️ Nessun dato riconosciuto. Prova con un\'immagine più nitida.';
+      status.textContent = '⚠️ Nessun dato riconosciuto — riprova con immagine più nitida';
       label.textContent = '📷 Riprova';
       return;
     }
 
-    // Mostra preview
     mostraPreviewOcr(ocrExtracted);
     status.style.display = 'none';
     label.textContent = '📷 Nuovo documento';
 
   } catch(e) {
-    console.error('[OCR error]', e);
-    status.textContent = '❌ Errore durante la scansione: ' + e.message;
+    console.error('[Gemini OCR error]', e);
+    status.textContent = '❌ ' + (e.message || 'Errore durante l\'analisi');
     label.textContent = '📷 Riprova';
   }
-
-  // Reset input per permettere di caricare di nuovo lo stesso file
-  input.value = '';
 }
 
-function parseDocumentoItaliano(testo) {
-  const t = testo.toUpperCase().replace(/\r/g, '\n');
-  const linee = t.split('\n').map(l => l.trim()).filter(l => l.length > 1);
-  const estratti = {};
-
-  // ── Tipo documento ──────────────────────────────────────────────────────────
-  if (/PASSAPORTO|PASSPORT/.test(t)) {
-    estratti.doc_tipo = "PASSAPORTO";
-  } else if (/CARTA\s*D[''']?\s*IDENTIT[AÀ]|IDENTITY\s*CARD/.test(t)) {
-    estratti.doc_tipo = "CARTA D'IDENTITÀ";
-  } else if (/PATENTE/.test(t)) {
-    estratti.doc_tipo = "PATENTE";
-  }
-
-  // ── Numero documento ─────────────────────────────────────────────────────────
-  // CI elettronica: AA 12345 AB  /  Passaporto: AA0000000
-  const numDocPatterns = [
-    /\b([A-Z]{2}\s?\d{5}\s?[A-Z]{2})\b/,         // CI elettronica
-    /\b([A-Z]{2}\d{7})\b/,                          // Passaporto italiano
-    /\bN[°.]?\s*([A-Z0-9]{5,12})\b/,               // generico "N. XXXXX"
-    /NUMERO\s*DOCUMENTO[:\s]+([A-Z0-9\s]{5,15})/,
-  ];
-  for (const p of numDocPatterns) {
-    const m = t.match(p);
-    if (m) { estratti.doc_num = m[1].replace(/\s+/g,' ').trim(); break; }
-  }
-
-  // ── Codice Fiscale ──────────────────────────────────────────────────────────
-  const cfMatch = t.match(/\b([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])\b/);
-  if (cfMatch) estratti.codice_fiscale = cfMatch[1];
-
-  // ── Cognome e Nome ──────────────────────────────────────────────────────────
-  // CI/Passaporto italiano: COGNOME su una riga, NOME sulla successiva
-  // oppure: COGNOME / SURNAME  poi  NOME / GIVEN NAMES
-  const cognomeIdx = linee.findIndex(l => /^COGNOME$|^SURNAME$|^NOM$/.test(l));
-  if (cognomeIdx >= 0 && linee[cognomeIdx+1]) {
-    const val = linee[cognomeIdx+1].replace(/[^A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞŸ '\-]/g,'').trim();
-    if (val.length > 1 && !/COGNOME|SURNAME|NOME|NAME/.test(val)) estratti.cognome = capitalize(val);
-  }
-  const nomeIdx = linee.findIndex(l => /^NOME$|^GIVEN\s*NAMES?$|^PRÉNOMS?$/.test(l));
-  if (nomeIdx >= 0 && linee[nomeIdx+1]) {
-    const val = linee[nomeIdx+1].replace(/[^A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞŸ '\-]/g,'').trim();
-    if (val.length > 1 && !/COGNOME|SURNAME|NOME|NAME/.test(val)) estratti.nome = capitalize(val);
-  }
-
-  // Fallback: cerca MRZ (Machine Readable Zone) per passaporto
-  // MRZ line 1: P<ITA<COGNOME<<NOME<<<<<<...
-  const mrzMatch = t.match(/P[<O]ITA([A-Z<]{39})/);
-  if (mrzMatch && !estratti.cognome) {
-    const mrzNome = mrzMatch[1].split('<<');
-    if (mrzNome[0]) estratti.cognome = capitalize(mrzNome[0].replace(/</g,' ').trim());
-    if (mrzNome[1]) estratti.nome = capitalize(mrzNome[1].replace(/</g,' ').trim());
-  }
-
-  // ── Data di nascita ─────────────────────────────────────────────────────────
-  // Formati: GG/MM/AAAA  GG-MM-AAAA  GG.MM.AAAA
-  // Cerca vicino a "NASCITA" / "BIRTH" / "DATE OF BIRTH"
-  const nascitaCtx = t.match(/(?:DATA\s*DI\s*NASCITA|DATE\s*OF\s*BIRTH|GEBOREN|NATO\s*IL|NATA\s*IL)[:\s]*(\d{2}[\/.\-]\d{2}[\/.\-]\d{4})/);
-  if (nascitaCtx) {
-    estratti.data_nascita = nascitaCtx[1].replace(/[.\-]/g,'/');
-  } else {
-    // Dal CF: posizioni 7-8=anno, 9=mese, 10-11=giorno
-    if (estratti.codice_fiscale) {
-      const cf = estratti.codice_fiscale;
-      const meseMap = {A:'01',B:'02',C:'03',D:'04',E:'05',H:'06',L:'07',M:'08',P:'09',R:'10',S:'11',T:'12'};
-      const gg = cf.substring(9,11);
-      const mm = meseMap[cf[8]] || '??';
-      const aaRaw = parseInt(cf.substring(6,8));
-      // Anno: se >25 probabilmente 19xx, altrimenti 20xx
-      const aa = aaRaw > 25 ? '19'+String(aaRaw).padStart(2,'0') : '20'+String(aaRaw).padStart(2,'0');
-      const giorno = parseInt(gg) > 40 ? String(parseInt(gg)-40).padStart(2,'0') : gg; // donne +40
-      estratti.data_nascita = `${giorno}/${mm}/${aa}`;
-    }
-    // Cerca data generica vicino a parole chiave
-    if (!estratti.data_nascita) {
-      const dateMatch = t.match(/\b(\d{2}[\/.\-]\d{2}[\/.\-]\d{4})\b/g);
-      if (dateMatch) estratti.data_nascita = dateMatch[0].replace(/[.\-]/g,'/');
-    }
-  }
-
-  // ── Luogo di nascita ────────────────────────────────────────────────────────
-  const luogoCtx = t.match(/(?:COMUNE\s*DI\s*NASCITA|LUOGO\s*DI\s*NASCITA|PLACE\s*OF\s*BIRTH|NATO\s*A|NATA\s*A)[:\s]+([A-ZÀÁÂÈÉÌÍÒÓÙÚ \-']+?)(?:\n|$)/);
-  if (luogoCtx) {
-    const lv = luogoCtx[1].replace(/[^A-ZÀÁÂÈÉÌÍÒÓÙÚ '\-]/g,'').trim();
-    if (lv.length > 1) estratti.luogo_nascita = capitalize(lv);
-  }
-  // Dal CF: luogo nascita codificato nei caratteri 11-14
-  if (!estratti.luogo_nascita && estratti.codice_fiscale) {
-    // Non decodifichiamo il codice catastale qui (richiederebbe lookup)
-    // Skip — già estratto dal testo o usiamo comune_cf se disponibile
-  }
-
-  // ── Indirizzo residenza ─────────────────────────────────────────────────────
-  const indirizzoCtx = t.match(/(?:RESIDENZA|INDIRIZZO|RESIDENTE\s*IN|VIA|CORSO|PIAZZA|VIALE|LARGO)[:\s]*([A-Z0-9ÀÁÂÈÉÌÍÒÓÙÚ ,.'\/\-]+?)(?:\n|$)/);
-  if (indirizzoCtx) {
-    const iv = indirizzoCtx[1].trim();
-    if (iv.length > 3) estratti.indirizzo = capitalize(iv);
-  }
-
-  // ── Comune di residenza ─────────────────────────────────────────────────────
-  const cittaCtx = t.match(/(?:COMUNE\s*DI\s*RESIDENZA|CITTÁ\s*DI\s*RESIDENZA)[:\s]+([A-ZÀÁÂÈÉÌÍÒÓÙÚ \-']+?)(?:\n|$)/);
-  if (cittaCtx) {
-    const cv = cittaCtx[1].replace(/[^A-ZÀÁÂÈÉÌÍÒÓÙÚ '\-]/g,'').trim();
-    if (cv.length > 1) estratti.citta_residenza = capitalize(cv);
-  }
-
-  return estratti;
+function salvaGeminiKey() {
+  const key = document.getElementById('geminiKeyInput')?.value?.trim();
+  if (!key || !key.startsWith('AIza')) { showToast('Chiave non valida', 'error'); return; }
+  sessionStorage.setItem('gemini_api_key', key);
+  document.getElementById('docScanStatus').textContent = '✓ Chiave salvata — ora carica di nuovo il documento';
+  document.getElementById('docScanLabel').textContent = '📷 Carica documento';
+  showToast('Chiave Gemini salvata per questa sessione', 'success');
 }
 
-function capitalize(str) {
-  return str.toLowerCase().replace(/(?:^|\s|'|-)(\S)/g, c => c.toUpperCase());
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Rimuovi prefisso "data:image/...;base64,"
+      const b64 = reader.result.split(',')[1];
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 const OCR_FIELD_LABELS = {
-  cognome: 'Cognome',
-  nome: 'Nome',
+  cognome:        'Cognome',
+  nome:           'Nome',
   codice_fiscale: 'Codice Fiscale',
-  data_nascita: 'Data di nascita',
-  luogo_nascita: 'Luogo di nascita',
-  citta_residenza: 'Città di residenza',
-  indirizzo: 'Indirizzo',
-  doc_tipo: 'Tipo documento',
-  doc_num: 'Numero documento',
+  data_nascita:   'Data di nascita',
+  luogo_nascita:  'Luogo di nascita',
+  citta_residenza:'Città di residenza',
+  indirizzo:      'Indirizzo',
+  doc_tipo:       'Tipo documento',
+  doc_num:        'Numero documento',
 };
 
 function mostraPreviewOcr(dati) {
@@ -2971,7 +2931,6 @@ function mostraPreviewOcr(dati) {
 }
 
 function applicaOcr() {
-  // Mappa nome_campo_ocr → id_elemento_form
   const mappaCampi = {
     cognome:        'new_cognome',
     nome:           'new_nome',
@@ -2991,16 +2950,14 @@ function applicaOcr() {
     if (!el) continue;
 
     if (el.tagName === 'SELECT') {
-      // Cerca opzione corrispondente
       const val = ocrExtracted[campo].toUpperCase();
       for (const opt of el.options) {
         if (opt.value.toUpperCase() === val || opt.text.toUpperCase() === val) {
-          el.value = opt.value;
-          break;
+          el.value = opt.value; break;
         }
       }
     } else if (el.type === 'date') {
-      // Converti GG/MM/AAAA → AAAA-MM-GG per input[type=date]
+      // GG/MM/AAAA → AAAA-MM-GG
       const m = ocrExtracted[campo].match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
       if (m) el.value = `${m[3]}-${m[2]}-${m[1]}`;
       else el.value = ocrExtracted[campo];
