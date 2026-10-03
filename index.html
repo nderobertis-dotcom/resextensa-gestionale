@@ -2843,7 +2843,7 @@ async function scanDocumento(input) {
           { inline_data: { mime_type: mimeType, data: base64 } }
         ]
       }],
-      generationConfig: { temperature: 0, maxOutputTokens: 512 }
+      generationConfig: { temperature: 0, maxOutputTokens: 1024 }
     };
 
     const resp = await fetch(geminiEndpoint(), {
@@ -2873,9 +2873,25 @@ async function scanDocumento(input) {
     const testo = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log('[Gemini raw]', testo);
 
-    // Pulisci ed estrai JSON
-    const jsonStr = testo.replace(/```json|```/g, '').trim();
-    const estratti = JSON.parse(jsonStr);
+    // Pulisci ed estrai JSON — gestisce anche risposte troncate
+    let jsonStr = testo.replace(/```json|```/g, '').trim();
+    // Se il JSON è troncato, chiudilo prima di fare il parse
+    if (!jsonStr.endsWith('}')) {
+      // Rimuovi l'ultimo campo incompleto e chiudi il JSON
+      jsonStr = jsonStr.replace(/,\s*"[^"]*"\s*:\s*"[^"]*$/, '').replace(/,\s*$/, '') + '}';
+    }
+    let estratti;
+    try {
+      estratti = JSON.parse(jsonStr);
+    } catch(parseErr) {
+      // Fallback: estrai i campi presenti con regex
+      estratti = {};
+      const campiRegex = /"(cognome|nome|codice_fiscale|data_nascita|luogo_nascita|citta_residenza|indirizzo|doc_tipo|doc_num)"\s*:\s*"([^"]*)"/g;
+      let m;
+      while ((m = campiRegex.exec(testo)) !== null) {
+        if (m[2] && m[2] !== 'null') estratti[m[1]] = m[2];
+      }
+    }
 
     // Filtra null e valori vuoti
     ocrExtracted = Object.fromEntries(
