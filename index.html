@@ -2778,7 +2778,7 @@ function getGeminiKey() {
   return GEMINI_API_KEY || sessionStorage.getItem('gemini_api_key');
 }
 function geminiEndpoint() {
-  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${getGeminiKey()}`;
+  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getGeminiKey()}`;
 }
 
 const GEMINI_PROMPT = `Sei un sistema di lettura di documenti di identità italiani (Carta d'Identità, Passaporto, Patente).
