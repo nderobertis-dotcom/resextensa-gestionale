@@ -1480,16 +1480,32 @@
   <div class="modal">
     <div class="modal-title">Nuovo componente</div>
     <!-- Scan documento -->
-    <div id="docScanBar" style="background:var(--bg2);border:1.5px dashed var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:180px">
-        <div style="font-weight:600;font-size:13px;color:var(--text1);margin-bottom:2px">📄 Compila da documento</div>
-        <div style="font-size:11px;color:var(--text3)">Carica foto o scansione di CI/Passaporto per compilare automaticamente i campi anagrafici</div>
+    <div id="docScanBar" style="background:var(--bg2);border:1.5px dashed var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px">
+      <div style="font-weight:600;font-size:13px;color:var(--text1);margin-bottom:2px">📄 Compila da documento</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Carica fronte e/o retro di CI, Passaporto o Patente per compilare automaticamente i campi</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <!-- Fronte -->
+        <div style="flex:1;min-width:140px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:5px">Fronte</div>
+          <label id="docFronteLabel" for="docFronteInput" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--bg1);border:1.5px dashed var(--border);border-radius:7px;padding:10px 8px;font-size:12px;color:var(--text2);transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <span id="docFronteIcon">📷</span> <span id="docFronteText">Carica fronte</span>
+          </label>
+          <input type="file" id="docFronteInput" accept="image/*" style="display:none" onchange="anteprima(this,'fronte')">
+        </div>
+        <!-- Retro -->
+        <div style="flex:1;min-width:140px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:5px">Retro <span style="font-weight:400;font-size:10px;opacity:.7">(facoltativo)</span></div>
+          <label id="docRetroLabel" for="docRetroInput" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--bg1);border:1.5px dashed var(--border);border-radius:7px;padding:10px 8px;font-size:12px;color:var(--text2);transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <span id="docRetroIcon">📷</span> <span id="docRetroText">Carica retro</span>
+          </label>
+          <input type="file" id="docRetroInput" accept="image/*" style="display:none" onchange="anteprima(this,'retro')">
+        </div>
+        <!-- Pulsante analizza -->
+        <div style="display:flex;align-items:flex-end">
+          <button id="docAnalizzaBtn" onclick="scanDocumento()" style="background:var(--accent);color:#fff;border:none;border-radius:7px;padding:10px 16px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;opacity:.4;pointer-events:none">🔍 Analizza</button>
+        </div>
       </div>
-      <label id="docScanLabel" style="cursor:pointer;background:var(--accent);color:#fff;border:none;border-radius:7px;padding:8px 14px;font-size:12px;font-weight:600;white-space:nowrap;display:inline-block" for="docScanInput">
-        📷 Carica documento
-      </label>
-      <input type="file" id="docScanInput" accept="image/*,application/pdf" style="display:none" onchange="scanDocumento(this)">
-      <div id="docScanStatus" style="font-size:11px;color:var(--text3);width:100%;display:none"></div>
+      <div id="docScanStatus" style="font-size:11px;color:var(--text3);margin-top:8px;display:none"></div>
     </div>
     <!-- Preview risultati OCR -->
     <div id="docOcrPreview" style="display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px 16px;margin-bottom:14px">
@@ -2781,18 +2797,50 @@ function geminiEndpoint() {
   return `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${getGeminiKey()}`;
 }
 
-const GEMINI_PROMPT = `Leggi questo documento di identità italiano ed estrai i dati anagrafici.
+const GEMINI_PROMPT = `Leggi questo documento di identità italiano (possono esserci una o due immagini: fronte e retro) ed estrai i dati anagrafici combinando le informazioni di entrambe le facciate.
 Rispondi SOLO con JSON, nessun altro testo:
 {"cognome":"","nome":"","codice_fiscale":"","data_nascita":"GG/MM/AAAA","luogo_nascita":"","citta_residenza":"","indirizzo":"","doc_tipo":"CARTA D'IDENTITÀ o PASSAPORTO o PATENTE","doc_num":""}
 Usa null per i campi assenti. cognome/nome in Title Case. data_nascita formato GG/MM/AAAA. codice_fiscale 16 caratteri maiuscoli.`;
 
-async function scanDocumento(input) {
+// Mostra anteprima miniatura e abilita il pulsante Analizza quando il fronte è caricato
+function anteprima(input, lato) {
   const file = input.files[0];
+  const icon = document.getElementById('docFronteIcon');
+  const text = document.getElementById('docFronteText');
+  const rIcon = document.getElementById('docRetroIcon');
+  const rText = document.getElementById('docRetroText');
+  const btn  = document.getElementById('docAnalizzaBtn');
+
   if (!file) return;
 
-  const status = document.getElementById('docScanStatus');
-  const label  = document.getElementById('docScanLabel');
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = `<img src="${e.target.result}" style="height:28px;width:44px;object-fit:cover;border-radius:3px;vertical-align:middle">`;
+    if (lato === 'fronte') {
+      icon.innerHTML = img;
+      text.textContent = file.name.length > 16 ? file.name.substring(0,14)+'…' : file.name;
+      // Abilita pulsante Analizza
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+    } else {
+      rIcon.innerHTML = img;
+      rText.textContent = file.name.length > 16 ? file.name.substring(0,14)+'…' : file.name;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function scanDocumento() {
+  const fronteInput = document.getElementById('docFronteInput');
+  const retroInput  = document.getElementById('docRetroInput');
+  const fronteFile  = fronteInput?.files?.[0];
+  const retroFile   = retroInput?.files?.[0];
+
+  if (!fronteFile) return;
+
+  const status  = document.getElementById('docScanStatus');
   const preview = document.getElementById('docOcrPreview');
+  const btn     = document.getElementById('docAnalizzaBtn');
 
   if (!getGeminiKey()) {
     status.style.display = 'block';
@@ -2802,30 +2850,38 @@ async function scanDocumento(input) {
         <input id="geminiKeyInput" type="text" placeholder="AIzaSy..." style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:var(--bg1);color:var(--text1)">
         <button onclick="salvaGeminiKey()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:12px;cursor:pointer">Salva e riprova</button>
       </div>`;
-    input.value = '';
     return;
   }
 
   status.style.display = 'block';
-  status.textContent = '⏳ Analisi documento in corso…';
-  label.textContent = '⏳ Analisi…';
+  status.textContent = retroFile
+    ? '⏳ Analisi fronte + retro in corso…'
+    : '⏳ Analisi documento in corso…';
+  btn.style.opacity = '.4';
+  btn.style.pointerEvents = 'none';
   preview.style.display = 'none';
   ocrExtracted = {};
-  input.value = '';
 
   try {
-    // Converti file in base64
-    const base64 = await fileToBase64(file);
-    const mimeType = file.type || 'image/jpeg';
+    // Converti fronte in base64
+    const fronteBase64 = await fileToBase64(fronteFile);
+    const fronteMime   = fronteFile.type || 'image/jpeg';
 
-    // Chiama Gemini Vision
+    // Costruisci le parti: testo + fronte [+ retro se presente]
+    const parts = [
+      { text: GEMINI_PROMPT },
+      { inline_data: { mime_type: fronteMime, data: fronteBase64 } }
+    ];
+
+    if (retroFile) {
+      const retroBase64 = await fileToBase64(retroFile);
+      const retroMime   = retroFile.type || 'image/jpeg';
+      parts.push({ inline_data: { mime_type: retroMime, data: retroBase64 } });
+    }
+
+    // Chiama Gemini Vision con tutte le immagini in un'unica richiesta
     const body = {
-      contents: [{
-        parts: [
-          { text: GEMINI_PROMPT },
-          { inline_data: { mime_type: mimeType, data: base64 } }
-        ]
-      }],
+      contents: [{ parts }],
       generationConfig: {
         temperature: 0,
         maxOutputTokens: 2048,
@@ -2842,7 +2898,6 @@ async function scanDocumento(input) {
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       const msg = err?.error?.message || '';
-      // Se errore 403 o API non abilitata, mostra campo per inserire chiave Gemini dedicata
       if (resp.status === 400 || resp.status === 403 || msg.includes('API_KEY') || msg.includes('not enabled') || msg.includes('disabled')) {
         status.innerHTML = `⚠️ L'API Gemini non è abilitata per questa chiave.<br>
           <span style="font-size:10px">Inserisci una <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">Gemini API key</a> dedicata (gratuita):</span><br>
@@ -2850,7 +2905,8 @@ async function scanDocumento(input) {
             <input id="geminiKeyInput" type="text" placeholder="AIzaSy..." style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:var(--bg1);color:var(--text1)">
             <button onclick="salvaGeminiKey()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:12px;cursor:pointer">Salva e riprova</button>
           </div>`;
-        label.textContent = '📷 Carica documento';
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
         return;
       }
       throw new Error(msg || `Errore API ${resp.status}`);
@@ -2860,18 +2916,15 @@ async function scanDocumento(input) {
     const testo = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log('[Gemini raw]', testo);
 
-    // Pulisci ed estrai JSON — gestisce anche risposte troncate
+    // Pulisci ed estrai JSON
     let jsonStr = testo.replace(/```json|```/g, '').trim();
-    // Se il JSON è troncato, chiudilo prima di fare il parse
     if (!jsonStr.endsWith('}')) {
-      // Rimuovi l'ultimo campo incompleto e chiudi il JSON
       jsonStr = jsonStr.replace(/,\s*"[^"]*"\s*:\s*"[^"]*$/, '').replace(/,\s*$/, '') + '}';
     }
     let estratti;
     try {
       estratti = JSON.parse(jsonStr);
     } catch(parseErr) {
-      // Fallback: estrai i campi presenti con regex
       estratti = {};
       const campiRegex = /"(cognome|nome|codice_fiscale|data_nascita|luogo_nascita|citta_residenza|indirizzo|doc_tipo|doc_num)"\s*:\s*"([^"]*)"/g;
       let m;
@@ -2887,18 +2940,21 @@ async function scanDocumento(input) {
 
     if (Object.keys(ocrExtracted).length === 0) {
       status.textContent = '⚠️ Nessun dato riconosciuto — riprova con immagine più nitida';
-      label.textContent = '📷 Riprova';
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
       return;
     }
 
     mostraPreviewOcr(ocrExtracted);
     status.style.display = 'none';
-    label.textContent = '📷 Nuovo documento';
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
 
   } catch(e) {
     console.error('[Gemini OCR error]', e);
     status.textContent = '❌ ' + (e.message || 'Errore durante l\'analisi');
-    label.textContent = '📷 Riprova';
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
   }
 }
 
@@ -2906,9 +2962,15 @@ function salvaGeminiKey() {
   const key = document.getElementById('geminiKeyInput')?.value?.trim();
   if (!key) { showToast('Chiave non valida', 'error'); return; }
   sessionStorage.setItem('gemini_api_key', key);
-  document.getElementById('docScanStatus').textContent = '✓ Chiave salvata — carica il documento';
-  document.getElementById('docScanLabel').textContent = '📷 Carica documento';
+  document.getElementById('docScanStatus').textContent = '✓ Chiave salvata — premi Analizza';
   showToast('Chiave Gemini salvata per questa sessione', 'success');
+  // Riabilita il pulsante se c'è già il fronte caricato
+  const fronteFile = document.getElementById('docFronteInput')?.files?.[0];
+  if (fronteFile) {
+    const btn = document.getElementById('docAnalizzaBtn');
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+  }
 }
 
 function fileToBase64(file) {
