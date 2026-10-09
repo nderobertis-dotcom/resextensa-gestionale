@@ -1192,31 +1192,63 @@
               <option value="">— Seleziona —</option>
             </select>
           </div>
-          <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
-            <div style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:2px">Compensi</div>
-            <div>
-              <div class="modal-label">Compenso netto a giornata *</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="font-weight:600;color:var(--accent)">€</span>
-                <input class="edit-input" id="ctr-netto" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettereNetto()">
+          <!-- COMPENSI -->
+          <div style="grid-column:1/-1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:10px">Compensi</div>
+            <!-- Spettacolo -->
+            <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">🎭 Per spettacolo</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div>
+                <div class="modal-label">Netto a giornata *</div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="font-weight:600;color:var(--accent)">€</span>
+                  <input class="edit-input" id="ctr-netto" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettereNetto()">
+                </div>
+              </div>
+              <div>
+                <div class="modal-label">Lordo a giornata <span style="font-weight:400;font-size:10px;color:var(--text3)">(facoltativo)</span></div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="font-weight:600;color:var(--accent)">€</span>
+                  <input class="edit-input" id="ctr-lordo" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettoreLordo()">
+                </div>
+              </div>
+              <div>
+                <div class="modal-label" style="color:var(--text3)">Netto in lettere <span style="font-size:10px">(auto)</span></div>
+                <input class="edit-input" id="ctr-netto-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+              </div>
+              <div>
+                <div class="modal-label" style="color:var(--text3)">Lordo in lettere <span style="font-size:10px">(auto)</span></div>
+                <input class="edit-input" id="ctr-lordo-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
               </div>
             </div>
-            <div>
-              <div class="modal-label">Compenso lordo a giornata *</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="font-weight:600;color:var(--accent)">€</span>
-                <input class="edit-input" id="ctr-lordo" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettoreLordo()">
+            <!-- Prove -->
+            <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid var(--border);padding-top:10px">🔁 Per prove <span style="font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text3)">(se diverso dallo spettacolo)</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <div class="modal-label">Netto a giornata <span style="font-weight:400;font-size:10px;color:var(--text3)">(facoltativo)</span></div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="font-weight:600;color:var(--accent)">€</span>
+                  <input class="edit-input" id="ctr-netto-prove" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettereNettoProve()">
+                </div>
               </div>
-            </div>
-            <div>
-              <div class="modal-label" style="color:var(--text3)">Netto in lettere <span style="font-size:10px">(auto)</span></div>
-              <input class="edit-input" id="ctr-netto-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
-            </div>
-            <div>
-              <div class="modal-label" style="color:var(--text3)">Lordo in lettere <span style="font-size:10px">(auto)</span></div>
-              <input class="edit-input" id="ctr-lordo-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+              <div>
+                <div class="modal-label">Lordo a giornata <span style="font-weight:400;font-size:10px;color:var(--text3)">(facoltativo)</span></div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="font-weight:600;color:var(--accent)">€</span>
+                  <input class="edit-input" id="ctr-lordo-prove" type="number" step="0.01" min="0" placeholder="0,00" style="flex:1" oninput="aggiornaLettereLordoProve()">
+                </div>
+              </div>
+              <div>
+                <div class="modal-label" style="color:var(--text3)">Netto prove in lettere <span style="font-size:10px">(auto)</span></div>
+                <input class="edit-input" id="ctr-netto-prove-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+              </div>
+              <div>
+                <div class="modal-label" style="color:var(--text3)">Lordo prove in lettere <span style="font-size:10px">(auto)</span></div>
+                <input class="edit-input" id="ctr-lordo-prove-lettere" readonly style="background:var(--surface);font-size:11px;color:var(--text2)">
+              </div>
             </div>
           </div>
+
           <div>
             <div class="modal-label">Data firma</div>
             <input class="edit-input" id="ctr-data-firma" type="date">
@@ -1228,8 +1260,19 @@
 
           <!-- Calendario -->
           <div style="grid-column:1/-1">
-            <div class="modal-label">Calendario attività * <span style="font-size:10px;color:var(--text3);font-weight:400">— una riga per ogni giornata</span></div>
-            <textarea class="edit-input" id="ctr-calendario" rows="8" placeholder="25/08/2026 Viaggio&#10;dal 26/08/2026 al 30/08/2026 prove presso Borgo Acqua Paola in Bracciano (RM)&#10;31/08/2026 Viaggio per Torino&#10;01/09/2026 Prove&#10;02/09/2026 Spettacolo c/o LAVANDERIA A VAPORE in Torino&#10;03/09/2026 Viaggio di rientro" style="font-family:'DM Mono',monospace;font-size:12px;resize:vertical"></textarea>
+            <div class="modal-label">Calendario attività <span style="font-size:10px;color:var(--text3);font-weight:400">— una riga per ogni giornata (facoltativo)</span></div>
+            <textarea class="edit-input" id="ctr-calendario" rows="5" placeholder="25/08/2026 Viaggio&#10;dal 26/08/2026 al 30/08/2026 prove presso Borgo Acqua Paola in Bracciano (RM)&#10;31/08/2026 Viaggio per Torino&#10;01/09/2026 Prove&#10;02/09/2026 Viaggio di rientro" style="font-family:'DM Mono',monospace;font-size:12px;resize:vertical"></textarea>
+          </div>
+
+          <!-- Spettacoli -->
+          <div style="grid-column:1/-1">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div class="modal-label" style="margin-bottom:0">Spettacoli <span style="font-size:10px;color:var(--text3);font-weight:400">— date e luoghi di replica</span></div>
+              <button onclick="aggiungiRigaSpettacolo()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer">+ Aggiungi</button>
+            </div>
+            <div id="ctr-spettacoli-lista" style="display:flex;flex-direction:column;gap:6px">
+              <!-- Righe dinamiche -->
+            </div>
           </div>
         </div>
 
@@ -4703,6 +4746,44 @@ function fmtEuro(n) {
   return parseFloat(n).toFixed(2).replace('.', ',');
 }
 
+function aggiornaLettereNettoProve() {
+  const val = document.getElementById('ctr-netto-prove')?.value;
+  const el  = document.getElementById('ctr-netto-prove-lettere');
+  if (el) el.value = val ? numeroInLettere(val) : '';
+}
+function aggiornaLettereLordoProve() {
+  const val = document.getElementById('ctr-lordo-prove')?.value;
+  const el  = document.getElementById('ctr-lordo-prove-lettere');
+  if (el) el.value = val ? numeroInLettere(val) : '';
+}
+
+function aggiungiRigaSpettacolo() {
+  const lista = document.getElementById('ctr-spettacoli-lista');
+  if (!lista) return;
+  const idx = lista.children.length;
+  const riga = document.createElement('div');
+  riga.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:6px;align-items:center';
+  riga.innerHTML = `
+    <input class="edit-input" placeholder="Nome spettacolo" style="font-size:12px" data-spett-field="nome">
+    <input class="edit-input" type="date" style="font-size:12px" data-spett-field="data">
+    <input class="edit-input" placeholder="Città" style="font-size:12px" data-spett-field="citta">
+    <input class="edit-input" placeholder="Teatro / Luogo" style="font-size:12px" data-spett-field="teatro">
+    <button onclick="this.closest('div').remove()" style="background:none;border:none;cursor:pointer;color:var(--cessato);font-size:16px;line-height:1;padding:0 4px" title="Rimuovi">✕</button>
+  `;
+  lista.appendChild(riga);
+}
+
+function raccogliSpettacoli() {
+  const lista = document.getElementById('ctr-spettacoli-lista');
+  if (!lista) return [];
+  return Array.from(lista.children).map(riga => ({
+    nome:   riga.querySelector('[data-spett-field="nome"]')?.value?.trim() || '',
+    data:   riga.querySelector('[data-spett-field="data"]')?.value || '',
+    citta:  riga.querySelector('[data-spett-field="citta"]')?.value?.trim() || '',
+    teatro: riga.querySelector('[data-spett-field="teatro"]')?.value?.trim() || '',
+  })).filter(s => s.nome || s.data || s.citta || s.teatro);
+}
+
 function aggiornaLettereNetto() {
   const val = document.getElementById('ctr-netto')?.value;
   const el  = document.getElementById('ctr-netto-lettere');
@@ -5066,12 +5147,29 @@ async function modificaContratto(id) {
         set('ctr-spettacolo', d.spettacolo);
         set('ctr-netto', d.nettoNum);
         set('ctr-lordo', d.lordoNum);
+        set('ctr-netto-prove', d.nettoProveNum);
+        set('ctr-lordo-prove', d.lordoProveNum);
         set('ctr-calendario', d.calendario);
         set('ctr-data-firma', d.dataFirma);
         set('ctr-citta-firma', d.cittaFirma);
         set('ctr-genere', d.genere||'F');
         aggiornaLettereNetto();
         aggiornaLettoreLordo();
+        aggiornaLettereNettoProve();
+        aggiornaLettereLordoProve();
+        // Ripristina righe spettacoli
+        if (Array.isArray(d.spettacoliList)) {
+          const lista = document.getElementById('ctr-spettacoli-lista');
+          if (lista) { lista.innerHTML = ''; d.spettacoliList.forEach(() => aggiungiRigaSpettacolo()); }
+          d.spettacoliList.forEach((s, i) => {
+            const riga = lista?.children[i];
+            if (!riga) return;
+            riga.querySelector('[data-spett-field="nome"]').value  = s.nome  || '';
+            riga.querySelector('[data-spett-field="data"]').value  = s.data  || '';
+            riga.querySelector('[data-spett-field="citta"]').value = s.citta || '';
+            riga.querySelector('[data-spett-field="teatro"]').value= s.teatro|| '';
+          });
+        }
         // Elimina vecchio record bozza
         eliminaContratto(id);
       }, 300);
@@ -5124,12 +5222,15 @@ async function openContrattualistica() {
   ['ctr-nome','ctr-nascita','ctr-cf','ctr-residenza','ctr-iban',
    'ctr-doc-tipo','ctr-doc-num','ctr-telefono','ctr-email',
    'ctr-qualifica','ctr-netto','ctr-netto-lettere','ctr-lordo','ctr-lordo-lettere',
+   'ctr-netto-prove','ctr-netto-prove-lettere','ctr-lordo-prove','ctr-lordo-prove-lettere',
    'ctr-calendario','ctr-search']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('ctr-data-firma').value = new Date().toISOString().slice(0,10);
   document.getElementById('ctr-citta-firma').value = 'Bari';
   document.getElementById('ctr-search-results').innerHTML = '';
   document.getElementById('ctr-genere').value = 'F';
+  const listaSp = document.getElementById('ctr-spettacoli-lista');
+  if (listaSp) listaSp.innerHTML = '';
 
   // Popola select con tutta la rubrica
   const sel = document.getElementById('ctr-select');
@@ -5203,17 +5304,21 @@ async function generaContrattualistica() {
   const nome       = g('ctr-nome');
   const qualifica  = g('ctr-qualifica').toUpperCase();
   const spettacolo = g('ctr-spettacolo');
-  const nettoNum   = g('ctr-netto');
-  const lordoNum   = g('ctr-lordo');
-  const netto      = nettoNum ? `€ ${fmtEuro(nettoNum)} (${numeroInLettere(nettoNum)})` : '';
-  const lordo      = lordoNum ? `€ ${fmtEuro(lordoNum)} (${numeroInLettere(lordoNum)})` : '';
+  const nettoNum      = g('ctr-netto');
+  const lordoNum      = g('ctr-lordo');
+  const nettoProveNum = g('ctr-netto-prove');
+  const lordoProveNum = g('ctr-lordo-prove');
+  const netto      = nettoNum      ? `€ ${fmtEuro(nettoNum)} (${numeroInLettere(nettoNum)})` : '';
+  const lordo      = lordoNum      ? `€ ${fmtEuro(lordoNum)} (${numeroInLettere(lordoNum)})` : '';
+  const nettoProve = nettoProveNum ? `€ ${fmtEuro(nettoProveNum)} (${numeroInLettere(nettoProveNum)})` : '';
+  const lordoProve = lordoProveNum ? `€ ${fmtEuro(lordoProveNum)} (${numeroInLettere(lordoProveNum)})` : '';
   const calendario = g('ctr-calendario');
+  const spettacoliList = raccogliSpettacoli();
 
   if (!nome)       { showToast('Seleziona lo scritturato', 'error'); return; }
   if (!qualifica)  { showToast('Inserisci la qualifica', 'error'); return; }
   if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
-  if (!nettoNum)   { showToast('Inserisci il compenso netto', 'error'); return; }
-  if (!calendario) { showToast('Inserisci il calendario attività', 'error'); return; }
+  if (!nettoNum)   { showToast('Inserisci il compenso netto per spettacolo', 'error'); return; }
 
   // Apri finestra subito (prima di qualsiasi async)
   const win = window.open('', '_blank');
@@ -5252,8 +5357,8 @@ async function generaContrattualistica() {
   const datiSalvataggio = {
     tipo: 'contrattualistica',
     nome, nascita, cf, residenza, docTipo, docNum, telefono, email, iban,
-    genere, qualifica, spettacolo, nettoNum, lordoNum,
-    netto, lordo, calendario, dataFirma, cittaFirma
+    genere, qualifica, spettacolo, nettoNum, lordoNum, nettoProveNum, lordoProveNum,
+    netto, lordo, nettoProve, lordoProve, calendario, spettacoliList, dataFirma, cittaFirma
   };
   salvaContrattoInArchivio('Contrattualistica', nome, spettacolo, datiSalvataggio);
 
@@ -5265,13 +5370,24 @@ async function generaContrattualistica() {
 
 function buildHTMLContrattualistica(d) {
   const { nome, nascita, cf, residenza, docTipo, docNum, telefono, email, iban,
-    genere, qualifica, spettacolo, netto, lordo, calendario, dataFirma, cittaFirma } = d;
+    genere, qualifica, spettacolo, netto, lordo, nettoProve, lordoProve,
+    calendario, spettacoliList, dataFirma, cittaFirma } = d;
   const S = (genere||'F') === 'F' ? 'a' : 'o';
   const script = `Scritturat${S}`;
   const art    = S === 'a' ? 'la' : 'lo';
   const pron   = S === 'a' ? 'La' : 'Lo';
   const calLines = (calendario||'').split('\n').filter(l=>l.trim());
   const calHtml = calLines.map(l=>`<li>${l.trim()}</li>`).join('');
+  const spettList = Array.isArray(spettacoliList) ? spettacoliList : [];
+  const spettHtml = spettList.length ? spettList.map(s => {
+    const dataFmt = s.data ? new Date(s.data+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+    return `<tr>
+      <td style="padding:4px 8px;border-bottom:1px solid #e8e4d8">${s.nome||''}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e8e4d8;white-space:nowrap">${dataFmt}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e8e4d8">${s.citta||''}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e8e4d8">${s.teatro||''}</td>
+    </tr>`;
+  }).join('') : '';
   const logoUrl = window.location.origin +
     (window.location.pathname.endsWith('/') ? window.location.pathname :
     window.location.pathname.replace(/\/[^/]*$/, '/')) + 'resextensa_logo.png';
@@ -5362,9 +5478,20 @@ function buildHTMLContrattualistica(d) {
     <div class="oggetto-row"><span class="oggetto-lbl">${script}: </span><strong>${nome}</strong></div>
     <div class="oggetto-row"><span class="oggetto-lbl">Qualifica professionale: </span><strong>${qualifica}</strong></div>
     <div class="oggetto-row"><span class="oggetto-lbl">Spettacolo: </span><strong>${spettacolo}</strong></div>
-    <div class="oggetto-row" style="margin-top:6px"><span class="oggetto-lbl">Calendario:</span>
+    ${calHtml ? `<div class="oggetto-row" style="margin-top:6px"><span class="oggetto-lbl">Calendario attività:</span>
       <ul style="margin:4px 0 0 16px;padding:0">${calHtml}</ul>
-    </div>
+    </div>` : ''}
+    ${spettHtml ? `<div class="oggetto-row" style="margin-top:8px"><span class="oggetto-lbl">Repliche / Spettacoli:</span>
+      <table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:10px">
+        <thead><tr style="background:${ACCENT_LIGHT}">
+          <th style="padding:4px 8px;text-align:left;font-weight:700;color:${ACCENT};font-size:9px;text-transform:uppercase;letter-spacing:0.06em">Spettacolo</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:700;color:${ACCENT};font-size:9px;text-transform:uppercase;letter-spacing:0.06em">Data</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:700;color:${ACCENT};font-size:9px;text-transform:uppercase;letter-spacing:0.06em">Città</th>
+          <th style="padding:4px 8px;text-align:left;font-weight:700;color:${ACCENT};font-size:9px;text-transform:uppercase;letter-spacing:0.06em">Teatro / Luogo</th>
+        </tr></thead>
+        <tbody>${spettHtml}</tbody>
+      </table>
+    </div>` : ''}
   </div>
 
   <div class="art">
@@ -5374,7 +5501,12 @@ function buildHTMLContrattualistica(d) {
 
   <div class="art">
     <div class="art-tit">2. Compenso</div>
-    <div class="art-body">Il compenso netto spettante viene stabilito in <strong>${netto}</strong> a giornata lavorativa di 7 ore cumulabili (in caso di mezza giornata lavorativa verrà conteggiata la giornata al 50%). L'importo del compenso lordo è di <strong>${lordo}</strong> per giornata lavorativa.</div>
+    <div class="art-body">
+      ${nettoProve
+        ? `Il compenso netto per giornata di <strong>spettacolo</strong> (7 ore cumulabili; in caso di mezza giornata lavorativa verrà conteggiata la giornata al 50%) è stabilito in <strong>${netto}</strong>${lordo ? `, pari a un lordo di <strong>${lordo}</strong>` : ''}.<br>Il compenso netto per giornata di <strong>prove</strong> è stabilito in <strong>${nettoProve}</strong>${lordoProve ? `, pari a un lordo di <strong>${lordoProve}</strong>` : ''}.`
+        : `Il compenso netto spettante viene stabilito in <strong>${netto}</strong> a giornata lavorativa di 7 ore cumulabili (in caso di mezza giornata lavorativa verrà conteggiata la giornata al 50%).${lordo ? ` L'importo del compenso lordo è di <strong>${lordo}</strong> per giornata lavorativa.` : ''}`
+      }
+    </div>
   </div>
 
   <div class="art">
