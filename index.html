@@ -5503,7 +5503,7 @@ function buildHTMLContrattualistica(d) {
     <div class="art-tit">2. Compenso</div>
     <div class="art-body">
       ${nettoProve
-        ? `Il compenso netto per giornata di <strong>spettacolo</strong> (7 ore cumulabili; in caso di mezza giornata lavorativa verrà conteggiata la giornata al 50%) è stabilito in <strong>${netto}</strong>${lordo ? `, pari a un lordo di <strong>${lordo}</strong>` : ''}.<br>Il compenso netto per giornata di <strong>prove</strong> è stabilito in <strong>${nettoProve}</strong>${lordoProve ? `, pari a un lordo di <strong>${lordoProve}</strong>` : ''}.`
+        ? `Il compenso netto per giornata di <strong>prove</strong> è stabilito in <strong>${nettoProve}</strong>${lordoProve ? `, pari a un lordo di <strong>${lordoProve}</strong>` : ''}.<br>Il compenso netto per giornata di <strong>spettacolo</strong> (7 ore cumulabili; in caso di mezza giornata lavorativa verrà conteggiata la giornata al 50%) è stabilito in <strong>${netto}</strong>${lordo ? `, pari a un lordo di <strong>${lordo}</strong>` : ''}.`
         : `Il compenso netto spettante viene stabilito in <strong>${netto}</strong> a giornata lavorativa di 7 ore cumulabili (in caso di mezza giornata lavorativa verrà conteggiata la giornata al 50%).${lordo ? ` L'importo del compenso lordo è di <strong>${lordo}</strong> per giornata lavorativa.` : ''}`
       }
     </div>
