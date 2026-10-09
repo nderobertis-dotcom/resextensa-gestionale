@@ -5374,7 +5374,7 @@ function buildHTMLContrattualistica(d) {
     calendario, spettacoliList, dataFirma, cittaFirma } = d;
   const S = (genere||'F') === 'F' ? 'a' : 'o';
   const script = `Scritturat${S}`;
-  const art    = S === 'a' ? 'la' : 'lo';
+  const art    = S === 'a' ? 'lla' : 'llo';   // usato come "a${art}" → "alla/allo"
   const pron   = S === 'a' ? 'La' : 'Lo';
   const calLines = (calendario||'').split('\n').filter(l=>l.trim());
   const calHtml = calLines.map(l=>`<li>${l.trim()}</li>`).join('');
