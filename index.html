@@ -8303,6 +8303,8 @@ async function openModificaAgibModal(id) {
     div.id = `agib_riga_${idx}`;
     div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;position:relative';
     const c = contacts.find(x => `${x.cognome} ${x.nome}` === r.cognome_nome);
+    const isPA = (r.prima_assunzione||'').toUpperCase() === 'SÌ' || (r.prima_assunzione||'').toUpperCase() === 'SI';
+    const resVal = r.residenza || '';
     div.innerHTML = `
       <button onclick="document.getElementById('agib_riga_${idx}').remove()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>
       <input type="hidden" id="agib_comp_id_${idx}" value="${c?.id||''}">
@@ -8310,6 +8312,11 @@ async function openModificaAgibModal(id) {
         <div class="modal-label">Componente</div>
         <input type="text" class="edit-input" id="agib_comp_${idx}" value="${r.cognome_nome}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
         <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+      </div>
+      <div id="agib_residenza_block_${idx}" style="display:${isPA ? 'block' : 'none'};margin-top:10px;padding:10px;background:var(--surface2);border:1px solid var(--accent,#7c6af7);border-radius:6px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent,#7c6af7);font-weight:700;margin-bottom:6px">⭐ Prima assunzione — verifica residenza</div>
+        <div class="modal-label">Residenza</div>
+        <input type="text" class="edit-input" id="agib_residenza_${idx}" value="${resVal.replace(/"/g,'&quot;')}" placeholder="Via, Città" style="font-size:12px">
       </div>`;
     wrap.appendChild(div);
   });
@@ -8387,6 +8394,11 @@ function aggiungiRigaAgib() {
       <div class="modal-label">Componente (digita almeno 3 lettere)</div>
       <input type="text" class="edit-input" id="agib_comp_${idx}" placeholder="Cerca per cognome o nome…" oninput="cercaComponenteAgib(${idx})" autocomplete="off">
       <div id="agib_comp_drop_${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+    </div>
+    <div id="agib_residenza_block_${idx}" style="display:none;margin-top:10px;padding:10px;background:var(--surface2);border:1px solid var(--accent,#7c6af7);border-radius:6px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent,#7c6af7);font-weight:700;margin-bottom:6px">⭐ Prima assunzione — verifica residenza</div>
+      <div class="modal-label">Residenza</div>
+      <input type="text" class="edit-input" id="agib_residenza_${idx}" placeholder="Via, Città" style="font-size:12px">
     </div>`;
   wrap.appendChild(div);
 }
@@ -8467,6 +8479,24 @@ function selezionaComponenteAgib(idx, contactId, label) {
   document.getElementById(`agib_comp_${idx}`).value = label;
   document.getElementById(`agib_comp_id_${idx}`).value = contactId;
   document.getElementById(`agib_comp_drop_${idx}`).style.display = 'none';
+
+  // Controlla prima assunzione e mostra il campo residenza se necessario
+  const resBlock = document.getElementById(`agib_residenza_block_${idx}`);
+  const resInput = document.getElementById(`agib_residenza_${idx}`);
+  if (!resBlock || !resInput) return;
+
+  const cognomeNome = label;
+  const giaAssunto = isGiàAssunto(cognomeNome);
+  if (giaAssunto) {
+    resBlock.style.display = 'none';
+    resInput.value = '';
+  } else {
+    // Prima assunzione: pre-popola dalla rubrica
+    const c = contacts.find(x => String(x.id) === String(contactId));
+    const resRubrica = c ? ((c.citta_residenza||'') + (c.indirizzo ? ', '+c.indirizzo : '')) : '';
+    resInput.value = resRubrica;
+    resBlock.style.display = 'block';
+  }
 }
 
 function cercaTeatroAgib(idx) {
@@ -8541,7 +8571,11 @@ async function saveAgib() {
           if (rigaEsistente) {
             primaAssunzione = rigaEsistente.prima_assunzione || 'NO';
             cf = rigaEsistente.codice_fiscale || '';
-            residenza = rigaEsistente.residenza || '';
+            // Se è prima assunzione, usa il campo UI (permettendo correzioni); altrimenti mantieni dal foglio
+            const resUIModifica = document.getElementById(`agib_residenza_${idx}`)?.value?.trim();
+            residenza = (primaAssunzione.toUpperCase()==='SÌ' || primaAssunzione.toUpperCase()==='SI') && resUIModifica
+                        ? resUIModifica
+                        : (rigaEsistente.residenza || '');
             tipoDoc = rigaEsistente.tipo_doc || '';
             numDoc = rigaEsistente.num_doc || '';
           } else {
@@ -8549,7 +8583,9 @@ async function saveAgib() {
             primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
             if (primaAssunzione === 'SI') {
               cf = c.codice_fiscale||'';
-              residenza = (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
+              // Usa il valore editabile dal campo UI se presente
+              residenza = document.getElementById(`agib_residenza_${idx}`)?.value?.trim()
+                          || (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
               tipoDoc = c.doc_tipo||'';
               numDoc = c.doc_num||'';
             }
@@ -8558,7 +8594,9 @@ async function saveAgib() {
           primaAssunzione = isGiàAssunto(cognomeNome) ? 'NO' : 'SI';
           if (primaAssunzione === 'SI') {
             cf = c.codice_fiscale||'';
-            residenza = (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
+            // Usa il valore editabile dal campo UI (pre-popolato dalla rubrica, modificabile dall'utente)
+            residenza = document.getElementById(`agib_residenza_${idx}`)?.value?.trim()
+                        || (c.citta_residenza||'')+(c.indirizzo?', '+c.indirizzo:'');
             tipoDoc = c.doc_tipo||'';
             numDoc = c.doc_num||'';
           }
