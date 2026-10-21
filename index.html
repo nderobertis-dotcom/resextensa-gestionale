@@ -4879,10 +4879,23 @@ function renderArchivioContratti() {
     const sc = CTR_STATI_COLOR[c.stato]||{bg:'#eee',color:'#333'};
     const isSel = c.id === selectedCtrId;
     const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
+    // Estrai data primo spettacolo da dati_json
+    let dataSpett = '';
+    if (c.dati_json) {
+      try {
+        const d = JSON.parse(c.dati_json);
+        const spetts = Array.isArray(d.spettacoliList) ? d.spettacoliList : [];
+        const primoConData = spetts.find(s => s.data);
+        if (primoConData?.data) {
+          dataSpett = fmtD(primoConData.data);
+        }
+      } catch(e) {}
+    }
     return `<div class="contact-item${isSel?' selected':''}" onclick="selectContratto('${c.id}')">
       <div style="display:flex;flex-direction:column;gap:3px">
         <div style="font-size:12px;font-weight:600;color:var(--text)">${c.scritturato}</div>
         <div style="font-size:10px;color:var(--text2)">${c.spettacolo||'—'} · ${c.tipo}</div>
+        ${dataSpett ? `<div style="font-size:10px;color:var(--text2)">🎭 Prima: <strong>${dataSpett}</strong></div>` : ''}
         <div style="font-size:10px;color:var(--text3)">${fmtD(c.data_creazione)}</div>
         <span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px;display:inline-block;background:${sc.bg};color:${sc.color};width:fit-content">${c.stato}</span>
       </div>
