@@ -4934,7 +4934,7 @@ function selectContratto(id) {
           ${isBozza ? `<button class="btn-secondary" style="font-size:11px;padding:5px 12px" onclick="modificaContratto('${c.id}')">✎ Modifica</button>` : ''}
           ${isBozza ? `<button class="btn-export" style="font-size:11px;padding:5px 12px" onclick="anteprimaContratto('${c.id}')">👁 Anteprima PDF</button>` : ''}
           ${prossimoStato && !isArchiv ? `<button class="btn-new" style="font-size:11px;padding:5px 12px" onclick="avanzaStatoContratto('${c.id}')">→ Segna come ${prossimoStato}</button>` : ''}
-          ${userRole==='admin' ? `<button class="btn-danger" style="font-size:11px;padding:5px 10px" onclick="eliminaContratto('${c.id}')">✕</button>` : ''}
+          <button class="btn-danger" style="font-size:11px;padding:5px 10px" onclick="eliminaContratto('${c.id}')">🗑 Elimina</button>
         </div>
       </div>
 
@@ -5008,9 +5008,15 @@ async function avanzaStatoContratto(id) {
 async function eliminaContratto(id) {
   const c = contratti.find(x=>x.id===id);
   if (!c||!confirm(`Eliminare il contratto di ${c.scritturato}?`)) return;
+  await _eliminaContrattoById(id);
+}
+
+async function _eliminaContrattoById(id) {
+  const c = contratti.find(x=>x.id===id);
+  if (!c) return;
   checkTokenAndRefresh();
   try {
-    await sheetsUpdate(`${CTR_SHEET}!A${c.rowIdx}:I${c.rowIdx}`, [['','','','','','','','','']]);
+    await sheetsUpdate(`${CTR_SHEET}!A${c.rowIdx}:J${c.rowIdx}`, [['','','','','','','','','','']]);
     showToast('Contratto eliminato', 'success');
     selectedCtrId = null;
     document.getElementById('ctr-detail').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Seleziona un contratto</div></div>`;
@@ -5183,8 +5189,8 @@ async function modificaContratto(id) {
             riga.querySelector('[data-spett-field="teatro"]').value= s.teatro|| '';
           });
         }
-        // Elimina vecchio record bozza
-        eliminaContratto(id);
+        // Elimina vecchio record bozza (silenzioso, nessun confirm)
+        _eliminaContrattoById(id);
       }, 300);
     } else {
       if (!spettacoliList.length) await loadSpettacoliSheet();
@@ -5212,7 +5218,7 @@ async function modificaContratto(id) {
         set('ct-citta-firma',       d.cittaFirma||'Bari');
         aggiornaLettereCtNetto();
         aggiornaLettereCtLordo();
-        eliminaContratto(id);
+        _eliminaContrattoById(id);
       }, 300);
     }
   } catch(e) { showToast('Errore: '+e.message, 'error'); }
