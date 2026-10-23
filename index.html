@@ -600,6 +600,7 @@ if (typeof SUPABASE_URL === 'undefined') {
         <div class="stat"><div class="stat-n" id="stat-u25" style="color:#5a9a6a">—</div><div class="stat-l">Under 25</div></div>
         <div class="stat"><div class="stat-n" id="stat-o35" style="color:#9a6a3a">—</div><div class="stat-l">Over 35</div></div>
         <button id="rubrica-migrate-btn" style="display:none;font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;margin-left:8px" onclick="migrateRubricaToSupabase()" title="Importa rubrica da Sheets a Supabase (una tantum)">⬆ Migra</button>
+        <button id="rubrica-backfill-btn" style="display:none;font-size:10px;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;margin-left:4px" onclick="backfillDataNascitaDaCF()" title="Recupera data di nascita dal Codice Fiscale per chi non ce l'ha">📅 Backfill nascita</button>
       </div>
     </div>
     <div style="display:flex;flex:1;overflow:hidden">
@@ -2585,6 +2586,49 @@ function mostraVerificaCFEdit(cf, cognome, nome, dataNascita, luogoNascita) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── BACKFILL DATA NASCITA DA CODICE FISCALE ─────────────────────────────────
+async function backfillDataNascitaDaCF() {
+  const mancanti = contacts.filter(c => c.codice_fiscale && c.codice_fiscale.length >= 11 && !c.data_nascita);
+  if (!mancanti.length) {
+    showToast('Nessun contatto da aggiornare (tutti hanno già la data di nascita o manca il CF)', 'info');
+    return;
+  }
+  if (!confirm(`Recuperare la data di nascita dal Codice Fiscale per ${mancanti.length} contatt${mancanti.length===1?'o':'i'}?`)) return;
+
+  let ok = 0, err = 0;
+  for (const c of mancanti) {
+    const n = annoNascitaFromCF(c.codice_fiscale);
+    if (!n) { err++; continue; }
+    const dataStr = `${n.anno}-${String(n.mese).padStart(2,'0')}-${String(n.giorno).padStart(2,'0')}`;
+    c.data_nascita = dataStr;
+    try {
+      if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && c._sb_id) {
+        const r = await sbFetch(`/rest/v1/rubrica?id=eq.${c._sb_id}`, {
+          method: 'PATCH', prefer: 'return=minimal',
+          body: JSON.stringify({ data_nascita: dataStr })
+        });
+        if (!r.ok) throw new Error(await r.text());
+      } else {
+        const row = contactToRow(c);
+        const sheetRow = sheetRowMap[c.id];
+        if (sheetRow) {
+          const startCol = colLetter(1);
+          const endCol = colLetter(row.length);
+          await sheetsUpdate(`${SHEET_NAME}!${startCol}${sheetRow}:${endCol}${sheetRow}`, [row]);
+        }
+      }
+      ok++;
+    } catch(e) {
+      console.warn('Errore backfill CF per', c.cognome, c.nome, e.message);
+      err++;
+    }
+  }
+  populateFilters(); renderList(); updateStats();
+  if (selectedId) { const found = contacts.find(x=>x.id===selectedId); if(found) renderDetail(found); }
+  showToast(`Data di nascita recuperata per ${ok} contatt${ok===1?'o':'i'}${err ? ` (${err} errori)` : ''}`, err ? 'error' : 'success');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function updateStats() {
   document.getElementById('stat-tot').textContent = contacts.length;
   document.getElementById('stat-attivi').textContent = contacts.filter(c=>c.stato==='ATTIVO').length;
@@ -2608,6 +2652,14 @@ function updateStats() {
   document.getElementById('stat-f').textContent = f || '—';
   document.getElementById('stat-u25').textContent = u25 || '—';
   document.getElementById('stat-o35').textContent = o35 || '—';
+
+  // Mostra pulsante backfill nascita solo se admin e ci sono contatti senza data_nascita ma con CF
+  const backfillBtn = document.getElementById('rubrica-backfill-btn');
+  if (backfillBtn) {
+    const daBackfillare = contacts.filter(c => c.codice_fiscale && c.codice_fiscale.length >= 11 && !c.data_nascita).length;
+    backfillBtn.style.display = (isAdmin && daBackfillare > 0) ? 'inline-block' : 'none';
+    if (daBackfillare > 0) backfillBtn.title = `Recupera data di nascita dal CF per ${daBackfillare} contatt${daBackfillare===1?'o':'i'}`;
+  }
 
   // Aggiorna box compleanno nell'header
   const bday = getNextBirthdays();
