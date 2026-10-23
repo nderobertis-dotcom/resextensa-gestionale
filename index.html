@@ -800,6 +800,7 @@ if (typeof SUPABASE_URL === 'undefined') {
         </select>
         <button class="btn-export" style="font-size:11px;padding:5px 12px" onclick="esportaFattureCSV()">↓ CSV</button>
         <button class="btn-new" style="font-size:11px;padding:5px 14px" onclick="openFatturaUpload()">↑ Carica fattura</button>
+        <button id="fat-migrate-btn" style="display:none;font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap" onclick="migrateFattureToSupabase()" title="Importa fatture da Sheets a Supabase (una tantum)">⬆ Migra</button>
       </div>
     </div>
     <div style="flex:1;overflow-y:auto;padding:12px 20px">
@@ -6855,10 +6856,40 @@ let fatturaPagamentoId = null; // ID fattura in lavorazione nel modal pagamento
 let fatturaFileSelected = null; // File PDF selezionato
 
 async function loadFatture() {
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch('/rest/v1/fatture?select=*&order=sort_order.asc,data_fattura.desc');
+      if (!r.ok) throw new Error(await r.text());
+      const rows = await r.json();
+      fatture = rows.map((row, i) => ({
+        _sb_id:       row.id,
+        id:           row.id,
+        file_id:      row.file_id      || '',
+        nome_file:    row.nome_file    || '',
+        fornitore:    row.fornitore    || '',
+        numero:       row.numero       || '',
+        data_fattura: row.data_fattura || '',
+        imponibile:   row.imponibile   || '',
+        iva:          row.iva          || '',
+        totale:       row.totale       || '',
+        stato:        row.stato        || 'DA PAGARE',
+        data_pag:     row.data_pag     || '',
+        modalita_pag: row.modalita_pag || '',
+        note_pag:     row.note_pag     || '',
+        note:         row.note         || '',
+        codice_spett: row.codice_spett || '',
+      })).filter(f => f.id && f.fornitore);
+      aggiornStatsFatture();
+      renderFattureTable();
+      return;
+    } catch(e) { showToast('Errore Supabase fatture: ' + e.message, 'error'); return; }
+  }
+  // Fallback Sheets
   try {
     const r = await sheetsGet(FAT_RANGE);
     const rows = r.values || [];
     fatture = rows.map(row => ({
+      _sb_id:       null,
       id:           row[0]  || '',
       file_id:      row[1]  || '',
       nome_file:    row[2]  || '',
@@ -6875,8 +6906,8 @@ async function loadFatture() {
       note:         row[13] || '',
       codice_spett: row[14] || '',
     })).filter(f => f.id && f.fornitore);
-    aggiornStatsFatture(); // stats globali iniziali
-    renderFattureTable();  // poi renderizza e ricalcola in base al filtro
+    aggiornStatsFatture();
+    renderFattureTable();
   } catch(e) { console.warn('Fatture non caricate:', e); }
 }
 
@@ -6889,12 +6920,17 @@ function aggiornStatsFatture(lista) {
   const totPag  = pagate.reduce((s,f)  => s + (parseFloat(f.totale)||0), 0);
   const fmt = v => '€ ' + v.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
   const hasFiltro = lista && lista.length !== fatture.length;
-  const label = hasFiltro ? ` (${src.length} filtrate)` : '';
   document.getElementById('fat-tot').textContent           = src.length + (hasFiltro ? ` / ${fatture.length}` : '');
   document.getElementById('fat-pagate').textContent        = pagate.length;
   document.getElementById('fat-damare').textContent        = damare.length;
   document.getElementById('fat-totimponibile').textContent = fmt(totImp);
   document.getElementById('fat-totpagato').textContent     = fmt(totPag);
+  const migrateBtn = document.getElementById('fat-migrate-btn');
+  if (migrateBtn && !lista) {
+    const supabaseReady = typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL;
+    const notYetMigrated = supabaseReady && fatture.length > 0 && !fatture[0]._sb_id;
+    migrateBtn.style.display = (userRole === 'admin' && notYetMigrated) ? '' : 'none';
+  }
 }
 
 function renderFattureTable() {
@@ -7279,15 +7315,27 @@ async function salvaFattura() {
         if (r.ok) fileId = (await r.json()).id;
       }
 
-      // Salva riga su Sheets
-      const row = [newId, fileId, nomeFile, d.fornitore, d.numero, d.data,
-                   d.imponibile, d.iva, d.totale, 'DA PAGARE', '', '', '', '',
-                   d.codice_spett || ''];
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FAT_SHEET+'!A:O')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [row] })
-      });
+      // Salva riga
+      if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+        const payload = {
+          id: newId, file_id: fileId, nome_file: nomeFile,
+          fornitore: d.fornitore, numero: d.numero, data_fattura: d.data,
+          imponibile: String(d.imponibile||''), iva: String(d.iva||''), totale: String(d.totale||''),
+          stato: 'DA PAGARE', data_pag: '', modalita_pag: '', note_pag: '', note: '',
+          codice_spett: d.codice_spett || '', sort_order: Date.now(),
+        };
+        const rSb = await sbFetch('/rest/v1/fatture', { method:'POST', prefer:'return=minimal', body: JSON.stringify(payload) });
+        if (!rSb.ok) throw new Error(await rSb.text());
+      } else {
+        const row = [newId, fileId, nomeFile, d.fornitore, d.numero, d.data,
+                     d.imponibile, d.iva, d.totale, 'DA PAGARE', '', '', '', '',
+                     d.codice_spett || ''];
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(FAT_SHEET+'!A:O')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [row] })
+        });
+      }
       ok++;
       statusEl.innerHTML = `<span style="color:var(--text2)">⏳ Caricamento ${ok}/${daProcessare.length}…</span>`;
     } catch(e) {
@@ -7574,6 +7622,19 @@ async function scaricaFatturaPDF(id) {
 async function salvaSpettacoloFattura(id, codice) {
   const idx = fatture.findIndex(f => f.id === id);
   if (idx < 0) return;
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const res = await sbFetch(`/rest/v1/fatture?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', prefer: 'return=minimal',
+        body: JSON.stringify({ codice_spett: codice })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      fatture[idx].codice_spett = codice;
+      showToast(codice ? `Spettacolo assegnato: ${codice}` : 'Spettacolo rimosso', 'success');
+    } catch(e) { showToast('Errore salvataggio: '+e.message, 'error'); }
+    return;
+  }
+  // Fallback Sheets
   const sheetRow = idx + 2;
   try {
     checkTokenAndRefresh();
@@ -7772,6 +7833,20 @@ async function salvaPagamento() {
   const notePag = document.getElementById('pag-note').value.trim();
   const idx = fatture.findIndex(f => f.id === fatturaPagamentoId);
   if (idx < 0) return;
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const res = await sbFetch(`/rest/v1/fatture?id=eq.${encodeURIComponent(fatturaPagamentoId)}`, {
+        method: 'PATCH', prefer: 'return=minimal',
+        body: JSON.stringify({ stato: 'PAGATA', data_pag: dataPag, modalita_pag: modalita, note_pag: notePag })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showToast('Pagamento registrato', 'success');
+      closePagamentoModal();
+      await loadFatture();
+    } catch(e) { showToast('Errore: ' + e.message, 'error'); }
+    return;
+  }
+  // Fallback Sheets
   const sheetRow = idx + 2;
   try {
     await sheetsUpdate(`${FAT_SHEET}!J${sheetRow}:M${sheetRow}`, [['PAGATA', dataPag, modalita, notePag]]);
@@ -7884,6 +7959,18 @@ async function eliminaRicevuta(fileId, fatId, fornitore) {
 async function eliminaFattura(id) {
   const f = fatture.find(x=>x.id===id);
   if (!f || !confirm(`Eliminare la fattura "${f.numero}" di ${f.fornitore}?`)) return;
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const res = await sbFetch(`/rest/v1/fatture?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE', prefer: 'return=minimal'
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showToast('Fattura eliminata', 'success');
+      await loadFatture();
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+    return;
+  }
+  // Fallback Sheets
   const idx = fatture.findIndex(x=>x.id===id);
   const sheetRow = idx + 2;
   try {
@@ -7896,6 +7983,47 @@ async function eliminaFattura(id) {
     showToast('Fattura eliminata', 'success');
     await loadFatture();
   } catch(e) { showToast('Errore: '+e.message, 'error'); }
+}
+
+// ── Migrazione Fatture da Sheets a Supabase ───────────────────────────────────
+async function migrateFattureToSupabase() {
+  if (!fatture.length) { showToast('Nessuna fattura da migrare. Carica prima da Sheets.', 'error'); return; }
+  if (!confirm(`Importare ${fatture.length} fatture da Sheets a Supabase?\n\nDopo la migrazione potrai svuotare il foglio Sheets.`)) return;
+  try {
+    const payloads = fatture.map((f, i) => ({
+      id:           f.id,
+      file_id:      f.file_id      || '',
+      nome_file:    f.nome_file    || '',
+      fornitore:    f.fornitore    || '',
+      numero:       f.numero       || '',
+      data_fattura: f.data_fattura || '',
+      imponibile:   String(f.imponibile   || ''),
+      iva:          String(f.iva          || ''),
+      totale:       String(f.totale       || ''),
+      stato:        f.stato        || 'DA PAGARE',
+      data_pag:     f.data_pag     || '',
+      modalita_pag: f.modalita_pag || '',
+      note_pag:     f.note_pag     || '',
+      note:         f.note         || '',
+      codice_spett: f.codice_spett || '',
+      sort_order:   i,
+    }));
+    const res = await sbFetch('/rest/v1/fatture', {
+      method: 'POST', prefer: 'return=minimal',
+      body: JSON.stringify(payloads)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(`${fatture.length} fatture migrate su Supabase!`, 'success');
+    if (confirm('Migrazione completata!\n\nVuoi svuotare il foglio Fatture su Sheets ora? (Operazione irreversibile)')) {
+      await freezeFattureSheets();
+    }
+    await loadFatture();
+  } catch(e) { showToast('Errore migrazione: ' + e.message, 'error'); }
+}
+
+async function freezeFattureSheets() {
+  await sheetsClear(`${FAT_SHEET}!A2:O5000`);
+  showToast('Foglio Fatture su Sheets svuotato.', 'success');
 }
 
 function esportaFattureCSV() {
