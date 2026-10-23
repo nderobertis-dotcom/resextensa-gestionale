@@ -3130,24 +3130,44 @@ document.getElementById('newModal').addEventListener('click', e=>{ if(e.target==
 document.getElementById('rappModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeRappModal(); });
 
 // ─── SPETTACOLI & CALENDARIO ──────────────────────────────────────────────────
-// Lista spettacoli — caricata da foglio Sheets "Spettacoli"
+// Lista spettacoli — caricata da Supabase (con fallback Sheets "Spettacoli")
 // Struttura foglio: A=titolo, B=data_inizio, C=data_fine, D=stato
-let spettacoliList = []; // array di oggetti {titolo, data_inizio, data_fine, stato}
+// Struttura Supabase: id(uuid), titolo, data_inizio(date), data_fine(date), stato
+let spettacoliList = []; // array di oggetti {id, titolo, data_inizio, data_fine, stato}
 
 function allSpettacoli() {
   return spettacoliList.map(s => s.titolo).filter(Boolean).sort();
 }
 
 async function loadSpettacoliSheet() {
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch('/rest/v1/spettacoli?select=*&order=titolo.asc');
+      if (!r.ok) throw new Error(await r.text());
+      const rows = await r.json();
+      spettacoliList = rows.map(s => ({
+        id:          s.id,
+        titolo:      s.titolo || '',
+        data_inizio: s.data_inizio || '',
+        data_fine:   s.data_fine || '',
+        stato:       s.stato || 'In produzione',
+      }));
+      return;
+    } catch(e) {
+      console.warn('Supabase spettacoli non disponibile, fallback Sheets:', e.message);
+    }
+  }
+  // Fallback Sheets
   try {
     const r = await sheetsGet(SPETT_SHEET_RANGE);
     const rows = r.values || [];
     spettacoliList = rows
       .map(row => ({
-        titolo:       row[0]?.trim() || '',
-        data_inizio:  row[1]?.trim() || '',
-        data_fine:    row[2]?.trim() || '',
-        stato:        row[3]?.trim() || 'In produzione',
+        id:          null,
+        titolo:      row[0]?.trim() || '',
+        data_inizio: row[1]?.trim() || '',
+        data_fine:   row[2]?.trim() || '',
+        stato:       row[3]?.trim() || 'In produzione',
       }))
       .filter(s => s.titolo);
   } catch(e) {
@@ -3188,43 +3208,123 @@ async function salvaSpettacolo() {
   const dataInizio = document.getElementById('spett-data-inizio').value;
   const dataFine   = document.getElementById('spett-data-fine').value;
   const stato      = document.getElementById('spett-stato').value;
-  const row = [titolo, dataInizio, dataFine, stato];
-  checkTokenAndRefresh();
-  try {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SPETT_SHEET+'!A:D')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [row] })
-    });
-    showToast(`Spettacolo "${titolo}" aggiunto`, 'success');
-    closeSpettacoloModal();
-    await loadCalendario();
-    renderSpettacoli();
-    document.getElementById('stat-spett').textContent = allSpettacoli().length;
-  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  closeSpettacoloModal();
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const payload = {
+        titolo,
+        data_inizio: dataInizio || null,
+        data_fine:   dataFine   || null,
+        stato:       stato      || 'In produzione',
+      };
+      const r = await sbFetch('/rest/v1/spettacoli', {
+        method: 'POST', prefer: 'return=representation',
+        body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const [inserted] = await r.json();
+      spettacoliList.push({ id: inserted.id, titolo: inserted.titolo, data_inizio: inserted.data_inizio||'', data_fine: inserted.data_fine||'', stato: inserted.stato||'In produzione' });
+      spettacoliList.sort((a,b)=>(a.titolo||'').localeCompare(b.titolo||'','it'));
+      showToast(`Spettacolo "${titolo}" aggiunto`, 'success');
+      renderSpettacoli();
+      document.getElementById('stat-spett').textContent = allSpettacoli().length;
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  } else {
+    // Fallback Sheets
+    const row = [titolo, dataInizio, dataFine, stato];
+    checkTokenAndRefresh();
+    try {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SPETT_SHEET+'!A:D')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [row] })
+      });
+      showToast(`Spettacolo "${titolo}" aggiunto`, 'success');
+      await loadCalendario();
+      renderSpettacoli();
+      document.getElementById('stat-spett').textContent = allSpettacoli().length;
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  }
 }
 
 async function eliminaSpettacolo(titolo) {
   const rapp = rappList.filter(r => r.spettacolo === titolo);
   const msg = rapp.length > 0
-    ? `Lo spettacolo "${titolo}" ha ${rapp.length} rappresentazioni nel calendario. Eliminarlo dal foglio Spettacoli lo rimuoverà dalla lista ma non dalle rappresentazioni esistenti. Continuare?`
+    ? `Lo spettacolo "${titolo}" ha ${rapp.length} rappresentazioni nel calendario. Eliminarlo rimuoverà dalla lista ma non dalle rappresentazioni esistenti. Continuare?`
     : `Eliminare definitivamente "${titolo}"?`;
   if (!confirm(msg)) return;
-  const idx = spettacoliList.findIndex(s => s.titolo === titolo);
-  if (idx < 0) return;
-  const sheetRow = idx + 2;
-  checkTokenAndRefresh();
+  const spett = spettacoliList.find(s => s.titolo === titolo);
+  if (!spett) return;
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && spett.id) {
+    try {
+      const r = await sbFetch(`/rest/v1/spettacoli?id=eq.${spett.id}`, { method: 'DELETE', prefer: 'return=minimal' });
+      if (!r.ok) throw new Error(await r.text());
+      spettacoliList = spettacoliList.filter(s => s.id !== spett.id);
+      showToast(`Spettacolo "${titolo}" eliminato`, 'success');
+      renderSpettacoli();
+      document.getElementById('stat-spett').textContent = allSpettacoli().length;
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  } else {
+    // Fallback Sheets
+    const idx = spettacoliList.findIndex(s => s.titolo === titolo);
+    const sheetRow = idx + 2;
+    checkTokenAndRefresh();
+    try {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SPETT_SHEET}!A${sheetRow}:D${sheetRow}?valueInputOption=RAW`, {
+        method: 'PUT',
+        headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['','','','']] })
+      });
+      showToast(`Spettacolo "${titolo}" eliminato`, 'success');
+      await loadCalendario();
+      renderSpettacoli();
+      document.getElementById('stat-spett').textContent = allSpettacoli().length;
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  }
+}
+
+// ─── MIGRAZIONE SPETTACOLI → SUPABASE ────────────────────────────────────────
+async function migrateSpettacoliToSupabase() {
+  if (!confirm(`Importare ${spettacoliList.length} spettacoli da Sheets a Supabase?\n\nQuesta operazione è una tantum. Dopo la migrazione il tab Sheets verrà svuotato.`)) return;
+  setSyncStatus('loading', 'Migrazione spettacoli in corso…');
+  let ok = 0, err = 0;
+  for (const s of spettacoliList) {
+    if (!s.titolo) continue;
+    try {
+      const payload = {
+        titolo:      s.titolo,
+        data_inizio: s.data_inizio || null,
+        data_fine:   s.data_fine   || null,
+        stato:       s.stato       || 'In produzione',
+      };
+      const r = await sbFetch('/rest/v1/spettacoli', {
+        method: 'POST', prefer: 'return=minimal',
+        body: JSON.stringify(payload)
+      });
+      if (r.status === 409 || r.status === 201 || r.ok) { ok++; }
+      else { console.warn('Spettacolo skip/err', s.titolo, r.status, await r.text()); err++; }
+    } catch(e) { console.error('Spettacolo err', s.titolo, e.message); err++; }
+  }
+  setSyncStatus('ok', 'Migrazione completata');
+  showToast(`Migrazione completata: ${ok} importati, ${err} errori`, err ? 'error' : 'success');
+  if (err === 0) {
+    if (confirm('Migrazione riuscita! Vuoi svuotare il tab Spettacoli su Google Sheets per completare il freeze?')) {
+      await freezeSpettacoliSheets();
+    }
+  }
+  await loadSpettacoliSheet();
+  renderSpettacoli();
+  document.getElementById('stat-spett').textContent = allSpettacoli().length;
+  const btn = document.getElementById('spettacoli-migrate-btn');
+  if (btn) btn.style.display = 'none';
+}
+
+async function freezeSpettacoliSheets() {
   try {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SPETT_SHEET}!A${sheetRow}:D${sheetRow}?valueInputOption=RAW`, {
-      method: 'PUT',
-      headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [['','','','']] })
-    });
-    showToast(`Spettacolo "${titolo}" eliminato`, 'success');
-    await loadCalendario();
-    renderSpettacoli();
-    document.getElementById('stat-spett').textContent = allSpettacoli().length;
-  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+    checkTokenAndRefresh();
+    await sheetsClear(`${SPETT_SHEET}!A2:D1000`);
+    showToast('Tab Spettacoli su Sheets svuotato (freeze completato)', 'success');
+  } catch(e) { showToast('Errore freeze Sheets: ' + e.message, 'error'); }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3386,6 +3486,7 @@ function renderSpettacoli() {
           <button class="view-btn${calView==='lista'?' active':''}" onclick="setCalView('lista')">≡ Lista</button>
           <button class="view-btn${calView==='griglia'?' active':''}" onclick="setCalView('griglia')">▦ Griglia</button>
         </div>
+        ${isAdmin && typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL ? `<button id="spettacoli-migrate-btn" style="font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap" onclick="migrateSpettacoliToSupabase()" title="Importa spettacoli da Sheets a Supabase (una tantum)">⬆ Migra</button>` : ''}
         ${isAdmin ? `<button class="btn-secondary" style="font-size:11px;padding:5px 12px" onclick="openSpettacoloModal()">+ Spettacolo</button>` : ''}
         ${isAdmin ? `<button class="btn-new" onclick="openRappModal()">+ Rappresentazione</button>` : ''}
       </div>
