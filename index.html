@@ -758,7 +758,7 @@ if (typeof SUPABASE_URL === 'undefined') {
       <div id="fornitoreModalBody" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px"></div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeFornitoreModal()">Annulla</button>
-        <button class="btn-new" onclick="salvaFornitore()">Salva su Sheets</button>
+        <button class="btn-new" onclick="salvaFornitore()">Salva</button>
       </div>
     </div>
   </div>
@@ -1306,7 +1306,7 @@ if (typeof SUPABASE_URL === 'undefined') {
       <div id="sponsorModalBody" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px"></div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeSponsorModal()">Annulla</button>
-        <button class="btn-new" onclick="salvaSponsor()">Salva su Sheets</button>
+        <button class="btn-new" onclick="salvaSponsor()">Salva</button>
       </div>
     </div>
   </div>
@@ -1443,7 +1443,7 @@ if (typeof SUPABASE_URL === 'undefined') {
     <div id="agibModalBody"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeAgibModal()">Annulla</button>
-      <button class="btn-primary" onclick="saveAgib()">Salva su Sheets</button>
+      <button class="btn-primary" onclick="saveAgib()">Salva</button>
     </div>
   </div>
 </div>
@@ -1455,7 +1455,7 @@ if (typeof SUPABASE_URL === 'undefined') {
     <div id="teatroForm" style="display:grid;grid-template-columns:1fr 1fr;gap:14px"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeTeatroModal()">Annulla</button>
-      <button class="btn-primary" onclick="saveTeatro()">Salva su Sheets</button>
+      <button class="btn-primary" onclick="saveTeatro()">Salva</button>
     </div>
   </div>
 </div>
@@ -1479,7 +1479,7 @@ if (typeof SUPABASE_URL === 'undefined') {
     <div id="compForm" style="display:grid;grid-template-columns:1fr 1fr;gap:14px"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeCompModal()">Annulla</button>
-      <button class="btn-primary" onclick="saveCompagnia()">Salva su Sheets</button>
+      <button class="btn-primary" onclick="saveCompagnia()">Salva</button>
     </div>
   </div>
 </div>
@@ -1575,7 +1575,7 @@ if (typeof SUPABASE_URL === 'undefined') {
     <div class="modal-grid" id="newForm"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal()">Annulla</button>
-      <button class="btn-primary" id="saveNewBtn" onclick="saveNew()">Salva su Sheets</button>
+      <button class="btn-primary" id="saveNewBtn" onclick="saveNew()">Salva</button>
     </div>
   </div>
 </div>
@@ -2834,7 +2834,7 @@ function renderEdit(c) {
     <div class="topbar-left"><span style="color:var(--accent);font-size:13px;font-weight:500">✎ Modalità modifica</span></div>
     <div class="topbar-right">
       <button class="btn-secondary" onclick="cancelEdit()">Annulla</button>
-      <button class="btn-primary" onclick="saveEdit(${c.id})">Salva su Sheets</button>
+      <button class="btn-primary" onclick="saveEdit(${c.id})">Salva</button>
     </div>
   </div>
   <div class="detail">
@@ -4071,7 +4071,7 @@ function renderCompEdit(c) {
     <div class="topbar-left"><span style="color:var(--accent);font-size:13px;font-weight:500">✎ Modifica compagnia</span></div>
     <div class="topbar-right">
       <button class="btn-secondary" onclick="cancelEditComp()">Annulla</button>
-      <button class="btn-primary" onclick="saveEditComp(${c.id})">Salva su Sheets</button>
+      <button class="btn-primary" onclick="saveEditComp(${c.id})">Salva</button>
     </div>
   </div>
   <div class="detail">
