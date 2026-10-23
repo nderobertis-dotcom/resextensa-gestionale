@@ -599,6 +599,7 @@ if (typeof SUPABASE_URL === 'undefined') {
         <div class="stat"><div class="stat-n" id="stat-f" style="color:#b54a7a">—</div><div class="stat-l">F</div></div>
         <div class="stat"><div class="stat-n" id="stat-u25" style="color:#5a9a6a">—</div><div class="stat-l">Under 25</div></div>
         <div class="stat"><div class="stat-n" id="stat-o35" style="color:#9a6a3a">—</div><div class="stat-l">Over 35</div></div>
+        <button id="rubrica-migrate-btn" style="display:none;font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;margin-left:8px" onclick="migrateRubricaToSupabase()" title="Importa rubrica da Sheets a Supabase (una tantum)">⬆ Migra</button>
       </div>
     </div>
     <div style="display:flex;flex:1;overflow:hidden">
@@ -1994,8 +1995,39 @@ async function sheetsClear(range) {
 }
 
 // ─── LOAD ─────────────────────────────────────────────────────────────────────
+// Converte una riga Supabase nell'oggetto contatto usato dall'app
+function rubricaRowToContact(row, numericId) {
+  const c = { id: numericId, _sb_id: row.id, _sort_order: row.sort_order || 0 };
+  Object.keys(COL).forEach(k => { c[k] = toUpperField(k, row[k] || ''); });
+  return c;
+}
+
 async function loadFromSheets() {
   setSyncStatus('loading', 'Aggiornamento…');
+
+  // ── PATH SUPABASE ──
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch('/rest/v1/rubrica?select=*&order=sort_order.asc,cognome.asc,nome.asc');
+      if (!r.ok) throw new Error(await r.text());
+      const rows = await r.json();
+      contacts = [];
+      sheetRowMap = {};
+      nextId = 1;
+      rows.forEach(row => {
+        const c = rubricaRowToContact(row, nextId++);
+        contacts.push(c);
+      });
+      _afterLoadContacts();
+      return;
+    } catch(e) {
+      setSyncStatus('error', 'Errore Supabase');
+      showToast('Errore caricamento rubrica: ' + e.message, 'error');
+      return;
+    }
+  }
+
+  // ── PATH SHEETS (fallback) ──
   try {
     const data = await sheetsGet(DATA_RANGE);
     const rows = data.values || [];
@@ -2017,48 +2049,54 @@ async function loadFromSheets() {
       sheetRowMap[c.id] = i + 5;
     });
 
-    // Se è un membro (non admin), controlla che la sua email sia nel foglio
-    if (userRole === 'member') {
-      const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
-      if (!myContact) {
-        document.getElementById('appScreen').style.display = 'none';
-        document.getElementById('loginScreen').style.display = 'flex';
-        showToast('Accesso non autorizzato: email non trovata nel sistema', 'error');
-        return;
-      }
-      // Mostra badge ruolo in header
-      setSyncStatus('ok', `Accesso come: ${myContact.nome} ${myContact.cognome}`);
-    } else {
-      setSyncStatus('ok', 'Admin — tutto modificabile');
-    }
-
-    // Aggiorna UI in base al ruolo
-    updateHeaderForRole();
-    populateFilters(); renderList(); updateStats();
-    // Aggiorna home con dati aggiornati
-    const hp = document.getElementById('panel-home');
-    if (hp && hp.style.display !== 'none') renderHome();
-
-    if (userRole === 'member') {
-      // I membri vedono subito la propria scheda
-      const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
-      if (myContact) { selectedId = myContact.id; renderList(); renderDetail(myContact); hideSidebar(); }
-    } else if (selectedId) {
-      const found = contacts.find(c => c.id === selectedId);
-      if (found) renderDetail(found);
-    } else {
-      document.getElementById('mainPanel').innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">◈</div>
-          <div class="empty-title">Seleziona un componente</div>
-          <div class="empty-sub">o aggiungi un nuovo contatto</div>
-          <button class="btn-new" onclick="openNewModal()">+ Nuovo componente</button>
-        </div>`;
-    }
+    _afterLoadContacts();
   } catch(e) {
     setSyncStatus('error', 'Errore connessione');
     console.error('SHEETS ERROR:', e.message, e);
     showToast('Errore: ' + e.message, 'error');
+  }
+}
+
+// Aggiornamenti UI comuni dopo qualsiasi load (Supabase o Sheets)
+function _afterLoadContacts() {
+  // Se è un membro (non admin), controlla che la sua email sia presente
+  if (userRole === 'member') {
+    const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
+    if (!myContact) {
+      document.getElementById('appScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      showToast('Accesso non autorizzato: email non trovata nel sistema', 'error');
+      return;
+    }
+    setSyncStatus('ok', `Accesso come: ${myContact.nome} ${myContact.cognome}`);
+  } else {
+    setSyncStatus('ok', 'Admin — tutto modificabile');
+  }
+  updateHeaderForRole();
+  populateFilters(); renderList(); updateStats();
+  // Mostra il pulsante Migra solo se admin + Supabase configurato + dati ancora su Sheets
+  const migrateBtn = document.getElementById('rubrica-migrate-btn');
+  if (migrateBtn) {
+    const supabaseReady = typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL;
+    const notYetMigrated = supabaseReady && contacts.length > 0 && !contacts[0]._sb_id;
+    migrateBtn.style.display = (userRole === 'admin' && notYetMigrated) ? '' : 'none';
+  }
+  const hp = document.getElementById('panel-home');
+  if (hp && hp.style.display !== 'none') renderHome();
+  if (userRole === 'member') {
+    const myContact = contacts.find(c => c.email.toLowerCase().trim() === userEmail);
+    if (myContact) { selectedId = myContact.id; renderList(); renderDetail(myContact); hideSidebar(); }
+  } else if (selectedId) {
+    const found = contacts.find(c => c.id === selectedId);
+    if (found) renderDetail(found);
+  } else {
+    document.getElementById('mainPanel').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">◈</div>
+        <div class="empty-title">Seleziona un componente</div>
+        <div class="empty-sub">o aggiungi un nuovo contatto</div>
+        <button class="btn-new" onclick="openNewModal()">+ Nuovo componente</button>
+      </div>`;
   }
 }
 
@@ -2101,10 +2139,9 @@ function contactToRow(c) {
 }
 
 async function sortAndSaveToSheets() {
-  if (!confirm('Ordinare tutti i contatti per cognome e salvare su Google Sheets?')) return;
+  if (!confirm('Ordinare tutti i contatti per cognome e salvare?')) return;
   setSyncStatus('loading', 'Ordinamento in corso…');
   try {
-    // Ordina localmente per cognome, poi per nome
     contacts.sort((a, b) => {
       const ca = (a.cognome || '').trim().toUpperCase();
       const cb = (b.cognome || '').trim().toUpperCase();
@@ -2112,25 +2149,30 @@ async function sortAndSaveToSheets() {
       return (a.nome || '').trim().toUpperCase().localeCompare((b.nome || '').trim().toUpperCase(), 'it');
     });
 
-    // Costruisce tutte le righe nell'ordine nuovo
-    const allRows = contacts.map(c => contactToRow(c));
-
-    // Pulisce l'area dati sul foglio
-    const clearRange = `${SHEET_NAME}!B5:W${5 + contacts.length + 10}`;
-    await sheetsClear(clearRange);
-
-    // Riscrive tutte le righe in ordine
-    const writeRange = `${SHEET_NAME}!B5:W${5 + contacts.length - 1}`;
-    await sheetsUpdate(writeRange, allRows);
-
-    // Aggiorna sheetRowMap con le nuove posizioni
-    contacts.forEach((c, i) => { sheetRowMap[c.id] = i + 5; });
+    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+      // Aggiorna sort_order su Supabase per ogni contatto
+      for (let i = 0; i < contacts.length; i++) {
+        const c = contacts[i];
+        if (!c._sb_id) continue;
+        await sbFetch(`/rest/v1/rubrica?id=eq.${c._sb_id}`, {
+          method: 'PATCH', prefer: 'return=minimal',
+          body: JSON.stringify({ sort_order: i })
+        });
+        c._sort_order = i;
+      }
+    } else {
+      // Fallback Sheets
+      const allRows = contacts.map(c => contactToRow(c));
+      const clearRange = `${SHEET_NAME}!B5:W${5 + contacts.length + 10}`;
+      await sheetsClear(clearRange);
+      const writeRange = `${SHEET_NAME}!B5:W${5 + contacts.length - 1}`;
+      await sheetsUpdate(writeRange, allRows);
+      contacts.forEach((c, i) => { sheetRowMap[c.id] = i + 5; });
+    }
 
     populateFilters(); renderList(); updateStats();
     setSyncStatus('ok', 'Ordinato ✓');
-    showToast('Contatti ordinati per cognome e salvati su Sheets', 'success');
-
-    // Rimostra il contatto selezionato
+    showToast('Contatti ordinati per cognome e salvati', 'success');
     if (selectedId) {
       const found = contacts.find(c => c.id === selectedId);
       if (found) renderDetail(found);
@@ -2141,14 +2183,35 @@ async function sortAndSaveToSheets() {
   }
 }
 
+// Costruisce il payload per Supabase da un contatto
+function contactToSupabasePayload(c) {
+  const p = {};
+  Object.keys(COL).forEach(k => { p[k] = toUpperField(k, c[k] || '') || ''; });
+  return p;
+}
+
 async function saveContactToSheets(c) {
   setSyncStatus('loading', 'Salvataggio…');
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && c._sb_id) {
+    try {
+      const r = await sbFetch(`/rest/v1/rubrica?id=eq.${c._sb_id}`, {
+        method: 'PATCH', prefer: 'return=minimal',
+        body: JSON.stringify(contactToSupabasePayload(c))
+      });
+      if (!r.ok) throw new Error(await r.text());
+      setSyncStatus('ok', 'Salvato ✓');
+      showToast('Modifiche salvate', 'success');
+    } catch(e) {
+      setSyncStatus('error', 'Errore salvataggio');
+      showToast('Errore nel salvataggio: ' + e.message, 'error');
+    }
+    return;
+  }
+  // Fallback Sheets
   const row = contactToRow(c);
   const sheetRow = sheetRowMap[c.id];
-  // Range: colonna B (col index 1 = B) → colonna T (col index 19 = T), on the right row
-  // Actually we start from col A+COL.cognome = B (index 1 = column B)
-  const startCol = colLetter(1); // B
-  const endCol = colLetter(row.length); 
+  const startCol = colLetter(1);
+  const endCol = colLetter(row.length);
   const range = `${SHEET_NAME}!${startCol}${sheetRow}:${endCol}${sheetRow}`;
   try {
     await sheetsUpdate(range, [row]);
@@ -2162,10 +2225,30 @@ async function saveContactToSheets(c) {
 
 async function appendContactToSheets(c) {
   setSyncStatus('loading', 'Aggiunta in corso…');
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const payload = { ...contactToSupabasePayload(c), sort_order: contacts.length };
+      const r = await sbFetch('/rest/v1/rubrica', {
+        method: 'POST', prefer: 'return=representation',
+        body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const [inserted] = await r.json();
+      // Aggiorna il contatto locale con l'id Supabase
+      c._sb_id = inserted.id;
+      c._sort_order = inserted.sort_order || 0;
+      setSyncStatus('ok', 'Aggiunto ✓');
+      showToast(`${c.cognome} ${c.nome} aggiunto`, 'success');
+    } catch(e) {
+      setSyncStatus('error', 'Errore aggiunta');
+      showToast('Errore nell\'aggiunta: ' + e.message, 'error');
+    }
+    return;
+  }
+  // Fallback Sheets
   const row = contactToRow(c);
   try {
     const result = await sheetsAppend([row]);
-    // Update sheetRowMap with the actual appended row
     const updatedRange = result.updates?.updatedRange || '';
     const match = updatedRange.match(/(\d+)$/);
     if (match) sheetRowMap[c.id] = parseInt(match[1]);
@@ -2178,11 +2261,51 @@ async function appendContactToSheets(c) {
 }
 
 async function clearRowOnSheets(sheetRow) {
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) return; // Supabase: delete gestito da deleteContact
   const startCol = colLetter(1);
   const endCol = colLetter(20);
   const range = `${SHEET_NAME}!${startCol}${sheetRow}:${endCol}${sheetRow}`;
   await sheetsClear(range);
 }
+
+// ─── MIGRAZIONE RUBRICA → SUPABASE ───────────────────────────────────────────
+async function migrateRubricaToSupabase() {
+  if (!confirm(`Importare ${contacts.length} componenti da Sheets a Supabase?\n\nQuesta operazione è una tantum. Dopo la migrazione il tab Sheets verrà svuotato.`)) return;
+  setSyncStatus('loading', 'Migrazione rubrica in corso…');
+  let ok = 0, err = 0;
+  for (let i = 0; i < contacts.length; i++) {
+    const c = contacts[i];
+    if (!c.cognome) continue;
+    try {
+      const payload = { ...contactToSupabasePayload(c), sort_order: i };
+      const r = await sbFetch('/rest/v1/rubrica', {
+        method: 'POST', prefer: 'return=minimal',
+        body: JSON.stringify(payload)
+      });
+      if (r.status === 409 || r.status === 201 || r.ok) { ok++; }
+      else { console.warn('Rubrica skip/err', c.cognome, c.nome, r.status, await r.text()); err++; }
+    } catch(e) { console.error('Rubrica err', c.cognome, e.message); err++; }
+  }
+  setSyncStatus('ok', 'Migrazione completata');
+  showToast(`Migrazione completata: ${ok} importati, ${err} errori`, err ? 'error' : 'success');
+  if (err === 0) {
+    if (confirm('Migrazione riuscita! Vuoi svuotare il tab Componenti su Google Sheets per completare il freeze?')) {
+      await freezeRubricaSheets();
+    }
+  }
+  await loadFromSheets();
+  const btn = document.getElementById('rubrica-migrate-btn');
+  if (btn) btn.style.display = 'none';
+}
+
+async function freezeRubricaSheets() {
+  try {
+    checkTokenAndRefresh();
+    await sheetsClear(`${SHEET_NAME}!B5:W1000`);
+    showToast('Tab Componenti su Sheets svuotato (freeze completato)', 'success');
+  } catch(e) { showToast('Errore freeze Sheets: ' + e.message, 'error'); }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function colLetter(n) {
   // n is 1-based col offset from A (so 1=B, 2=C, …)
@@ -2774,17 +2897,28 @@ async function saveEdit(id) {
 }
 
 async function deleteContact(id) {
-  if (!confirm('Rimuovere questo componente? La riga su Google Sheets verrà svuotata.')) return;
+  if (!confirm('Rimuovere questo componente?')) return;
+  const c = contacts.find(x=>x.id===id);
   const sheetRow = sheetRowMap[id];
   contacts = contacts.filter(x=>x.id!==id);
   selectedId = null; editMode = false;
   document.getElementById('mainPanel').innerHTML = `<div class="empty-state"><div class="empty-icon">◈</div><div class="empty-title">Componente rimosso</div></div>`;
   populateFilters(); renderList(); updateStats();
-  try {
-    await clearRowOnSheets(sheetRow);
-    showToast('Componente rimosso da Google Sheets', 'success');
-  } catch(e) {
-    showToast('Rimosso localmente, errore Sheets: ' + e.message, 'error');
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL && c?._sb_id) {
+    try {
+      const r = await sbFetch(`/rest/v1/rubrica?id=eq.${c._sb_id}`, { method: 'DELETE', prefer: 'return=minimal' });
+      if (!r.ok) throw new Error(await r.text());
+      showToast('Componente rimosso', 'success');
+    } catch(e) {
+      showToast('Rimosso localmente, errore Supabase: ' + e.message, 'error');
+    }
+  } else {
+    try {
+      await clearRowOnSheets(sheetRow);
+      showToast('Componente rimosso da Google Sheets', 'success');
+    } catch(e) {
+      showToast('Rimosso localmente, errore Sheets: ' + e.message, 'error');
+    }
   }
 }
 
@@ -2829,14 +2963,18 @@ async function saveNew() {
       c[f.key] = el ? toUpperField(f.key, el.value) : '';
     }
   });
+  const newCognome = toUpperField('cognome', c.cognome || '');
+  const newNome = toUpperField('nome', c.nome || '');
   contacts.push(c);
   closeModal();
   populateFilters(); renderList(); updateStats(); selectContact(c.id);
   await appendContactToSheets(c);
-  // Ricarica da Sheets per sincronizzare sheetRowMap e rimuovere eventuali duplicati
+  // Ricarica per sincronizzare (sheetRowMap su Sheets, _sb_id su Supabase)
   await loadFromSheets();
   loadFornitori();
-  selectContact(c.id);
+  // Trova il contatto appena inserito e selezionalo
+  const newC = contacts.find(x => (x.cognome||'').toUpperCase() === newCognome && (x.nome||'').toUpperCase() === newNome);
+  if (newC) selectContact(newC.id);
 }
 
 // ─── SCAN DOCUMENTO CON GEMINI VISION ────────────────────────────────────────
