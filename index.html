@@ -689,6 +689,7 @@
             <input type="search" class="search-input" id="teatriSearchInput" placeholder="Cerca teatro…" oninput="renderTeatriList()">
           </div>
           <button class="btn-new" id="teatri-add-btn" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="openTeatroModal()">+ Nuovo</button>
+          <button id="teatri-migrate-btn" style="display:none;font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap" onclick="migrateTeatriToSupabase()" title="Importa teatri da Sheets a Supabase (una tantum)">⬆ Migra</button>
         </div>
         <div class="contact-list" id="teatriList"></div>
       </div>
@@ -7648,6 +7649,22 @@ async function eliminaContrattiForn(fileId, fornId, ragioneSociale) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── SUPABASE HELPER ──────────────────────────────────────────────────────────
+function sbFetch(path, options = {}) {
+  const url = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '') + path;
+  const key = typeof SUPABASE_ANON !== 'undefined' ? SUPABASE_ANON : '';
+  return fetch(url, {
+    ...options,
+    headers: {
+      'apikey': key,
+      'Authorization': 'Bearer ' + key,
+      'Content-Type': 'application/json',
+      'Prefer': options.prefer || '',
+      ...(options.headers || {})
+    }
+  });
+}
+
 // ─── TEATRI ───────────────────────────────────────────────────────────────────
 const TEATRI_SHEET = 'Teatri';
 const TEATRI_RANGE = 'Teatri!A2:E';
@@ -7668,17 +7685,17 @@ let teatriRowMap = {};
 
 async function loadTeatri() {
   try {
-    const data = await sheetsGet(TEATRI_RANGE);
-    const rows = data.values || [];
-    teatri = []; teatriRowMap = {}; nextTeatroId = 1;
-    rows.forEach((row, i) => {
-      const g = k => (row[TEATRI_COL[k]] || '').trim().replace(/^'/, '');
-      if (!g('nome_struttura')) return;
-      const t = { id: nextTeatroId++ };
-      Object.keys(TEATRI_COL).forEach(k => { t[k] = toUpperField(k, g(k)); });
-      teatri.push(t);
-      teatriRowMap[t.id] = i + 2;
-    });
+    const r = await sbFetch('/rest/v1/teatri?select=*&order=nome_struttura.asc');
+    if (!r.ok) throw new Error(await r.text());
+    const rows = await r.json();
+    teatri = rows.map(t => ({
+      id:             t.id,
+      nome_struttura: t.nome_struttura || '',
+      indirizzo:      t.indirizzo || '',
+      cap:            t.cap || '',
+      citta:          t.citta || '',
+      pr:             t.pr || '',
+    }));
     renderTeatriList();
     updateTeatriStats();
   } catch(e) { showToast('Errore caricamento teatri: ' + e.message, 'error'); }
@@ -7707,11 +7724,14 @@ function renderTeatriList() {
   const isAdmin = userRole === 'admin';
   const addBtn = document.getElementById('teatri-add-btn');
   if (addBtn) addBtn.style.display = isAdmin ? '' : 'none';
+  // Mostra pulsante migrazione solo ad admin e solo se Supabase è configurato
+  const migrateBtn = document.getElementById('teatri-migrate-btn');
+  if (migrateBtn) migrateBtn.style.display = (isAdmin && typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? '' : 'none';
   el.innerHTML = list.map(t => {
     const active = t.id === selectedTeatroId ? ' active' : '';
     const [bg,fg] = getColor(t.nome_struttura);
     const initials = t.nome_struttura.substring(0,2).toUpperCase();
-    return `<div class="contact-item${active}" onclick="selectTeatro(${t.id})">
+    return `<div class="contact-item${active}" onclick="selectTeatro('${t.id}')">
       <div class="avatar" style="background:${bg};color:${fg};font-size:10px">${initials}</div>
       <div class="contact-info">
         <div class="contact-name">${t.nome_struttura}</div>
@@ -7740,7 +7760,7 @@ function renderTeatroDetail(t) {
     <div class="topbar-right">
       ${isAdmin ? `<button class="btn-secondary" onclick="startEditTeatro()">✎ Modifica</button>` : ''}
       ${isAdmin ? `<button class="btn-export" onclick="sortAndSaveTeatri()" title="Ordina per nome">⇅ Ordina</button>` : ''}
-      ${isAdmin ? `<button class="btn-danger" onclick="deleteTeatro(${t.id})">✕ Rimuovi</button>` : ''}
+      ${isAdmin ? `<button class="btn-danger" onclick="deleteTeatro('${t.id}')">✕ Rimuovi</button>` : ''}
       ${isAdmin ? `<button class="btn-new" onclick="openTeatroModal()">+ Nuovo</button>` : ''}
     </div>
   </div>
@@ -7769,7 +7789,7 @@ function renderTeatroEdit(t) {
     <div class="topbar-left"><span style="color:var(--accent);font-size:13px;font-weight:500">✎ Modifica teatro</span></div>
     <div class="topbar-right">
       <button class="btn-secondary" onclick="cancelEditTeatro()">Annulla</button>
-      <button class="btn-primary" onclick="saveEditTeatro(${t.id})">Salva su Sheets</button>
+      <button class="btn-primary" onclick="saveEditTeatro('${t.id}')">Salva</button>
     </div>
   </div>
   <div class="detail">
@@ -7790,22 +7810,34 @@ async function saveEditTeatro(id) {
   const t = teatri.find(x=>x.id===id);
   TEATRI_FIELDS.forEach(f => { const el=document.getElementById('tedit_'+f.key); if(el) t[f.key]=toUpperField(f.key, el.value); });
   editTeatroMode=false; renderTeatriList(); renderTeatroDetail(t);
-  const row = Object.keys(TEATRI_COL).map(k => t[k]||'');
   try {
-    await sheetsUpdate(`${TEATRI_SHEET}!A${teatriRowMap[id]}:E${teatriRowMap[id]}`, [row]);
+    const r = await sbFetch(`/rest/v1/teatri?id=eq.${id}`, {
+      method: 'PATCH',
+      prefer: 'return=minimal',
+      body: JSON.stringify({
+        nome_struttura: t.nome_struttura,
+        indirizzo: t.indirizzo,
+        cap: t.cap,
+        citta: t.citta,
+        pr: t.pr
+      })
+    });
+    if (!r.ok) throw new Error(await r.text());
     showToast('Teatro salvato', 'success');
   } catch(e) { showToast('Errore: '+e.message, 'error'); }
 }
 
 async function deleteTeatro(id) {
   if (!confirm('Rimuovere questo teatro?')) return;
-  const row = teatriRowMap[id];
   teatri = teatri.filter(x=>x.id!==id);
   selectedTeatroId = null;
   document.getElementById('teatriDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">🎭</div><div class="empty-title">Teatro rimosso</div></div>`;
   renderTeatriList(); updateTeatriStats();
-  try { await sheetsClear(`${TEATRI_SHEET}!A${row}:E${row}`); showToast('Rimosso', 'success'); }
-  catch(e) { showToast('Errore: '+e.message, 'error'); }
+  try {
+    const r = await sbFetch(`/rest/v1/teatri?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' });
+    if (!r.ok) throw new Error(await r.text());
+    showToast('Rimosso', 'success');
+  } catch(e) { showToast('Errore: '+e.message, 'error'); }
 }
 
 function openTeatroModal(id=null) {
@@ -7823,38 +7855,63 @@ function closeTeatroModal() { document.getElementById('teatroModal').classList.r
 async function saveTeatro() {
   const nome = document.getElementById('tnew_nome_struttura').value.trim();
   if (!nome) { showToast('Nome struttura obbligatorio', 'error'); return; }
-  const t = { id: nextTeatroId++ };
-  TEATRI_FIELDS.forEach(f => { const el=document.getElementById('tnew_'+f.key); t[f.key]=el ? toUpperField(f.key, el.value) : ''; });
-  teatri.push(t);
-  closeTeatroModal(); renderTeatriList(); selectTeatro(t.id); updateTeatriStats();
-  const row = Object.keys(TEATRI_COL).map(k => t[k]||'');
+  const payload = {};
+  TEATRI_FIELDS.forEach(f => { const el=document.getElementById('tnew_'+f.key); payload[f.key]=el ? toUpperField(f.key, el.value) : ''; });
+  closeTeatroModal();
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(TEATRI_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-    const r = await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:TEATRI_RANGE, majorDimension:'ROWS', values:[row] }) });
-    const result = await r.json();
-    const match = (result.updates?.updatedRange||'').match(/(\d+)$/);
-    if (match) teatriRowMap[t.id] = parseInt(match[1]);
+    const r = await sbFetch('/rest/v1/teatri', {
+      method: 'POST',
+      prefer: 'return=representation',
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const [inserted] = await r.json();
+    const t = { id: inserted.id, nome_struttura: inserted.nome_struttura||'', indirizzo: inserted.indirizzo||'', cap: inserted.cap||'', citta: inserted.citta||'', pr: inserted.pr||'' };
+    teatri.push(t);
+    renderTeatriList(); selectTeatro(t.id); updateTeatriStats();
     showToast(`${nome} aggiunto`, 'success');
   } catch(e) { showToast('Errore: '+e.message, 'error'); }
 }
 
 async function sortAndSaveTeatri() {
-  if (!confirm('Ordinare tutti i teatri per nome e salvare su Google Sheets?')) return;
-  setSyncStatus('loading', 'Ordinamento in corso…');
-  try {
-    teatri.sort((a,b) => (a.nome_struttura||'').localeCompare(b.nome_struttura||'', 'it'));
-    const allRows = teatri.map(t => Object.keys(TEATRI_COL).map(k => t[k]||''));
-    await sheetsClear(`${TEATRI_SHEET}!A2:E${1 + teatri.length + 10}`);
-    await sheetsUpdate(`${TEATRI_SHEET}!A2:E${1 + teatri.length}`, allRows);
-    teatri.forEach((t,i) => { teatriRowMap[t.id] = i + 2; });
-    renderTeatriList();
-    if (selectedTeatroId) { const found = teatri.find(x=>x.id===selectedTeatroId); if(found) renderTeatroDetail(found); }
-    setSyncStatus('ok', 'Ordinato ✓');
-    showToast('Teatri ordinati e salvati', 'success');
-  } catch(e) {
-    setSyncStatus('error', 'Errore');
-    showToast('Errore: '+e.message, 'error');
+  // Su Supabase l'ordine è gestito dalla query (order=nome_struttura.asc).
+  // Questo pulsante riordina solo la lista locale senza scritture su DB.
+  teatri.sort((a,b) => (a.nome_struttura||'').localeCompare(b.nome_struttura||'', 'it'));
+  renderTeatriList();
+  if (selectedTeatroId) { const found = teatri.find(x=>x.id===selectedTeatroId); if(found) renderTeatroDetail(found); }
+  showToast('Lista ordinata per nome', 'success');
+}
+
+// ─── MIGRAZIONE TEATRI: SHEETS → SUPABASE (una tantum) ────────────────────────
+async function migrateTeatriToSupabase() {
+  if (!confirm(`Importare ${teatri.length} teatri da Sheets a Supabase?\n\nQuesta operazione va eseguita UNA SOLA VOLTA. I teatri già presenti su Supabase con lo stesso nome verranno saltati.`)) return;
+  setSyncStatus('loading', 'Migrazione in corso…');
+  let ok = 0, skip = 0, err = 0;
+  for (const t of teatri) {
+    if (!t.nome_struttura) continue;
+    try {
+      const r = await sbFetch('/rest/v1/teatri', {
+        method: 'POST',
+        prefer: 'return=minimal',
+        body: JSON.stringify({
+          nome_struttura: t.nome_struttura,
+          indirizzo: t.indirizzo || null,
+          cap: t.cap || null,
+          citta: t.citta || null,
+          pr: t.pr || null
+        })
+      });
+      if (r.status === 409 || r.status === 201 || r.ok) { ok++; }
+      else { console.warn('Teatro skip/err', t.nome_struttura, r.status); err++; }
+    } catch(e) { console.error('Migrazione teatro', t.nome_struttura, e); err++; }
   }
+  setSyncStatus('ok', 'Migrazione completata');
+  showToast(`Migrazione completata: ${ok} importati, ${err} errori`, err ? 'error' : 'success');
+  // Ricarica da Supabase per avere UUID corretti
+  await loadTeatri();
+  // Nascondi il pulsante migrazione dopo l'uso
+  const btn = document.getElementById('teatri-migrate-btn');
+  if (btn) btn.style.display = 'none';
 }
 document.getElementById('agibModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeAgibModal(); });
 
