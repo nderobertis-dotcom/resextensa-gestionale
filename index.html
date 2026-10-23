@@ -7941,11 +7941,25 @@ async function migrateTeatriToSupabase() {
   }
   setSyncStatus('ok', 'Migrazione completata');
   showToast(`Migrazione completata: ${ok} importati, ${err} errori`, err ? 'error' : 'success');
+  if (err === 0) {
+    // Freeze: svuota tab Teatri su Sheets
+    if (confirm('Migrazione riuscita! Vuoi svuotare il tab Teatri su Google Sheets per completare il freeze?')) {
+      await freezeTeatriSheets();
+    }
+  }
   // Ricarica da Supabase per avere UUID corretti
   await loadTeatri();
   // Nascondi il pulsante migrazione dopo l'uso
   const btn = document.getElementById('teatri-migrate-btn');
   if (btn) btn.style.display = 'none';
+}
+
+async function freezeTeatriSheets() {
+  try {
+    checkTokenAndRefresh();
+    await sheetsClear(`${TEATRI_SHEET}!A2:E1000`);
+    showToast('Tab Teatri su Sheets svuotato (freeze completato)', 'success');
+  } catch(e) { showToast('Errore freeze Sheets: ' + e.message, 'error'); }
 }
 document.getElementById('agibModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeAgibModal(); });
 
