@@ -394,6 +394,14 @@
 </style>
 <!-- config.js: file locale con GEMINI_KEY_CONFIG, non presente su GitHub -->
 <script src="config.js" onerror="console.info('config.js non trovato — scansione documento richiederà chiave manuale')"></script>
+<script>
+// Supabase — ResExtensa Gestionale
+// La chiave anon è pubblica per design: la sicurezza è garantita dalle RLS policies su Supabase
+if (typeof SUPABASE_URL === 'undefined') {
+  var SUPABASE_URL  = 'https://mdaeqbcasnfenbsdmglz.supabase.co';
+  var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kYWVxYmNhc25mZW5ic2RtZ2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NjQyNjQsImV4cCI6MjEwODM0MDI2NH0.iH2GjOAyT80agQOq_S98e1vweCFEz4F5uRCliKEb1GY';
+}
+</script>
 </head>
 <body>
 
