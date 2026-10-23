@@ -7684,18 +7684,36 @@ let nextTeatroId = 1;
 let teatriRowMap = {};
 
 async function loadTeatri() {
+  // Se Supabase è configurato, carica da lì; altrimenti fallback su Sheets
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch('/rest/v1/teatri?select=*&order=nome_struttura.asc');
+      if (!r.ok) throw new Error(await r.text());
+      const rows = await r.json();
+      teatri = rows.map(t => ({
+        id:             t.id,
+        nome_struttura: t.nome_struttura || '',
+        indirizzo:      t.indirizzo || '',
+        cap:            t.cap || '',
+        citta:          t.citta || '',
+        pr:             t.pr || '',
+      }));
+      renderTeatriList();
+      updateTeatriStats();
+      return;
+    } catch(e) { showToast('Errore caricamento teatri (Supabase): ' + e.message, 'error'); return; }
+  }
+  // Fallback Sheets
   try {
-    const r = await sbFetch('/rest/v1/teatri?select=*&order=nome_struttura.asc');
-    if (!r.ok) throw new Error(await r.text());
-    const rows = await r.json();
-    teatri = rows.map(t => ({
-      id:             t.id,
-      nome_struttura: t.nome_struttura || '',
-      indirizzo:      t.indirizzo || '',
-      cap:            t.cap || '',
-      citta:          t.citta || '',
-      pr:             t.pr || '',
-    }));
+    const data = await sheetsGet(TEATRI_RANGE);
+    const rows = data.values || [];
+    nextTeatroId = 1;
+    teatriRowMap = {};
+    teatri = rows.map((r, i) => {
+      const id = nextTeatroId++;
+      teatriRowMap[id] = i + 2;
+      return { id, nome_struttura: r[0]||'', indirizzo: r[1]||'', cap: r[2]||'', citta: r[3]||'', pr: r[4]||'' };
+    }).filter(t => t.nome_struttura);
     renderTeatriList();
     updateTeatriStats();
   } catch(e) { showToast('Errore caricamento teatri: ' + e.message, 'error'); }
@@ -7810,34 +7828,39 @@ async function saveEditTeatro(id) {
   const t = teatri.find(x=>x.id===id);
   TEATRI_FIELDS.forEach(f => { const el=document.getElementById('tedit_'+f.key); if(el) t[f.key]=toUpperField(f.key, el.value); });
   editTeatroMode=false; renderTeatriList(); renderTeatroDetail(t);
-  try {
-    const r = await sbFetch(`/rest/v1/teatri?id=eq.${id}`, {
-      method: 'PATCH',
-      prefer: 'return=minimal',
-      body: JSON.stringify({
-        nome_struttura: t.nome_struttura,
-        indirizzo: t.indirizzo,
-        cap: t.cap,
-        citta: t.citta,
-        pr: t.pr
-      })
-    });
-    if (!r.ok) throw new Error(await r.text());
-    showToast('Teatro salvato', 'success');
-  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch(`/rest/v1/teatri?id=eq.${id}`, {
+        method: 'PATCH', prefer: 'return=minimal',
+        body: JSON.stringify({ nome_struttura: t.nome_struttura, indirizzo: t.indirizzo, cap: t.cap, citta: t.citta, pr: t.pr })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      showToast('Teatro salvato', 'success');
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  } else {
+    const row = [t.nome_struttura, t.indirizzo, t.cap, t.citta, t.pr];
+    try { await sheetsUpdate(`${TEATRI_SHEET}!A${teatriRowMap[id]}:E${teatriRowMap[id]}`, [row]); showToast('Teatro salvato', 'success'); }
+    catch(e) { showToast('Errore: '+e.message, 'error'); }
+  }
 }
 
 async function deleteTeatro(id) {
   if (!confirm('Rimuovere questo teatro?')) return;
+  const row = teatriRowMap[id];
   teatri = teatri.filter(x=>x.id!==id);
   selectedTeatroId = null;
   document.getElementById('teatriDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">🎭</div><div class="empty-title">Teatro rimosso</div></div>`;
   renderTeatriList(); updateTeatriStats();
-  try {
-    const r = await sbFetch(`/rest/v1/teatri?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' });
-    if (!r.ok) throw new Error(await r.text());
-    showToast('Rimosso', 'success');
-  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch(`/rest/v1/teatri?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' });
+      if (!r.ok) throw new Error(await r.text());
+      showToast('Rimosso', 'success');
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  } else {
+    try { await sheetsClear(`${TEATRI_SHEET}!A${row}:E${row}`); showToast('Rimosso', 'success'); }
+    catch(e) { showToast('Errore: '+e.message, 'error'); }
+  }
 }
 
 function openTeatroModal(id=null) {
@@ -7858,19 +7881,30 @@ async function saveTeatro() {
   const payload = {};
   TEATRI_FIELDS.forEach(f => { const el=document.getElementById('tnew_'+f.key); payload[f.key]=el ? toUpperField(f.key, el.value) : ''; });
   closeTeatroModal();
-  try {
-    const r = await sbFetch('/rest/v1/teatri', {
-      method: 'POST',
-      prefer: 'return=representation',
-      body: JSON.stringify(payload)
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const [inserted] = await r.json();
-    const t = { id: inserted.id, nome_struttura: inserted.nome_struttura||'', indirizzo: inserted.indirizzo||'', cap: inserted.cap||'', citta: inserted.citta||'', pr: inserted.pr||'' };
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch('/rest/v1/teatri', { method: 'POST', prefer: 'return=representation', body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error(await r.text());
+      const [inserted] = await r.json();
+      const t = { id: inserted.id, nome_struttura: inserted.nome_struttura||'', indirizzo: inserted.indirizzo||'', cap: inserted.cap||'', citta: inserted.citta||'', pr: inserted.pr||'' };
+      teatri.push(t);
+      renderTeatriList(); selectTeatro(t.id); updateTeatriStats();
+      showToast(`${nome} aggiunto`, 'success');
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  } else {
+    const t = { id: nextTeatroId++, ...payload };
     teatri.push(t);
     renderTeatriList(); selectTeatro(t.id); updateTeatriStats();
-    showToast(`${nome} aggiunto`, 'success');
-  } catch(e) { showToast('Errore: '+e.message, 'error'); }
+    const row = [t.nome_struttura, t.indirizzo, t.cap, t.citta, t.pr];
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(TEATRI_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+      const r = await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ range:TEATRI_RANGE, majorDimension:'ROWS', values:[row] }) });
+      const result = await r.json();
+      const match = (result.updates?.updatedRange||'').match(/(\d+)$/);
+      if (match) teatriRowMap[t.id] = parseInt(match[1]);
+      showToast(`${nome} aggiunto`, 'success');
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+  }
 }
 
 async function sortAndSaveTeatri() {
