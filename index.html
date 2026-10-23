@@ -924,6 +924,7 @@ if (typeof SUPABASE_URL === 'undefined') {
             <option value="RICEVUTO FIRMATO">Ricevuto firmato</option>
             <option value="ARCHIVIATO">Archiviato</option>
           </select>
+          <button id="ctr-migrate-btn" style="display:none;font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap" onclick="migrateContrattiToSupabase()" title="Importa contratti da Sheets a Supabase (una tantum)">⬆ Migra</button>
         </div>
       </div>
       <div style="flex:1;display:flex;overflow:hidden">
@@ -5085,11 +5086,37 @@ function switchModView(view) {
 }
 
 async function loadContratti() {
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch('/rest/v1/contratti?select=*&order=sort_order.asc,data_creazione.desc');
+      if (!r.ok) throw new Error(await r.text());
+      const rows = await r.json();
+      contratti = rows.map((row, i) => ({
+        rowIdx:         i + 2,
+        _sb_id:         row.id,
+        id:             row.id,
+        tipo:           row.tipo || '',
+        scritturato:    row.scritturato || '',
+        spettacolo:     row.spettacolo || '',
+        data_creazione: row.data_creazione || '',
+        stato:          row.stato || 'BOZZA',
+        file_id:        row.file_id || '',
+        note:           row.note || '',
+        data_stato:     row.data_stato || '',
+        dati_json:      row.dati_json || '',
+      })).filter(c => c.id && c.scritturato);
+      updateCtrStats();
+      renderArchivioContratti();
+      return;
+    } catch(e) { showToast('Errore Supabase contratti: ' + e.message, 'error'); return; }
+  }
+  // Fallback Sheets
   try {
     const r = await sheetsGet(CTR_RANGE);
     const rows = r.values || [];
     contratti = rows.map((row,i) => ({
       rowIdx:         i+2,
+      _sb_id:         null,
       id:             row[0]||'',
       tipo:           row[1]||'',
       scritturato:    row[2]||'',
@@ -5112,6 +5139,12 @@ function updateCtrStats() {
   document.getElementById('ctr-stat-inviato').textContent = contratti.filter(c=>c.stato==='INVIATO').length;
   document.getElementById('ctr-stat-ricevuto').textContent= contratti.filter(c=>c.stato==='RICEVUTO FIRMATO').length;
   document.getElementById('ctr-stat-archiv').textContent  = contratti.filter(c=>c.stato==='ARCHIVIATO').length;
+  const migrateBtn = document.getElementById('ctr-migrate-btn');
+  if (migrateBtn) {
+    const supabaseReady = typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL;
+    const notYetMigrated = supabaseReady && contratti.length > 0 && !contratti[0]._sb_id;
+    migrateBtn.style.display = (userRole === 'admin' && notYetMigrated) ? '' : 'none';
+  }
 }
 
 function renderArchivioContratti() {
@@ -5245,6 +5278,21 @@ async function avanzaStatoContratto(id) {
   const nuovoStato = CTR_STATI[idx+1];
   if (!confirm(`Segnare il contratto di ${c.scritturato} come "${nuovoStato}"?`)) return;
   const oggi = new Date().toISOString().slice(0,10);
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const res = await sbFetch(`/rest/v1/contratti?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: JSON.stringify({ stato: nuovoStato, data_stato: oggi })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showToast(`Stato aggiornato: ${nuovoStato}`, 'success');
+      await loadContratti();
+      selectContratto(id);
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+    return;
+  }
+  // Fallback Sheets
   const sheetRow = c.rowIdx;
   checkTokenAndRefresh();
   try {
@@ -5264,6 +5312,21 @@ async function eliminaContratto(id) {
 async function _eliminaContrattoById(id) {
   const c = contratti.find(x=>x.id===id);
   if (!c) return;
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const res = await sbFetch(`/rest/v1/contratti?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        prefer: 'return=minimal'
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showToast('Contratto eliminato', 'success');
+      selectedCtrId = null;
+      document.getElementById('ctr-detail').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Seleziona un contratto</div></div>`;
+      await loadContratti();
+    } catch(e) { showToast('Errore: '+e.message, 'error'); }
+    return;
+  }
+  // Fallback Sheets
   checkTokenAndRefresh();
   try {
     await sheetsUpdate(`${CTR_SHEET}!A${c.rowIdx}:J${c.rowIdx}`, [['','','','','','','','','','']]);
@@ -5362,7 +5425,33 @@ async function salvaContrattoInArchivio(tipo, scritturato, spettacolo, dati) {
   const newId = 'CTR-'+Date.now();
   const oggi  = new Date().toISOString().slice(0,10);
   const jsonStr = dati ? JSON.stringify(dati) : '';
-  const row   = [newId, tipo, scritturato, spettacolo, oggi, 'BOZZA', '', '', '', jsonStr];
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const payload = {
+        id:             newId,
+        tipo:           tipo || '',
+        scritturato:    scritturato || '',
+        spettacolo:     spettacolo || '',
+        data_creazione: oggi,
+        stato:          'BOZZA',
+        file_id:        '',
+        note:           '',
+        data_stato:     '',
+        dati_json:      jsonStr,
+        sort_order:     Date.now(),
+      };
+      const res = await sbFetch('/rest/v1/contratti', {
+        method: 'POST',
+        prefer: 'return=minimal',
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showToast('Contratto salvato in archivio come BOZZA', 'success');
+      return newId;
+    } catch(e) { console.warn('Errore salvataggio archivio Supabase:', e); return null; }
+  }
+  // Fallback Sheets
+  const row = [newId, tipo, scritturato, spettacolo, oggi, 'BOZZA', '', '', '', jsonStr];
   checkTokenAndRefresh();
   try {
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CTR_SHEET+'!A:J')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
@@ -5373,6 +5462,43 @@ async function salvaContrattoInArchivio(tipo, scritturato, spettacolo, dati) {
     showToast('Contratto salvato in archivio come BOZZA', 'success');
     return newId;
   } catch(e) { console.warn('Errore salvataggio archivio:', e); return null; }
+}
+
+// ── Migrazione Contratti da Sheets a Supabase ──────────────────────────────
+async function migrateContrattiToSupabase() {
+  if (!contratti.length) { showToast('Nessun contratto da migrare. Carica prima da Sheets.', 'error'); return; }
+  if (!confirm(`Importare ${contratti.length} contratti da Sheets a Supabase?\n\nQuesto importerà tutti i contratti. Dopo la migrazione potrai svuotare il foglio Sheets.`)) return;
+  try {
+    const payloads = contratti.map((c, i) => ({
+      id:             c.id,
+      tipo:           c.tipo || '',
+      scritturato:    c.scritturato || '',
+      spettacolo:     c.spettacolo || '',
+      data_creazione: c.data_creazione || '',
+      stato:          c.stato || 'BOZZA',
+      file_id:        c.file_id || '',
+      note:           c.note || '',
+      data_stato:     c.data_stato || '',
+      dati_json:      c.dati_json || '',
+      sort_order:     i,
+    }));
+    const res = await sbFetch('/rest/v1/contratti', {
+      method: 'POST',
+      prefer: 'return=minimal',
+      body: JSON.stringify(payloads)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(`${contratti.length} contratti migrati su Supabase!`, 'success');
+    if (confirm('Migrazione completata!\n\nVuoi svuotare il foglio Contratti su Sheets ora? (Operazione irreversibile)')) {
+      await freezeContrattiSheets();
+    }
+    await loadContratti();
+  } catch(e) { showToast('Errore migrazione: ' + e.message, 'error'); }
+}
+
+async function freezeContrattiSheets() {
+  await sheetsClear(`${CTR_SHEET}!A2:J5000`);
+  showToast('Foglio Contratti su Sheets svuotato.', 'success');
 }
 
 function anteprimaContratto(id) {
