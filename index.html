@@ -2657,8 +2657,7 @@ function updateStats() {
   const backfillBtn = document.getElementById('rubrica-backfill-btn');
   if (backfillBtn) {
     const daBackfillare = contacts.filter(c => c.codice_fiscale && c.codice_fiscale.length >= 11 && !c.data_nascita).length;
-    console.log('[Backfill] userRole:', userRole, '| daBackfillare:', daBackfillare, '| sample data_nascita:', contacts.slice(0,3).map(c=>c.data_nascita));
-    backfillBtn.style.display = (userRole === 'admin' && daBackfillare > 0) ? 'inline-block' : 'none';
+backfillBtn.style.display = (userRole === 'admin' && daBackfillare > 0) ? 'inline-block' : 'none';
     if (daBackfillare > 0) backfillBtn.title = `Recupera data di nascita dal CF per ${daBackfillare} contatt${daBackfillare===1?'o':'i'}`;
   }
 
