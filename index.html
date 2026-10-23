@@ -6926,7 +6926,7 @@ function aggiornStatsFatture(lista) {
   document.getElementById('fat-totimponibile').textContent = fmt(totImp);
   document.getElementById('fat-totpagato').textContent     = fmt(totPag);
   const migrateBtn = document.getElementById('fat-migrate-btn');
-  if (migrateBtn && !lista) {
+  if (migrateBtn) {
     const supabaseReady = typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL;
     const notYetMigrated = supabaseReady && fatture.length > 0 && !fatture[0]._sb_id;
     migrateBtn.style.display = (userRole === 'admin' && notYetMigrated) ? '' : 'none';
