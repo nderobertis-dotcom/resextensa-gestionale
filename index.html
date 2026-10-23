@@ -1387,6 +1387,7 @@ if (typeof SUPABASE_URL === 'undefined') {
         <div class="stat"><div class="stat-n" id="stat-agib-tot">—</div><div class="stat-l">Pratiche</div></div>
         <div class="stat"><div class="stat-n" id="stat-agib-righe">—</div><div class="stat-l">Righe totali</div></div>
         <div class="stat"><div class="stat-n" id="stat-agib-prima">—</div><div class="stat-l">Prime assunzioni</div></div>
+        <button id="agib-migrate-btn" style="display:none;font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;margin-left:8px" onclick="migrateAgibToSupabase()" title="Importa agibilità da Sheets a Supabase (una tantum)">⬆ Migra</button>
       </div>
     </div>
     <div style="display:flex;flex:1;overflow:hidden">
@@ -8368,12 +8369,60 @@ function fmtDataInvio(d) {
   return d;
 }
 
+function _agibRowToObj(r, rowIdx) {
+  return {
+    rowIdx,
+    _sb_id: r._sb_id || null,
+    id_pratica: (r.id_pratica||'').trim(),
+    data_invio: (r.data_invio||'').trim(),
+    cognome_nome: (r.cognome_nome||'').trim(),
+    data_dal: (r.data_dal||'').trim(),
+    data_al: (r.data_al||'').trim(),
+    teatro: (r.teatro||'').trim(),
+    indirizzo_teatro: (r.indirizzo_teatro||'').trim(),
+    prima_assunzione: (r.prima_assunzione||'NO').trim(),
+    codice_fiscale: (r.codice_fiscale||'').trim(),
+    residenza: (r.residenza||'').trim(),
+    tipo_doc: (r.tipo_doc||'').trim(),
+    num_doc: (r.num_doc||'').trim(),
+    stato: (r.stato||'BOZZA').trim(),
+    destinatari: (r.destinatari||'').trim(),
+  };
+}
+
+function _agibBuildPratiche() {
+  const map = {};
+  agibData.forEach(r => {
+    if (!map[r.id_pratica]) map[r.id_pratica] = { id: r.id_pratica, data_invio: r.data_invio, righe: [] };
+    map[r.id_pratica].righe.push(r);
+  });
+  agibPratiche = Object.values(map).sort((a,b) => b.id.localeCompare(a.id));
+  if (agibPratiche.length) {
+    const lastNum = parseInt(agibPratiche[0].id.replace(/\D/g,'')) || 0;
+    nextAgibPratica = lastNum + 1;
+  }
+}
+
 async function loadAgibilita() {
+  if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    try {
+      const r = await sbFetch('/rest/v1/agibilita?select=*&order=sort_order.asc,id_pratica.desc,cognome_nome.asc');
+      if (!r.ok) throw new Error(await r.text());
+      const rows = await r.json();
+      agibData = rows.map((row, i) => _agibRowToObj({ ...row, _sb_id: row.id }, i));
+      _agibBuildPratiche();
+      renderAgibList();
+      updateAgibStats();
+      return;
+    } catch(e) { showToast('Errore Supabase agibilità: ' + e.message, 'error'); return; }
+  }
+  // Fallback Sheets
   try {
     const data = await sheetsGet(AGIB_RANGE);
     const rows = data.values || [];
     agibData = rows.map((r,i) => ({
-      rowIdx: i+2,  // indice reale nel foglio (riga 1 = intestazione)
+      rowIdx: i+2,
+      _sb_id: null,
       id_pratica: (r[0]||'').trim(),
       data_invio: (r[1]||'').trim(),
       cognome_nome: (r[2]||'').trim(),
@@ -8388,22 +8437,8 @@ async function loadAgibilita() {
       num_doc: (r[11]||'').trim(),
       stato: (r[12]||'BOZZA').trim(),
       destinatari: (r[13]||'').trim(),
-    })).filter(r => r.id_pratica && r.cognome_nome); // escludi righe vuote
-
-    // Raggruppa per id_pratica
-    const map = {};
-    agibData.forEach(r => {
-      if (!map[r.id_pratica]) map[r.id_pratica] = { id: r.id_pratica, data_invio: r.data_invio, righe: [] };
-      map[r.id_pratica].righe.push(r);
-    });
-    agibPratiche = Object.values(map).sort((a,b) => b.id.localeCompare(a.id));
-
-    // Calcola prossimo ID pratica
-    if (agibPratiche.length) {
-      const lastNum = parseInt(agibPratiche[0].id.replace(/\D/g,'')) || 0;
-      nextAgibPratica = lastNum + 1;
-    }
-
+    })).filter(r => r.id_pratica && r.cognome_nome);
+    _agibBuildPratiche();
     renderAgibList();
     updateAgibStats();
   } catch(e) { showToast('Errore caricamento agibilità: ' + e.message, 'error'); }
@@ -8413,6 +8448,12 @@ function updateAgibStats() {
   document.getElementById('stat-agib-tot').textContent = agibPratiche.length || '—';
   document.getElementById('stat-agib-righe').textContent = agibData.length || '—';
   document.getElementById('stat-agib-prima').textContent = agibData.filter(r=>r.prima_assunzione==='SI').length || '—';
+  const migrateBtn = document.getElementById('agib-migrate-btn');
+  if (migrateBtn) {
+    const supabaseReady = typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL;
+    const notYetMigrated = supabaseReady && agibData.length > 0 && !agibData[0]._sb_id;
+    migrateBtn.style.display = (userRole === 'admin' && notYetMigrated) ? '' : 'none';
+  }
 }
 
 function filteredAgib() {
@@ -9028,42 +9069,93 @@ async function saveAgib() {
   }
 
   try {
-    checkTokenAndRefresh();
-    if (isModifica) {
-      const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).sort((a,b)=>a.rowIdx-b.rowIdx);
-      // Sovrascrive le righe esistenti con i nuovi dati
-      for (let i = 0; i < nuoveRighe.length; i++) {
-        if (i < righeVecchie.length) {
-          await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`, [nuoveRighe[i]]);
-        } else {
-          // Più righe nuove che vecchie — append in blocco alla fine
-          const righeNuove = nuoveRighe.slice(righeVecchie.length);
-          const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-          const resp = await fetch(url, {
-            method: 'POST',
-            headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ range: AGIB_RANGE, majorDimension: 'ROWS', values: righeNuove })
-          });
-          if (!resp.ok) throw new Error('Errore append nuove righe: ' + resp.status);
-          break; // append fatto in blocco, esci dal loop
+    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+      // ── PATH SUPABASE ──────────────────────────────────────────
+      // nuoveRighe = array di array Sheets-style; costruiamo payload oggetti
+      const buildPayload = (row, idx) => ({
+        id_pratica:      row[0],
+        data_invio:      (row[1]||'').replace(/^'/,''),
+        cognome_nome:    row[2],
+        data_dal:        (row[3]||'').replace(/^'/,''),
+        data_al:         (row[4]||'').replace(/^'/,''),
+        teatro:          row[5]||'',
+        indirizzo_teatro:row[6]||'',
+        prima_assunzione:row[7]||'NO',
+        codice_fiscale:  row[8]||'',
+        residenza:       row[9]||'',
+        tipo_doc:        row[10]||'',
+        num_doc:         row[11]||'',
+        stato:           row[12]||'BOZZA',
+        destinatari:     row[13]||'',
+        sort_order:      idx,
+      });
+
+      if (isModifica) {
+        const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica);
+        // Update righe esistenti + insert nuove + delete eccesso
+        for (let i = 0; i < nuoveRighe.length; i++) {
+          const payload = buildPayload(nuoveRighe[i], i);
+          if (i < righeVecchie.length && righeVecchie[i]._sb_id) {
+            const res = await sbFetch(`/rest/v1/agibilita?id=eq.${righeVecchie[i]._sb_id}`, {
+              method:'PATCH', prefer:'return=minimal', body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error(await res.text());
+          } else {
+            const res = await sbFetch('/rest/v1/agibilita', {
+              method:'POST', prefer:'return=minimal', body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error(await res.text());
+          }
         }
-      }
-      // Azzera le righe vecchie in eccesso (righe eliminate)
-      for (let i = nuoveRighe.length; i < righeVecchie.length; i++) {
-        await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`,
-          [['','','','','','','','','','','','','','','']]);
+        // Elimina righe in eccesso
+        for (let i = nuoveRighe.length; i < righeVecchie.length; i++) {
+          if (righeVecchie[i]._sb_id) {
+            await sbFetch(`/rest/v1/agibilita?id=eq.${righeVecchie[i]._sb_id}`, { method:'DELETE', prefer:'return=minimal' });
+          }
+        }
+      } else {
+        const payloads = nuoveRighe.map((row, i) => buildPayload(row, i));
+        const res = await sbFetch('/rest/v1/agibilita', {
+          method:'POST', prefer:'return=minimal', body: JSON.stringify(payloads)
+        });
+        if (!res.ok) throw new Error(await res.text());
       }
     } else {
-      const appendRange = `${AGIB_SHEET}!A:A`;
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-      const r = await fetch(url, {
-        method:'POST',
-        headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ range: appendRange, majorDimension:'ROWS', values:nuoveRighe })
-      });
-      if (!r.ok) {
-        const rBody = await r.json();
-        throw new Error('Errore salvataggio ' + r.status + ': ' + JSON.stringify(rBody));
+      // ── PATH SHEETS ───────────────────────────────────────────
+      checkTokenAndRefresh();
+      if (isModifica) {
+        const righeVecchie = agibData.filter(r=>r.id_pratica===idPratica).sort((a,b)=>a.rowIdx-b.rowIdx);
+        for (let i = 0; i < nuoveRighe.length; i++) {
+          if (i < righeVecchie.length) {
+            await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`, [nuoveRighe[i]]);
+          } else {
+            const righeNuove = nuoveRighe.slice(righeVecchie.length);
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AGIB_RANGE)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+            const resp = await fetch(url, {
+              method: 'POST',
+              headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ range: AGIB_RANGE, majorDimension: 'ROWS', values: righeNuove })
+            });
+            if (!resp.ok) throw new Error('Errore append nuove righe: ' + resp.status);
+            break;
+          }
+        }
+        for (let i = nuoveRighe.length; i < righeVecchie.length; i++) {
+          await sheetsUpdate(`${AGIB_SHEET}!A${righeVecchie[i].rowIdx}:O${righeVecchie[i].rowIdx}`,
+            [['','','','','','','','','','','','','','','']]);
+        }
+      } else {
+        const appendRange = `${AGIB_SHEET}!A:A`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+        const r = await fetch(url, {
+          method:'POST',
+          headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+          body: JSON.stringify({ range: appendRange, majorDimension:'ROWS', values:nuoveRighe })
+        });
+        if (!r.ok) {
+          const rBody = await r.json();
+          throw new Error('Errore salvataggio ' + r.status + ': ' + JSON.stringify(rBody));
+        }
       }
     }
     closeAgibModal();
@@ -9076,17 +9168,21 @@ async function saveAgib() {
 async function deletePratica(id, stato) {
   const isBozza = !stato || stato === 'BOZZA';
   if (isBozza) {
-    // BOZZA: elimina completamente
     if (!confirm(`Eliminare definitivamente la pratica ${id}?`)) return;
-    const righe = agibData.filter(r=>r.id_pratica===id).map(r=>r.rowIdx).sort((a,b)=>b-a);
+    const righe = agibData.filter(r=>r.id_pratica===id);
     try {
-      for (const row of righe) await sheetsClear(`${AGIB_SHEET}!A${row}:O${row}`);
+      if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+        const res = await sbFetch(`/rest/v1/agibilita?id_pratica=eq.${encodeURIComponent(id)}`, { method:'DELETE', prefer:'return=minimal' });
+        if (!res.ok) throw new Error(await res.text());
+      } else {
+        for (const r of righe.map(r=>r.rowIdx).sort((a,b)=>b-a))
+          await sheetsClear(`${AGIB_SHEET}!A${r}:O${r}`);
+      }
       await loadAgibilita();
       document.getElementById('agibDetail').innerHTML = `<div class="empty-state"><div class="empty-icon">📑</div><div class="empty-title">Pratica eliminata</div></div>`;
       showToast(`Pratica ${id} eliminata`, 'success');
     } catch(e) { showToast('Errore: '+e.message, 'error'); }
   } else {
-    // INVIATA: segna come CANCELLATA ma mantiene l'ID
     if (!confirm(`Segnare la pratica ${id} come CANCELLATA?\nL'ID rimarrà in memoria come riferimento storico.`)) return;
     await aggiornaStatoPratica(id, 'CANCELLATA');
     showToast(`Pratica ${id} segnata come CANCELLATA`, 'success');
@@ -9096,13 +9192,58 @@ async function deletePratica(id, stato) {
 async function aggiornaStatoPratica(id, nuovoStato) {
   const righe = agibData.filter(r=>r.id_pratica===id);
   try {
-    for (const r of righe) {
-      await sheetsUpdate(`${AGIB_SHEET}!M${r.rowIdx}`, [[nuovoStato]]);
+    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+      const res = await sbFetch(`/rest/v1/agibilita?id_pratica=eq.${encodeURIComponent(id)}`, {
+        method:'PATCH', prefer:'return=minimal', body: JSON.stringify({ stato: nuovoStato })
+      });
+      if (!res.ok) throw new Error(await res.text());
+    } else {
+      for (const r of righe) {
+        await sheetsUpdate(`${AGIB_SHEET}!M${r.rowIdx}`, [[nuovoStato]]);
+      }
     }
     await loadAgibilita();
     const p = agibPratiche.find(x=>x.id===id);
     if (p) renderAgibDetail(p);
   } catch(e) { showToast('Errore aggiornamento stato: '+e.message, 'error'); }
+}
+
+async function migrateAgibToSupabase() {
+  if (!agibData.length) { showToast('Nessuna riga da migrare. Carica prima da Sheets.', 'error'); return; }
+  if (!confirm(`Importare ${agibData.length} righe agibilità da Sheets a Supabase? Questa operazione è una tantum. Dopo la migrazione il tab Sheets verrà svuotato.`)) return;
+  try {
+    const payloads = agibData.map((r, i) => ({
+      id_pratica:       r.id_pratica,
+      data_invio:       r.data_invio,
+      cognome_nome:     r.cognome_nome,
+      data_dal:         r.data_dal,
+      data_al:          r.data_al,
+      teatro:           r.teatro,
+      indirizzo_teatro: r.indirizzo_teatro,
+      prima_assunzione: r.prima_assunzione || 'NO',
+      codice_fiscale:   r.codice_fiscale,
+      residenza:        r.residenza,
+      tipo_doc:         r.tipo_doc,
+      num_doc:          r.num_doc,
+      stato:            r.stato || 'BOZZA',
+      destinatari:      r.destinatari,
+      sort_order:       i,
+    }));
+    const res = await sbFetch('/rest/v1/agibilita', {
+      method:'POST', prefer:'return=minimal', body: JSON.stringify(payloads)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(`Migrazione completata — ${payloads.length} righe inserite`, 'success');
+    if (confirm('Migrazione riuscita! Svuotare il foglio Sheets Agibilita ora?')) {
+      await freezeAgibSheets();
+    }
+    await loadAgibilita();
+  } catch(e) { showToast('Errore migrazione: '+e.message, 'error'); }
+}
+
+async function freezeAgibSheets() {
+  await sheetsClear(`${AGIB_SHEET}!A2:O5000`);
+  showToast('Foglio Agibilita svuotato', 'success');
 }
 
 function openInvioAgibModal(id) {
@@ -9157,13 +9298,21 @@ async function inviaAgibilita() {
   const mailto = `mailto:${destinatari.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message + '\n\nIn allegato la Comunicazione di Agibilità ' + id + '.')}`;
   window.open(mailto, '_blank');
 
-  // Segna come INVIATA e salva destinatari nel foglio
+  // Segna come INVIATA e salva destinatari
   try {
     await aggiornaStatoPratica(id, 'INVIATA');
     // Salva anche i destinatari nella colonna N (indice 13)
     const righe = agibData.filter(r=>r.id_pratica===id);
-    for (const r of righe) {
-      await sheetsUpdate(`${AGIB_SHEET}!N${r.rowIdx}`, [[destinatari.join(', ')]]);
+    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+      const res = await sbFetch(`/rest/v1/agibilita?id_pratica=eq.${encodeURIComponent(id)}`, {
+        method:'PATCH', prefer:'return=minimal',
+        body: JSON.stringify({ destinatari: destinatari.join(', ') })
+      });
+      if (!res.ok) console.warn('Errore salvataggio destinatari:', await res.text());
+    } else {
+      for (const r of righe) {
+        await sheetsUpdate(`${AGIB_SHEET}!N${r.rowIdx}`, [[destinatari.join(', ')]]);
+      }
     }
     showToast(`✅ Client email aperto — allega il PDF e invia. Pratica segnata come INVIATA`, 'success');
   } catch(e) {
