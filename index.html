@@ -959,7 +959,7 @@ if (typeof SUPABASE_URL === 'undefined') {
       </div>
       <div style="flex:1;display:flex;overflow:hidden">
         <!-- Lista contratti -->
-        <div style="width:280px;min-width:280px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto" id="ctr-list"></div>
+        <div style="width:300px;min-width:300px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto" id="ctr-list"></div>
         <!-- Dettaglio contratto -->
         <div id="ctr-detail" style="flex:1;overflow-y:auto;background:var(--bg)">
           <div class="empty-state">
@@ -5579,49 +5579,109 @@ function updateCtrStats() {
   }
 }
 
+// Tiene traccia dei nominativi espansi nella sidebar
+const _ctrExpanded = new Set();
+
+function _ctrStatoRank(stato) {
+  // Ordine "peggiore → migliore": BOZZA è il peggiore
+  const rank = { 'BOZZA': 0, 'INVIATO': 1, 'RICEVUTO FIRMATO': 2, 'ARCHIVIATO': 3 };
+  return rank[stato] ?? 0;
+}
+
 function renderArchivioContratti() {
   const q     = (document.getElementById('ctrSearchInput')?.value||'').toLowerCase();
   const stato = document.getElementById('ctrStatoFilter')?.value||'';
-  const list  = contratti.filter(c => {
-    const mq = !q || c.scritturato.toLowerCase().includes(q) || c.spettacolo.toLowerCase().includes(q);
+  const fmtD  = v => v ? v.split('-').reverse().join('/') : '—';
+
+  // Filtra
+  const filtered = contratti.filter(c => {
+    const mq = !q || c.scritturato.toLowerCase().includes(q) || (c.spettacolo||'').toLowerCase().includes(q);
     const ms = !stato || c.stato === stato;
     return mq && ms;
-  }).sort((a,b) => b.id.localeCompare(a.id));
+  });
 
-  const el = document.getElementById('ctr-list');
-  el.innerHTML = list.map(c => {
-    const sc = CTR_STATI_COLOR[c.stato]||{bg:'#eee',color:'#333'};
-    const isSel = c.id === selectedCtrId;
-    const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
-    // Estrai data firma e data primo spettacolo da dati_json
-    let dataSpett = '';
-    let dataFirmaFmt = '';
-    if (c.dati_json) {
-      try {
-        const d = JSON.parse(c.dati_json);
-        const spetts = Array.isArray(d.spettacoliList) ? d.spettacoliList : [];
-        const primoConData = spetts.find(s => s.data);
-        if (primoConData?.data) dataSpett = fmtD(primoConData.data);
-        if (d.dataFirma) dataFirmaFmt = d.dataFirma; // già in formato GG/MM/AAAA
-      } catch(e) {}
-    }
-    const dataLabel = dataFirmaFmt || fmtD(c.data_creazione);
-    return `<div class="contact-item${isSel?' selected':''}" onclick="selectContratto('${c.id}')">
-      <div style="display:flex;flex-direction:column;gap:3px">
-        <div style="font-size:12px;font-weight:600;color:var(--text)">${c.scritturato}</div>
-        <div style="font-size:10px;color:var(--text2)">${c.spettacolo||'—'} · ${c.tipo}</div>
-        ${dataSpett ? `<div style="font-size:10px;color:var(--text2)">🎭 Prima: <strong>${dataSpett}</strong></div>` : ''}
-        <div style="font-size:10px;color:var(--text3)">${dataLabel}</div>
-        <span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px;display:inline-block;background:${sc.bg};color:${sc.color};width:fit-content">${c.stato}</span>
+  // Raggruppa per scritturato
+  const gruppi = {};
+  for (const c of filtered) {
+    const nome = c.scritturato || '—';
+    if (!gruppi[nome]) gruppi[nome] = [];
+    gruppi[nome].push(c);
+  }
+
+  // Ordina alfabeticamente per COGNOME (prima parola)
+  const nomiOrdinati = Object.keys(gruppi).sort((a, b) => a.localeCompare(b, 'it'));
+
+  if (nomiOrdinati.length === 0) {
+    document.getElementById('ctr-list').innerHTML =
+      '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Nessun contratto</div>';
+    return;
+  }
+
+  const html = nomiOrdinati.map(nome => {
+    const cList = gruppi[nome].sort((a,b) => b.id.localeCompare(a.id));
+    const count = cList.length;
+
+    // Stato peggiore = rank minimo
+    const worstStato = cList.reduce((worst, c) =>
+      _ctrStatoRank(c.stato) < _ctrStatoRank(worst) ? c.stato : worst, cList[0].stato);
+    const wsc = CTR_STATI_COLOR[worstStato] || { bg:'#eee', color:'#333' };
+
+    const isOpen   = _ctrExpanded.has(nome);
+    const hasSelIn = cList.some(c => c.id === selectedCtrId);
+
+    // Riga dei contratti interni (visibile solo se espanso)
+    const righeContratti = cList.map(c => {
+      const sc     = CTR_STATI_COLOR[c.stato] || { bg:'#eee', color:'#333' };
+      const isSel  = c.id === selectedCtrId;
+      let dataLabel = fmtD(c.data_creazione);
+      if (c.dati_json) {
+        try {
+          const d = JSON.parse(c.dati_json);
+          if (d.dataFirma) dataLabel = d.dataFirma;
+        } catch(e) {}
+      }
+      return `<div
+        onclick="event.stopPropagation();selectContratto('${c.id}')"
+        style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px 8px 20px;cursor:pointer;border-top:1px solid var(--border);
+               background:${isSel ? 'var(--primary-light,#e8f0fe)' : 'var(--surface)'}">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.spettacolo||'—'}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">${c.tipo} · ${dataLabel}</div>
+        </div>
+        <span style="flex-shrink:0;font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:${sc.bg};color:${sc.color};white-space:nowrap">${c.stato}</span>
+      </div>`;
+    }).join('');
+
+    return `<div style="border-bottom:1px solid var(--border)">
+      <!-- Card nominativo -->
+      <div onclick="_ctrToggle('${nome.replace(/'/g,"\\'")}');renderArchivioContratti()"
+           style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;
+                  background:${hasSelIn ? 'var(--primary-light,#e8f0fe)' : 'var(--surface)'};
+                  user-select:none">
+        <div style="font-size:13px;flex:1;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nome}</div>
+        <span style="flex-shrink:0;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${wsc.bg};color:${wsc.color}">${worstStato}</span>
+        <span style="flex-shrink:0;font-size:11px;font-weight:700;min-width:20px;text-align:center;padding:1px 5px;border-radius:10px;background:var(--border);color:var(--text2)">${count}</span>
+        <span style="flex-shrink:0;font-size:10px;color:var(--text3)">${isOpen ? '▲' : '▼'}</span>
       </div>
+      <!-- Contratti espansi -->
+      ${isOpen ? righeContratti : ''}
     </div>`;
-  }).join('') || '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Nessun contratto</div>';
+  }).join('');
+
+  document.getElementById('ctr-list').innerHTML = html;
+}
+
+function _ctrToggle(nome) {
+  if (_ctrExpanded.has(nome)) _ctrExpanded.delete(nome);
+  else _ctrExpanded.add(nome);
 }
 
 function selectContratto(id) {
   selectedCtrId = id;
-  renderArchivioContratti();
   const c = contratti.find(x=>x.id===id);
+  // Espandi automaticamente il nominativo di questo contratto
+  if (c?.scritturato) _ctrExpanded.add(c.scritturato);
+  renderArchivioContratti();
   if (!c) return;
   const sc = CTR_STATI_COLOR[c.stato]||{bg:'#eee',color:'#333'};
   const fmtD = v => v ? v.split('-').reverse().join('/') : '—';
