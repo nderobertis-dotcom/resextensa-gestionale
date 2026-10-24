@@ -5863,7 +5863,7 @@ async function salvaContrattoInArchivio(tipo, scritturato, spettacolo, dati, luo
         note:             '',
         data_stato:       '',
         dati_json:        jsonStr,
-        sort_order:       Date.now(),
+        sort_order:       Math.floor(Date.now() / 1000),
       };
       const res = await sbFetch('/rest/v1/contratti', {
         method: 'POST',
