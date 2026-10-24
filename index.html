@@ -616,7 +616,6 @@ if (typeof SUPABASE_URL === 'undefined') {
       <div id="bdayHeader"></div>
       <div class="header-stats">
         <div class="stat"><div class="stat-n" id="stat-tot">—</div><div class="stat-l">Componenti</div></div>
-        <div class="stat"><div class="stat-n" id="stat-attivi" style="color:var(--attivo)">—</div><div class="stat-l">Attivi</div></div>
         <div class="stat"><div class="stat-n" id="stat-spett" style="color:var(--accent)">—</div><div class="stat-l">Spettacoli</div></div>
         <div class="stat"><div class="stat-n" id="stat-m" style="color:#4a7ab5">—</div><div class="stat-l">M</div></div>
         <div class="stat"><div class="stat-n" id="stat-f" style="color:#b54a7a">—</div><div class="stat-l">F</div></div>
@@ -641,12 +640,11 @@ if (typeof SUPABASE_URL === 'undefined') {
       </div>
       <div class="filters">
         <div>
-          <div class="filter-label">Stato</div>
-          <select id="filterStato">
+          <div class="filter-label">Sesso</div>
+          <select id="filterSesso">
             <option value="">Tutti</option>
-            <option value="ATTIVO">Attivi</option>
-            <option value="CESSATO">Cessati</option>
-            <option value="ND">Non definito</option>
+            <option value="M">M</option>
+            <option value="F">F</option>
           </select>
         </div>
         <div>
@@ -1773,7 +1771,7 @@ async function downloadDriveFile(fileId, fileName) {
 
 // Mappatura colonne Sheets → campi app (0-based, colonna B=1, C=2 …)
 const COL = {
-  cognome:0, nome:1, spettacoli:2, stato:3,
+  cognome:0, nome:1, spettacoli:2, sesso:3,
   data_nascita:4, luogo_nascita:5, citta_residenza:6, indirizzo:7,
   doc_tipo:8, doc_num:9, telefono:10, email:11, pec:12,
   codice_fiscale:13, cv:14, incarico:15, carta_freccia:16,
@@ -1790,7 +1788,7 @@ const COLORS = [
 const FIELDS = [
   { key:'cognome', label:'Cognome', req:true },
   { key:'nome', label:'Nome', req:true },
-  { key:'stato', label:'Stato', type:'select', opts:['ATTIVO','CESSATO',''] },
+  { key:'sesso', label:'Sesso', type:'select', opts:['','M','F'] },
   { key:'incarico', label:'Incarico', type:'select', opts:['','Amministrativo','Artista','Ballerino/a','Danzatore/trice','Direzione Artistica','Tecnico'] },
   { key:'spettacoli', label:'Spettacoli', type:'checkboxes', opts:[], full:true },
   { key:'email', label:'Email' },
@@ -2376,10 +2374,10 @@ function avatarLarge(c) {
   const [bg,fg] = getColor(c.cognome+c.nome);
   return `<div class="avatar-lg" style="background:${bg};color:${fg}">${initials(c)}</div>`;
 }
-function statoBadge(s) {
-  if (s==='ATTIVO') return `<span class="badge-small badge-attivo">Attivo</span>`;
-  if (s==='CESSATO') return `<span class="badge-small badge-cessato">Cessato</span>`;
-  return `<span class="badge-small badge-unknown">—</span>`;
+function sessoBadge(s) {
+  if (s==='M') return `<span class="badge-small" style="background:rgba(74,122,181,0.15);color:#4a7ab5">M</span>`;
+  if (s==='F') return `<span class="badge-small" style="background:rgba(181,74,122,0.15);color:#b54a7a">F</span>`;
+  return '';
 }
 // allSpettacoli() è definita nella sezione Spettacoli & Calendario (usa spettacoliList da Supabase)
 function allIncarichi() {
@@ -2785,7 +2783,6 @@ function goToContact(id) {
 
 function updateStats() {
   document.getElementById('stat-tot').textContent = contacts.length;
-  document.getElementById('stat-attivi').textContent = contacts.filter(c=>c.stato==='ATTIVO').length;
   document.getElementById('stat-spett').textContent = allSpettacoli().length;
 
   // Statistiche sesso ed età
@@ -2837,14 +2834,13 @@ function populateFilters() {
   fi.innerHTML = '<option value="">Tutti gli incarichi</option>' + allIncarichi().map(s=>`<option value="${s}"${s===ci?' selected':''}>${s}</option>`).join('');
 }
 function filteredContacts() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  const stato = document.getElementById('filterStato').value;
+  const q     = document.getElementById('searchInput').value.toLowerCase();
+  const sesso = document.getElementById('filterSesso').value;
   const spett = document.getElementById('filterSpett').value;
-  const inc = document.getElementById('filterIncarico').value;
+  const inc   = document.getElementById('filterIncarico').value;
   return contacts.filter(c => {
     if (q && !`${c.cognome} ${c.nome} ${c.email} ${c.codice_fiscale} ${c.telefono}`.toLowerCase().includes(q)) return false;
-    if (stato === 'ND' && c.stato) return false;
-    if (stato && stato !== 'ND' && c.stato !== stato) return false;
+    if (sesso && (c.sesso || sessoFromCF(c.codice_fiscale)) !== sesso) return false;
     if (spett && !(c.spettacoli||'').split(',').map(x=>x.trim()).includes(spett)) return false;
     if (inc && c.incarico !== inc) return false;
     return true;
@@ -2860,7 +2856,7 @@ function renderList() {
       ${avatarSmall(c)}
       <div class="contact-info">
         <div class="contact-name">${c.cognome} ${c.nome}</div>
-        <div class="contact-meta">${statoBadge(c.stato)}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${meta}</span></div>
+        <div class="contact-meta">${sessoBadge(c.sesso||sessoFromCF(c.codice_fiscale))}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${meta}</span></div>
       </div>
     </div>`;
   }).join('') || '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Nessun risultato</div>';
@@ -2924,7 +2920,7 @@ function renderDetail(c) {
   if (editMode) return renderEdit(c);
   const [bg,fg] = getColor(c.cognome+c.nome);
   const chips = c.spettacoli ? c.spettacoli.split(',').map(s=>`<span class="chip">${s.trim()}</span>`).join('') : '';
-  const statoClass = c.stato==='ATTIVO' ? 'badge-attivo' : c.stato==='CESSATO' ? 'badge-cessato' : 'badge-unknown';
+  const sessoDisp = c.sesso || sessoFromCF(c.codice_fiscale) || '—';
   const editable = canEdit(c);
   const isAdmin = userRole === 'admin';
   document.getElementById('mainPanel').innerHTML = `
@@ -2946,7 +2942,7 @@ function renderDetail(c) {
       <div class="detail-name-wrap">
         <div class="detail-name">${c.cognome} ${c.nome}</div>
         <div class="detail-sub">
-          <span class="badge-stato ${statoClass}">${c.stato||'—'}</span>
+          ${sessoBadge(sessoDisp)}
           ${c.incarico?`<span style="color:var(--text2)">${c.incarico}</span>`:''}
         </div>
         ${chips?`<div class="spettacoli-chips">${chips}</div>`:''}
@@ -3470,7 +3466,7 @@ function showToast(msg, type='success') {
 }
 
 document.getElementById('searchInput').addEventListener('input', renderList);
-document.getElementById('filterStato').addEventListener('change', renderList);
+document.getElementById('filterSesso').addEventListener('change', renderList);
 document.getElementById('filterSpett').addEventListener('change', renderList);
 document.getElementById('filterIncarico').addEventListener('change', renderList);
 document.getElementById('newModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeModal(); });
@@ -3776,16 +3772,15 @@ function renderHome() {
 
   // Stats sidebar
   const tot = contacts.length;
-  const attivi = contacts.filter(c=>c.stato==='ATTIVO').length;
   const spett = allSpettacoli().length;
   let m=0,f=0,u25=0,o35=0;
   contacts.forEach(c => {
-    const s=sessoFromCF(c.codice_fiscale); if(s==='M')m++; if(s==='F')f++;
+    const s=c.sesso||sessoFromCF(c.codice_fiscale); if(s==='M')m++; if(s==='F')f++;
     const e=etaFromCF(c.codice_fiscale); if(e!==null){if(e<25)u25++; if(e>35)o35++;}
   });
-  ['tot','attivi','spett','m','f','u25','o35'].forEach((k,i) => {
+  ['tot','spett','m','f','u25','o35'].forEach((k,i) => {
     const el = document.getElementById('hs-'+k);
-    if (el) el.textContent = [tot,attivi,spett,m,f,u25,o35][i];
+    if (el) el.textContent = [tot,spett,m,f,u25,o35][i];
   });
 
   // Cards footer
@@ -6116,7 +6111,6 @@ async function openContrattualistica() {
   const sel = document.getElementById('ctr-select');
   sel.innerHTML = '<option value="">— Seleziona —</option>' +
     [...contacts]
-      .filter(c => c.stato==='ATTIVO' || !c.stato)
       .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
       .map(c => `<option value="${c.id}">${c.cognome} ${c.nome}</option>`)
       .join('');
@@ -6550,7 +6544,6 @@ async function openContrattoModal() {
   const selComp = document.getElementById('ct-componente');
   selComp.innerHTML = '<option value="">— Seleziona —</option>' +
     [...contacts]
-      .filter(c => c.stato === 'ATTIVO' || !c.stato)
       .sort((a,b) => a.cognome.localeCompare(b.cognome,'it'))
       .map(c => `<option value="${c.id}">${c.cognome} ${c.nome}</option>`)
       .join('');
@@ -9624,7 +9617,7 @@ function cercaComponenteAgib(idx) {
   if (!risultati.length) { drop.style.display='none'; return; }
   drop.innerHTML = risultati.map(c =>
     `<div style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)" onmousedown="selezionaComponenteAgib(${idx},${c.id},'${(c.cognome+' '+c.nome).replace(/'/g,"\\'")}')">
-      ${c.cognome} ${c.nome} <span style="color:var(--text3);font-size:10px">${c.stato||''}</span>
+      ${c.cognome} ${c.nome} <span style="color:var(--text3);font-size:10px">${c.incarico||''}</span>
     </div>`
   ).join('');
   drop.style.display = 'block';
