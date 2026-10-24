@@ -6141,9 +6141,7 @@ async function generaContrattualistica() {
   if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
   if (!nettoNum)   { showToast('Inserisci il compenso netto per spettacolo', 'error'); return; }
 
-  // Apri finestra subito (prima di qualsiasi async) per evitare blocco popup
-  const win = window.open('about:blank', '_blank');
-  if (!win) { showToast('Popup bloccato — consenti i popup per questo sito', 'error'); return; }
+  // La finestra viene aperta dopo il salvataggio (blob URL evita problemi con about:blank post-async)
 
   const nascita    = g('ctr-nascita');
   const cf         = g('ctr-cf');
@@ -6185,8 +6183,11 @@ async function generaContrattualistica() {
   if (nuovoId) selectContratto(nuovoId);
 
   const html = buildHTMLContrattualistica(datiSalvataggio);
-  win.document.write(html);
-  win.document.close();
+  const blob = new Blob([html], {type: 'text/html'});
+  const blobUrl = URL.createObjectURL(blob);
+  const win = window.open(blobUrl, '_blank');
+  if (!win) showToast('Popup bloccato — consenti i popup per questo sito', 'error');
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 }
 
 function buildHTMLContrattualistica(d) {
@@ -6605,8 +6606,7 @@ async function generaContrattoScrittura() {
   const c = contacts.find(x => String(x.id) === String(compId));
   if (!c) return;
 
-  const win = window.open('about:blank', '_blank');
-  if (!win) { showToast('Popup bloccato dal browser — consenti i popup per questo sito', 'error'); return; }
+  // La finestra viene aperta dopo il salvataggio tramite blob URL
 
   const nomeCognome = `${c.cognome} ${c.nome}`.trim();
   const luogo       = g('ct-luogo-nascita');
@@ -6636,8 +6636,11 @@ async function generaContrattoScrittura() {
   if (nuovoIdScr) selectContratto(nuovoIdScr);
 
   const html = buildHTMLContrattoScrittura(datiSalvataggio);
-  win.document.write(html);
-  win.document.close();
+  const blob = new Blob([html], {type: 'text/html'});
+  const blobUrl = URL.createObjectURL(blob);
+  const win = window.open(blobUrl, '_blank');
+  if (!win) showToast('Popup bloccato dal browser — consenti i popup per questo sito', 'error');
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 }
 
 function buildHTMLContrattoScrittura(d) {
