@@ -4862,6 +4862,8 @@ async function loadVerificaContratti() {
 
     // File Drive orfani (non linkati ad alcun contratto Supabase)
     const orfani = Object.values(driveFiles).filter(f => !sbByFileId[f.id]);
+    // Rendi accessibile globalmente per importaDriveInSupabase()
+    window._orfaniDrive = orfani;
 
     // ── 4. Render ────────────────────────────────────────────────────────────
     const cols = [
@@ -4918,6 +4920,7 @@ async function loadVerificaContratti() {
           <span style="font-size:12px;color:var(--text3)">${totSb} in archivio · ${totDrive} file Drive · ${cartelle.length} nominativi</span>
           ${totAnomalie > 0 ? `<span style="font-size:11px;color:#ef4444;font-weight:600">⚠ ${totAnomalie} anomali${totAnomalie===1?'a':'e'}</span>` : '<span style="font-size:11px;color:#22c55e;font-weight:600">✓ Nessuna anomalia</span>'}
           <button class="btn-export" onclick="loadVerificaContratti()">↺ Aggiorna</button>
+          ${userRole === 'admin' && orfani.length > 0 ? `<button class="btn-export" style="background:#6366f1;color:#fff;border-color:#6366f1" onclick="importaDriveInSupabase()">📥 Importa ${orfani.length} da Drive</button>` : ''}
         </div>
       </div>
 
@@ -4953,6 +4956,159 @@ async function loadVerificaContratti() {
       <div class="kanban-header"><div class="kanban-title">📋 Verifica Contratti</div><button class="btn-export" onclick="loadVerificaContratti()">↺ Aggiorna</button></div>
       <div style="color:#ef4444;padding:16px">Errore: ${e.message}</div>`;
   }
+}
+// ─── IMPORTA ORFANI DA DRIVE IN SUPABASE ────────────────────────────────────
+function parseDriveFilename(filename) {
+  // Rimuove estensione
+  let name = filename.replace(/\.pdf$/i, '').replace(/\.docx?$/i, '');
+  // Rimuove suffissi firma: _fr, _fs, _firmato, firmato_
+  name = name.replace(/[_ ]+(fr|fs|firmato)$/i, '').replace(/^firmato[_ ]+/i, '');
+  // Normalizza separatori multipli
+  name = name.trim();
+
+  // Pattern tipico: "Contratto [data] [spettacolo] [scritturato]..."
+  // Prova a estrarre: "Contratto 6 marzo Parma Anniciello_firmato" →
+  //   spettacolo = tutto ciò che viene dopo "Contratto [eventuale data]" e prima dell'ultimo termine
+  //   scritturato = cartella (passata separatamente)
+
+  // Rimuove prefisso "Contratto" iniziale
+  let resto = name.replace(/^[Cc]ontratto\s+/i, '').trim();
+
+  // Rimuove date tipo "6 marzo", "18 giugno", "2024", ecc.
+  resto = resto.replace(/\b\d{1,2}\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\b/gi, '').trim();
+  resto = resto.replace(/\b\d{4}\b/g, '').trim();
+  // Normalizza spazi multipli
+  resto = resto.replace(/\s{2,}/g, ' ').trim();
+
+  return resto; // sarà usato come base per spettacolo
+}
+
+function deduciStato(filename) {
+  const n = filename.toLowerCase();
+  const hasFr = n.includes('_fr.') || n.includes('_fr_') || /[_\s]fr$/.test(n.replace('.pdf',''));
+  const hasFs = n.includes('_fs.') || n.includes('_fs_') || /[_\s]fs$/.test(n.replace('.pdf',''));
+  const hasFirmato = n.includes('firmato');
+  if (hasFirmato || (hasFr && hasFs)) return 'RICEVUTO FIRMATO';
+  if (hasFr || hasFs) return 'INVIATO';
+  return 'BOZZA';
+}
+
+async function importaDriveInSupabase() {
+  const orfani = window._orfaniDrive || [];
+  if (!orfani.length) { showToast('Nessun file orfano da importare', 'info'); return; }
+
+  // Costruisce preview
+  const righe = orfani.map(f => {
+    const spettacolo = parseDriveFilename(f.name);
+    const scritturato = f.folder;
+    const stato = deduciStato(f.name);
+    return { file_id: f.id, file_name: f.name, folder: f.folder, scritturato, spettacolo, stato };
+  });
+
+  // Mostra modale di preview
+  const modal = document.createElement('div');
+  modal.id = 'import-drive-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:#0008;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:var(--surface1);border-radius:12px;padding:24px;max-width:900px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 8px 32px #0004">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:700">📥 Importa contratti da Drive</div>
+        <button onclick="document.getElementById('import-drive-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2)">✕</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">
+        Revisiona i dati estratti dai nomi file. Puoi modificare ogni campo prima di confermare l'importazione.
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--surface2)">
+            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">File Drive</th>
+            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Scritturato/a</th>
+            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Spettacolo / desc.</th>
+            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Tipo</th>
+            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Stato</th>
+          </tr>
+        </thead>
+        <tbody id="import-drive-tbody">
+          ${righe.map((r,i) => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:6px 8px;max-width:200px;word-break:break-all;color:var(--text3);font-size:10px">
+                <a href="https://drive.google.com/file/d/${r.file_id}/view" target="_blank" style="color:#6366f1">${r.file_name}</a>
+              </td>
+              <td style="padding:4px 8px"><input data-i="${i}" data-f="scritturato" value="${r.scritturato.replace(/"/g,'&quot;')}" style="width:120px;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text1)"></td>
+              <td style="padding:4px 8px"><input data-i="${i}" data-f="spettacolo" value="${r.spettacolo.replace(/"/g,'&quot;')}" style="width:160px;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text1)"></td>
+              <td style="padding:4px 8px">
+                <select data-i="${i}" data-f="tipo" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text1)">
+                  <option value="Scrittura">Scrittura</option>
+                  <option value="Collaborazione">Collaborazione</option>
+                  <option value="Ospitalità">Ospitalità</option>
+                  <option value="Altro">Altro</option>
+                </select>
+              </td>
+              <td style="padding:4px 8px">
+                <select data-i="${i}" data-f="stato" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text1)">
+                  <option value="BOZZA" ${r.stato==='BOZZA'?'selected':''}>BOZZA</option>
+                  <option value="INVIATO" ${r.stato==='INVIATO'?'selected':''}>INVIATO</option>
+                  <option value="RICEVUTO FIRMATO" ${r.stato==='RICEVUTO FIRMATO'?'selected':''}>RICEVUTO FIRMATO</option>
+                  <option value="ARCHIVIATO" ${r.stato==='ARCHIVIATO'?'selected':''}>ARCHIVIATO</option>
+                </select>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+        <button onclick="document.getElementById('import-drive-modal').remove()" class="btn-export">Annulla</button>
+        <button onclick="confermaImportaDrive()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer">✓ Conferma importazione (${righe.length})</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // Salva righe in window per accesso da confermaImportaDrive
+  window._importDriveRighe = righe;
+}
+
+async function confermaImportaDrive() {
+  const righe = window._importDriveRighe || [];
+  // Leggi valori aggiornati dagli input/select
+  document.querySelectorAll('#import-drive-tbody input, #import-drive-tbody select').forEach(el => {
+    const i = +el.dataset.i;
+    const f = el.dataset.f;
+    righe[i][f] = el.value;
+  });
+
+  const modal = document.getElementById('import-drive-modal');
+  if (modal) modal.remove();
+
+  showToast(`Importazione di ${righe.length} contratti in corso…`, 'info');
+
+  let ok = 0, err = 0;
+  for (const r of righe) {
+    const id = 'drv_' + r.file_id.substring(0, 16);
+    const payload = {
+      id,
+      tipo: r.tipo || 'Scrittura',
+      scritturato: r.scritturato,
+      spettacolo: r.spettacolo,
+      data_creazione: '',
+      stato: r.stato,
+      file_id: r.file_id,
+      note: '',
+      data_stato: '',
+      dati_json: '',
+      sort_order: 0
+    };
+    try {
+      const res = await sbFetch('/rest/v1/contratti', {
+        method: 'POST',
+        prefer: 'return=minimal,resolution=ignore-duplicates',
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) { const t = await res.text(); console.warn('Import err', r.file_id, t); err++; }
+      else ok++;
+    } catch(e) { err++; console.error(e); }
+  }
+
+  showToast(`Importati ${ok} contratti${err ? ` (${err} errori)` : ''}`, err ? 'error' : 'success');
+  loadVerificaContratti();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 document.getElementById('teatroModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeTeatroModal(); });
