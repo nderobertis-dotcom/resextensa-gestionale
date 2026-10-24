@@ -6141,10 +6141,9 @@ async function generaContrattualistica() {
   if (!spettacolo) { showToast('Seleziona lo spettacolo', 'error'); return; }
   if (!nettoNum)   { showToast('Inserisci il compenso netto per spettacolo', 'error'); return; }
 
-  // Apri finestra subito (prima di qualsiasi async)
-  const win = window.open('', '_blank');
+  // Apri finestra subito (prima di qualsiasi async) per evitare blocco popup
+  const win = window.open('about:blank', '_blank');
   if (!win) { showToast('Popup bloccato — consenti i popup per questo sito', 'error'); return; }
-  win.document.write('<html><body style="font-family:Arial;padding:40px;color:#666">⏳ Generazione in corso…</body></html>');
 
   const nascita    = g('ctr-nascita');
   const cf         = g('ctr-cf');
@@ -6186,7 +6185,6 @@ async function generaContrattualistica() {
   if (nuovoId) selectContratto(nuovoId);
 
   const html = buildHTMLContrattualistica(datiSalvataggio);
-  win.document.open();
   win.document.write(html);
   win.document.close();
 }
@@ -6607,9 +6605,8 @@ async function generaContrattoScrittura() {
   const c = contacts.find(x => String(x.id) === String(compId));
   if (!c) return;
 
-  const win = window.open('', '_blank');
+  const win = window.open('about:blank', '_blank');
   if (!win) { showToast('Popup bloccato dal browser — consenti i popup per questo sito', 'error'); return; }
-  win.document.write('<html><body style="font-family:Arial;padding:40px;color:#666">⏳ Generazione contratto in corso…</body></html>');
 
   const nomeCognome = `${c.cognome} ${c.nome}`.trim();
   const luogo       = g('ct-luogo-nascita');
@@ -6639,7 +6636,6 @@ async function generaContrattoScrittura() {
   if (nuovoIdScr) selectContratto(nuovoIdScr);
 
   const html = buildHTMLContrattoScrittura(datiSalvataggio);
-  win.document.open();
   win.document.write(html);
   win.document.close();
 }
