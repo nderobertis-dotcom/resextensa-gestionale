@@ -1233,6 +1233,10 @@ if (typeof SUPABASE_URL === 'undefined') {
               <option value="">— Seleziona —</option>
             </select>
           </div>
+          <div style="grid-column:1/-1">
+            <div class="modal-label">Luogo spettacolo</div>
+            <input class="edit-input" id="ctr-luogo-spettacolo" placeholder="es. Teatro Abeliano, Bari">
+          </div>
           <!-- COMPENSI -->
           <div style="grid-column:1/-1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
             <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;margin-bottom:10px">Compensi</div>
@@ -6124,7 +6128,8 @@ async function generaContrattualistica() {
   const g = id => document.getElementById(id)?.value?.trim()||'';
   const nome       = g('ctr-nome');
   const qualifica  = g('ctr-qualifica').toUpperCase();
-  const spettacolo = g('ctr-spettacolo');
+  const spettacolo      = g('ctr-spettacolo');
+  const luogoSpettacolo = g('ctr-luogo-spettacolo');
   const nettoNum      = g('ctr-netto');
   const lordoNum      = g('ctr-lordo');
   const nettoProveNum = g('ctr-netto-prove');
@@ -6181,7 +6186,7 @@ async function generaContrattualistica() {
     genere, qualifica, spettacolo, nettoNum, lordoNum, nettoProveNum, lordoProveNum,
     netto, lordo, nettoProve, lordoProve, calendario, spettacoliList, dataFirma, cittaFirma
   };
-  salvaContrattoInArchivio('Contrattualistica', nome, spettacolo, datiSalvataggio);
+  salvaContrattoInArchivio('Contrattualistica', nome, spettacolo, datiSalvataggio, luogoSpettacolo);
 
   const html = buildHTMLContrattualistica(datiSalvataggio);
   win.document.open();
