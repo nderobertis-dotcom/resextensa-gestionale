@@ -5523,18 +5523,19 @@ async function loadContratti() {
       if (!r.ok) throw new Error(await r.text());
       const rows = await r.json();
       contratti = rows.map((row, i) => ({
-        rowIdx:         i + 2,
-        _sb_id:         row.id,
-        id:             row.id,
-        tipo:           row.tipo || '',
-        scritturato:    row.scritturato || '',
-        spettacolo:     row.spettacolo || '',
-        data_creazione: row.data_creazione || '',
-        stato:          row.stato || 'BOZZA',
-        file_id:        row.file_id || '',
-        note:           row.note || '',
-        data_stato:     row.data_stato || '',
-        dati_json:      row.dati_json || '',
+        rowIdx:            i + 2,
+        _sb_id:            row.id,
+        id:                row.id,
+        tipo:              row.tipo || '',
+        scritturato:       row.scritturato || '',
+        spettacolo:        row.spettacolo || '',
+        luogo_spettacolo:  row.luogo_spettacolo || '',
+        data_creazione:    row.data_creazione || '',
+        stato:             row.stato || 'BOZZA',
+        file_id:           row.file_id || '',
+        note:              row.note || '',
+        data_stato:        row.data_stato || '',
+        dati_json:         row.dati_json || '',
       })).filter(c => c.id && c.scritturato);
       updateCtrStats();
       renderArchivioContratti();
@@ -5676,25 +5677,35 @@ function selectContratto(id) {
           <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Scritturato/a</div><div>${c.scritturato}</div></div>
           <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Tipo contratto</div><div>${c.tipo}</div></div>
           <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Spettacolo</div><div>${c.spettacolo||'—'}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Luogo spettacolo</div><div>${c.luogo_spettacolo||'—'}</div></div>
           <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Data creazione</div><div>${fmtD(c.data_creazione)}</div></div>
           ${c.data_stato ? `<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Ultimo aggiornamento stato</div><div>${fmtD(c.data_stato)}</div></div>` : ''}
           ${c.note ? `<div style="grid-column:1/-1"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Note</div><div>${c.note}</div></div>` : ''}
         </div>
       </div>
 
-      <!-- Allegati (contratto con doppia firma) -->
+      <!-- File contratto su Drive -->
       <div style="border-top:1px solid var(--border);padding-top:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3)">
-            Documenti allegati ${isArchiv?'(contratto con doppia firma)':''}
+            File contratto
           </div>
-          ${(isRicevuto||isArchiv)&&userRole==='admin' ? `
-          <div>
-            <input type="file" id="ctr-upload-${c.id}" multiple accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadAllegatoContratto(this,'${c.id}')">
-            <button class="btn-new" style="font-size:11px;padding:4px 10px" onclick="document.getElementById('ctr-upload-${c.id}').click()">↑ Allega documento</button>
+          ${userRole==='admin' ? `
+          <div style="display:flex;gap:6px">
+            <input type="file" id="ctr-upload-${c.id}" accept=".pdf" style="display:none" onchange="uploadFileContratto(this,'${c.id}')">
+            <button class="btn-new" style="font-size:11px;padding:4px 10px" onclick="document.getElementById('ctr-upload-${c.id}').click()">
+              ${c.file_id ? '↑ Sostituisci PDF' : '↑ Carica PDF'}
+            </button>
           </div>` : ''}
         </div>
-        <div id="ctr-allegati-${c.id}"><span style="color:var(--text3);font-size:12px">🔍 Caricamento…</span></div>
+        <div id="ctr-file-${c.id}">
+          ${c.file_id ? `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px">
+              <span>📄</span>
+              <div style="flex:1;font-size:12px;color:var(--text2)">File collegato</div>
+              <a href="https://drive.google.com/file/d/${c.file_id}/view" target="_blank" class="btn-export" style="font-size:11px;padding:3px 9px;text-decoration:none">👁 Apri</a>
+            </div>` : `<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun file collegato</span>`}
+        </div>
       </div>
     </div>`;
 
@@ -5768,108 +5779,92 @@ async function _eliminaContrattoById(id) {
   } catch(e) { showToast('Errore: '+e.message, 'error'); }
 }
 
-// ── Allegati contratto su Drive ───────────────────────────────────────────────
-async function trovaCreaCartellaContratto(ctrId) {
-  const nome = `CTR_${ctrId}`;
-  const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+// ── File contratto su Drive (uno per contratto, nella cartella del nominativo) ─
+async function trovaCreaCartellaPerNominativo(scritturato) {
+  // Cerca cartella esistente con il cognome/nome dello scritturato
+  const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
     headers: { Authorization: 'Bearer '+accessToken }
   });
-  const d = await r.json();
-  if (d.files?.length) return d.files[0].id;
+  const cartelle = (await r.json()).files || [];
+  // Cerca corrispondenza per cognome (prima parola dello scritturato)
+  const cognome = scritturato.split(/[\s,]+/)[0].toLowerCase();
+  const trovata = cartelle.find(c => c.name.toLowerCase().includes(cognome));
+  if (trovata) return trovata.id;
+  // Crea nuova cartella con il nome dello scritturato
   const r2 = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
     method: 'POST',
     headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.folder', parents: [DRIVE_CONTRATTI_FOLDER] })
+    body: JSON.stringify({ name: scritturato, mimeType: 'application/vnd.google-apps.folder', parents: [DRIVE_CONTRATTI_FOLDER] })
   });
   return (await r2.json()).id;
 }
 
-async function caricaAllegatiContratto(ctrId) {
-  const box = document.getElementById(`ctr-allegati-${ctrId}`);
-  if (!box) return;
+async function uploadFileContratto(input, ctrId) {
+  const file = input.files[0];
+  if (!file) return;
+  const c = contratti.find(x => x.id === ctrId);
+  if (!c) return;
   try {
-    const nome = `CTR_${ctrId}`;
-    const q = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`);
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
-      headers: { Authorization: 'Bearer '+accessToken }
-    });
-    const d = await r.json();
-    if (!d.files?.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun documento allegato</span>'; return; }
-    const folderId = d.files[0].id;
-    const q2 = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-    const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,size,modifiedTime,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=name`, {
-      headers: { Authorization: 'Bearer '+accessToken }
-    });
-    const files = (await r2.json()).files || [];
-    if (!files.length) { box.innerHTML = '<span style="color:var(--text3);font-size:12px;font-style:italic">Nessun documento allegato</span>'; return; }
-    box.innerHTML = files.map(file => {
-      const icon = file.mimeType?.includes('pdf') ? '📄' : '🖼';
-      const size = file.size ? (parseInt(file.size)/1024).toFixed(0)+' KB' : '';
-      const data = new Date(file.modifiedTime).toLocaleDateString('it-IT');
-      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
-        <span>${icon}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
-          <div style="font-size:10px;color:var(--text3)">${size}${size?' · ':''}${data}</div>
-        </div>
-        <a href="https://drive.google.com/file/d/${file.id}/view" target="_blank" class="btn-export" style="font-size:11px;padding:3px 9px;text-decoration:none">👁</a>
-        ${userRole==='admin'?`<button class="btn-danger" style="font-size:11px;padding:3px 7px" onclick="eliminaAllegatoContratto('${file.id}','${ctrId}')">✕</button>`:''}
-      </div>`;
-    }).join('');
-  } catch(e) { box.innerHTML = `<span style="color:var(--cessato);font-size:12px">Errore: ${e.message}</span>`; }
-}
-
-async function uploadAllegatoContratto(input, ctrId) {
-  const files = Array.from(input.files);
-  if (!files.length) return;
-  try {
-    const folderId = await trovaCreaCartellaContratto(ctrId);
+    showToast('Caricamento file in corso…', 'info');
     checkTokenAndRefresh();
-    for (const file of files) {
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify({ name: file.name, parents: [folderId] })], { type: 'application/json' }));
-      form.append('file', file);
-      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
-        method: 'POST', headers: { Authorization: 'Bearer '+accessToken }, body: form
-      });
+
+    // 1. Elimina vecchio file Drive se presente
+    if (c.file_id) {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${c.file_id}?supportsAllDrives=true`, {
+        method: 'DELETE', headers: { Authorization: 'Bearer '+accessToken }
+      }).catch(() => {}); // ignora errori di eliminazione (file già rimosso)
     }
-    showToast(`${files.length} documento/i allegato/i`, 'success');
+
+    // 2. Trova/crea cartella del nominativo
+    const folderId = await trovaCreaCartellaPerNominativo(c.scritturato);
+
+    // 3. Upload nuovo file
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify({ name: file.name, parents: [folderId] })], { type: 'application/json' }));
+    form.append('file', file);
+    const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name', {
+      method: 'POST', headers: { Authorization: 'Bearer '+accessToken }, body: form
+    });
+    if (!uploadRes.ok) throw new Error('Upload Drive fallito');
+    const uploaded = await uploadRes.json();
+
+    // 4. Aggiorna file_id in Supabase
+    if (c._sb_id) {
+      const patch = await sbFetch(`/rest/v1/contratti?id=eq.${encodeURIComponent(ctrId)}`, {
+        method: 'PATCH', prefer: 'return=minimal',
+        body: JSON.stringify({ file_id: uploaded.id })
+      });
+      if (!patch.ok) throw new Error(await patch.text());
+    }
+
+    showToast('File caricato e collegato', 'success');
     input.value = '';
-    await caricaAllegatiContratto(ctrId);
+    await loadContratti();
+    selectContratto(ctrId);
   } catch(e) { showToast('Errore upload: '+e.message, 'error'); }
 }
 
-async function eliminaAllegatoContratto(fileId, ctrId) {
-  if (!confirm('Eliminare questo documento?')) return;
-  try {
-    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
-      method: 'DELETE', headers: { Authorization: 'Bearer '+accessToken }
-    });
-    showToast('Documento eliminato', 'success');
-    await caricaAllegatiContratto(ctrId);
-  } catch(e) { showToast('Errore: '+e.message, 'error'); }
-}
-
 // ── Salva contratto in archivio (chiamata da generaContrattoScrittura e generaContrattualistica)
-async function salvaContrattoInArchivio(tipo, scritturato, spettacolo, dati) {
+async function salvaContrattoInArchivio(tipo, scritturato, spettacolo, dati, luogo_spettacolo) {
   const newId = 'CTR-'+Date.now();
   const oggi  = new Date().toISOString().slice(0,10);
   const jsonStr = dati ? JSON.stringify(dati) : '';
   if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
     try {
       const payload = {
-        id:             newId,
-        tipo:           tipo || '',
-        scritturato:    scritturato || '',
-        spettacolo:     spettacolo || '',
-        data_creazione: oggi,
-        stato:          'BOZZA',
-        file_id:        '',
-        note:           '',
-        data_stato:     '',
-        dati_json:      jsonStr,
-        sort_order:     Date.now(),
+        id:               newId,
+        tipo:             tipo || '',
+        scritturato:      scritturato || '',
+        spettacolo:       spettacolo || '',
+        luogo_spettacolo: luogo_spettacolo || '',
+        data_creazione:   oggi,
+        stato:            'BOZZA',
+        file_id:          '',
+        note:             '',
+        data_stato:       '',
+        dati_json:        jsonStr,
+        sort_order:       Date.now(),
       };
       const res = await sbFetch('/rest/v1/contratti', {
         method: 'POST',
