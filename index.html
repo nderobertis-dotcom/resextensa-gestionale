@@ -250,6 +250,29 @@
   .cal-grid-day.today .cal-grid-day-num { color: var(--accent); font-weight: 700; }
   .cal-event-pill { background: var(--accent); color: #1a1200; border-radius: 3px; padding: 2px 5px; font-size: 9px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 
+  /* ── RUBRICA TABELLA COMPLETEZZA ── */
+  #rubrica-table-container { overflow-x: auto; }
+  .rub-table { border-collapse: collapse; width: 100%; font-size: 12px; white-space: nowrap; }
+  .rub-table th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--surface); color: var(--text2);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em;
+    padding: 8px 10px; border-bottom: 2px solid var(--border2);
+    font-weight: 600; text-align: center; cursor: pointer; user-select: none;
+  }
+  .rub-table th:first-child { text-align: left; min-width: 160px; position: sticky; left: 0; z-index: 3; background: var(--surface); }
+  .rub-table th.sort-asc::after { content: ' ↑'; }
+  .rub-table th.sort-desc::after { content: ' ↓'; }
+  .rub-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: center; vertical-align: middle; }
+  .rub-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--bg); z-index: 1; font-weight: 500; cursor: pointer; }
+  .rub-table td:first-child:hover { color: var(--accent); }
+  .rub-table tr:hover td { background: var(--surface2); }
+  .rub-table tr:hover td:first-child { background: var(--surface2); }
+  .rub-cell-ok  { color: #22c55e; font-size: 15px; }
+  .rub-cell-no  { color: #ef4444; font-size: 13px; font-weight: 700; }
+  .rub-cell-val { color: var(--text2); font-size: 11px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
+  .rub-table-legend { display: flex; gap: 16px; font-size: 11px; color: var(--text3); margin-bottom: 10px; align-items: center; }
+
   /* ── SECTION STATS BAR ── */
   .section-stats-bar {
     display: flex; align-items: center; gap: 16px;
@@ -601,9 +624,14 @@ if (typeof SUPABASE_URL === 'undefined') {
         <div class="stat"><div class="stat-n" id="stat-o35" style="color:#9a6a3a">—</div><div class="stat-l">Over 35</div></div>
         <button id="rubrica-migrate-btn" style="display:none;font-size:10px;padding:4px 8px;background:var(--warning,#f59e0b);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;margin-left:8px" onclick="migrateRubricaToSupabase()" title="Importa rubrica da Sheets a Supabase (una tantum)">⬆ Migra</button>
         <button id="rubrica-backfill-btn" style="display:none;font-size:10px;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;margin-left:4px" onclick="backfillDataNascitaDaCF()" title="Recupera data di nascita dal Codice Fiscale per chi non ce l'ha">📅 Backfill nascita</button>
+        <button id="rubrica-table-toggle" style="font-size:10px;padding:4px 8px;background:var(--surface2,#e5e7eb);color:var(--text1);border:1px solid var(--border);border-radius:6px;cursor:pointer;white-space:nowrap;margin-left:8px" onclick="toggleRubricaTabella()" title="Alterna vista schede / vista tabella completezza dati">☰ Tabella</button>
       </div>
     </div>
-    <div style="display:flex;flex:1;overflow:hidden">
+    <!-- VISTA TABELLA COMPLETEZZA -->
+    <div id="rubrica-table-view" style="display:none;flex:1;overflow:auto;padding:16px">
+      <div id="rubrica-table-container"></div>
+    </div>
+    <div id="rubrica-card-view" style="display:flex;flex:1;overflow:hidden">
     <aside>
       <div class="sidebar-top">
         <div class="search-wrap">
@@ -639,7 +667,7 @@ if (typeof SUPABASE_URL === 'undefined') {
         <div class="empty-sub">Connessione a Google Sheets in corso</div>
       </div>
     </main>
-    </div>
+    </div><!-- fine rubrica-card-view -->
   </div>
 
   <!-- TAB SPETTACOLI -->
@@ -2626,6 +2654,132 @@ async function backfillDataNascitaDaCF() {
   populateFilters(); renderList(); updateStats();
   if (selectedId) { const found = contacts.find(x=>x.id===selectedId); if(found) renderDetail(found); }
   showToast(`Data di nascita recuperata per ${ok} contatt${ok===1?'o':'i'}${err ? ` (${err} errori)` : ''}`, err ? 'error' : 'success');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── RUBRICA VISTA TABELLA COMPLETEZZA ───────────────────────────────────────
+// Campi mostrati in tabella: escludi cognome/nome (sono la riga), spettacoli (multi)
+const TABLE_FIELDS = [
+  { key:'stato',             label:'Stato',        showVal: true },
+  { key:'incarico',          label:'Incarico',     showVal: true },
+  { key:'email',             label:'Email' },
+  { key:'telefono',          label:'Telefono' },
+  { key:'pec',               label:'PEC' },
+  { key:'codice_fiscale',    label:'C.F.' },
+  { key:'data_nascita',      label:'Nascita' },
+  { key:'luogo_nascita',     label:'Luogo nasc.' },
+  { key:'citta_residenza',   label:'Città res.' },
+  { key:'indirizzo',         label:'Indirizzo' },
+  { key:'doc_tipo',          label:'Tipo doc',     showVal: true },
+  { key:'doc_num',           label:'N. doc' },
+  { key:'carta_freccia',     label:'CartaFreccia' },
+  { key:'iban',              label:'IBAN' },
+  { key:'intestatario_conto',label:'Intestatario' },
+  { key:'istituto_bancario', label:'Banca' },
+  { key:'cv',                label:'CV' },
+];
+
+let rubricaTableVisible = false;
+let rubricaTableSortKey = null;
+let rubricaTableSortDir = 1; // 1=asc, -1=desc
+
+function toggleRubricaTabella() {
+  rubricaTableVisible = !rubricaTableVisible;
+  document.getElementById('rubrica-table-view').style.display = rubricaTableVisible ? 'block' : 'none';
+  document.getElementById('rubrica-card-view').style.display  = rubricaTableVisible ? 'none' : 'flex';
+  const btn = document.getElementById('rubrica-table-toggle');
+  if (btn) {
+    btn.textContent = rubricaTableVisible ? '◈ Schede' : '☰ Tabella';
+    btn.style.background = rubricaTableVisible ? 'var(--accent)' : 'var(--surface2,#e5e7eb)';
+    btn.style.color = rubricaTableVisible ? '#1a1200' : 'var(--text1)';
+    btn.style.border = rubricaTableVisible ? '1px solid var(--accent)' : '1px solid var(--border)';
+  }
+  if (rubricaTableVisible) renderRubricaTabella();
+}
+
+function renderRubricaTabella() {
+  const container = document.getElementById('rubrica-table-container');
+  if (!container) return;
+
+  // Ordina la lista
+  let lista = [...contacts];
+  if (rubricaTableSortKey) {
+    lista.sort((a, b) => {
+      if (rubricaTableSortKey === '_nome') {
+        return rubricaTableSortDir * (`${a.cognome} ${a.nome}`).localeCompare(`${b.cognome} ${b.nome}`);
+      }
+      const av = !!(a[rubricaTableSortKey] && String(a[rubricaTableSortKey]).trim());
+      const bv = !!(b[rubricaTableSortKey] && String(b[rubricaTableSortKey]).trim());
+      return rubricaTableSortDir * ((bv ? 1 : 0) - (av ? 1 : 0));
+    });
+  } else {
+    lista.sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`));
+  }
+
+  // Conteggio completezza per colonna (per intestazione)
+  const totali = lista.length;
+  const presenti = {};
+  TABLE_FIELDS.forEach(f => {
+    presenti[f.key] = lista.filter(c => c[f.key] && String(c[f.key]).trim()).length;
+  });
+
+  const sortIcon = (key) => {
+    if (rubricaTableSortKey !== key) return '';
+    return rubricaTableSortDir === 1 ? ' ↑' : ' ↓';
+  };
+  const thClass = (key) => rubricaTableSortKey === key ? (rubricaTableSortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+
+  const header = `<tr>
+    <th onclick="sortRubricaTable('_nome')" class="${thClass('_nome')}">Cognome e Nome${sortIcon('_nome')}</th>
+    ${TABLE_FIELDS.map(f => {
+      const pct = totali ? Math.round(presenti[f.key] / totali * 100) : 0;
+      const color = pct === 100 ? '#22c55e' : pct >= 60 ? '#f59e0b' : '#ef4444';
+      return `<th onclick="sortRubricaTable('${f.key}')" class="${thClass(f.key)}" title="${presenti[f.key]}/${totali} (${pct}%)">
+        ${f.label}<br><span style="font-size:9px;color:${color};font-weight:400">${presenti[f.key]}/${totali}</span>
+      </th>`;
+    }).join('')}
+  </tr>`;
+
+  const rows = lista.map(c => {
+    const nomeCell = `<td onclick="goToContact(${c.id})" title="Apri scheda">${c.cognome} ${c.nome}</td>`;
+    const cells = TABLE_FIELDS.map(f => {
+      const val = c[f.key] ? String(c[f.key]).trim() : '';
+      if (!val) return `<td><span class="rub-cell-no">✕</span></td>`;
+      if (f.showVal) return `<td><span class="rub-cell-val" title="${val}">${val}</span></td>`;
+      return `<td><span class="rub-cell-ok">✓</span></td>`;
+    }).join('');
+    return `<tr>${nomeCell}${cells}</tr>`;
+  }).join('');
+
+  // Legenda completezza
+  const mancanti = lista.filter(c => TABLE_FIELDS.some(f => !c[f.key] || !String(c[f.key]).trim())).length;
+  container.innerHTML = `
+    <div class="rub-table-legend">
+      <span><span class="rub-cell-ok">✓</span> Dato presente</span>
+      <span><span class="rub-cell-no">✕</span> Dato assente</span>
+      <span style="margin-left:8px">${totali} componenti · ${mancanti} con almeno un campo mancante</span>
+      <span style="margin-left:auto;font-size:10px;color:var(--text3)">Clicca intestazione per ordinare · Clicca nome per aprire scheda</span>
+    </div>
+    <table class="rub-table"><thead>${header}</thead><tbody>${rows}</tbody></table>`;
+}
+
+function sortRubricaTable(key) {
+  if (rubricaTableSortKey === key) {
+    rubricaTableSortDir *= -1;
+  } else {
+    rubricaTableSortKey = key;
+    rubricaTableSortDir = key === '_nome' ? 1 : -1; // per dati: prima i presenti
+  }
+  renderRubricaTabella();
+}
+
+function goToContact(id) {
+  // Torna alla vista schede e apre il contatto
+  if (rubricaTableVisible) toggleRubricaTabella();
+  selectedId = id;
+  renderList();
+  const c = contacts.find(x => x.id === id);
+  if (c) { renderDetail(c); if (window.innerWidth < 768) hideSidebar(); }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
