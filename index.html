@@ -2795,7 +2795,7 @@ function updateStats() {
   const anno = today.getFullYear();
   let m=0, f=0, u25=0, o35=0;
   contacts.forEach(c => {
-    const sesso = sessoFromCF(c.codice_fiscale);
+    const sesso = c.sesso || sessoFromCF(c.codice_fiscale);
     if (sesso === 'M') m++;
     if (sesso === 'F') f++;
     const eta = etaFromCF(c.codice_fiscale);
