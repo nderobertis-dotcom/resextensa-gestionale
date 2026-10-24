@@ -6182,7 +6182,9 @@ async function generaContrattualistica() {
     genere, qualifica, spettacolo, nettoNum, lordoNum, nettoProveNum, lordoProveNum,
     netto, lordo, nettoProve, lordoProve, calendario, spettacoliList, dataFirma, cittaFirma
   };
-  salvaContrattoInArchivio('Contrattualistica', nome, spettacolo, datiSalvataggio, luogoSpettacolo);
+  const nuovoId = await salvaContrattoInArchivio('Contrattualistica', nome, spettacolo, datiSalvataggio, luogoSpettacolo);
+  await loadContratti();
+  if (nuovoId) selectContratto(nuovoId);
 
   const html = buildHTMLContrattualistica(datiSalvataggio);
   win.document.open();
@@ -6633,7 +6635,9 @@ async function generaContrattoScrittura() {
     docTipo, docNum, telefono, email,
     qualifica, spettacolo, periodo: periodoStr, dal, al, compenso, lordo, cittaFirma, dataFirma
   };
-  salvaContrattoInArchivio('Contratto di Scrittura', nomeCognome, spettacolo, datiSalvataggio);
+  const nuovoIdScr = await salvaContrattoInArchivio('Contratto di Scrittura', nomeCognome, spettacolo, datiSalvataggio);
+  await loadContratti();
+  if (nuovoIdScr) selectContratto(nuovoIdScr);
 
   const html = buildHTMLContrattoScrittura(datiSalvataggio);
   win.document.open();
