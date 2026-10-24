@@ -2381,11 +2381,7 @@ function statoBadge(s) {
   if (s==='CESSATO') return `<span class="badge-small badge-cessato">Cessato</span>`;
   return `<span class="badge-small badge-unknown">—</span>`;
 }
-function allSpettacoli() {
-  const s = new Set();
-  contacts.forEach(c => { if (c.spettacoli) c.spettacoli.split(',').forEach(x => { const t=x.trim(); if(t) s.add(t); }); });
-  return [...s].sort();
-}
+// allSpettacoli() è definita nella sezione Spettacoli & Calendario (usa spettacoliList da Supabase)
 function allIncarichi() {
   const s = new Set();
   contacts.forEach(c => { if (c.incarico) s.add(c.incarico.trim()); });
@@ -3487,7 +3483,7 @@ document.getElementById('rappModal').addEventListener('click', e=>{ if(e.target=
 let spettacoliList = []; // array di oggetti {id, titolo, data_inizio, data_fine, stato}
 
 function allSpettacoli() {
-  return spettacoliList.map(s => s.titolo).filter(Boolean).sort();
+  return [...new Set(spettacoliList.map(s => s.titolo).filter(Boolean))].sort();
 }
 
 async function loadSpettacoliSheet() {
