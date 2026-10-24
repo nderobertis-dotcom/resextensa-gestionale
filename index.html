@@ -1771,11 +1771,12 @@ async function downloadDriveFile(fileId, fileName) {
 
 // Mappatura colonne Sheets → campi app (0-based, colonna B=1, C=2 …)
 const COL = {
-  cognome:0, nome:1, spettacoli:2, sesso:3,
+  cognome:0, nome:1, spettacoli:2,
   data_nascita:4, luogo_nascita:5, citta_residenza:6, indirizzo:7,
   doc_tipo:8, doc_num:9, telefono:10, email:11, pec:12,
   codice_fiscale:13, cv:14, incarico:15, carta_freccia:16,
   istituto_bancario:17, iban:18, intestatario_conto:19
+  // NOTA: sesso NON è in COL — non viene da Sheets ma da Supabase (colonna dedicata)
 };
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -2033,6 +2034,8 @@ async function sheetsClear(range) {
 function rubricaRowToContact(row, numericId) {
   const c = { id: numericId, _sb_id: row.id, _sort_order: row.sort_order || 0 };
   Object.keys(COL).forEach(k => { c[k] = toUpperField(k, row[k] || ''); });
+  // sesso non è in COL (non viene da Sheets): lo leggiamo direttamente da Supabase
+  c.sesso = row.sesso || '';
   return c;
 }
 
@@ -2221,6 +2224,8 @@ async function sortAndSaveToSheets() {
 function contactToSupabasePayload(c) {
   const p = {};
   Object.keys(COL).forEach(k => { p[k] = toUpperField(k, c[k] || '') || ''; });
+  // sesso non è in COL ma va salvato su Supabase (può essere impostato manualmente)
+  p.sesso = c.sesso || sessoFromCF(c.codice_fiscale) || '';
   return p;
 }
 
