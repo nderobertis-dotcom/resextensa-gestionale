@@ -4797,10 +4797,20 @@ async function loadVerificaContratti() {
       <div class="kanban-title">📋 Verifica Contratti</div>
       <button class="btn-export" onclick="loadVerificaContratti()">↺ Aggiorna</button>
     </div>
-    <div style="color:var(--text3);font-size:13px;margin-bottom:20px">🔍 Scansione cartelle in corso…</div>`;
+    <div style="color:var(--text3);font-size:13px;margin-bottom:20px">🔍 Caricamento Supabase + scansione Drive in corso…</div>`;
 
   try {
-    // 1. Carica tutte le sottocartelle
+    // ── 1. Carica contratti da Supabase ──────────────────────────────────────
+    let sbContratti = [];
+    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+      const r = await sbFetch('/rest/v1/contratti?select=*&order=sort_order.asc,data_creazione.desc');
+      if (r.ok) sbContratti = await r.json();
+    }
+    // Mappa file_id → contratto Supabase per incrocio
+    const sbByFileId = {};
+    sbContratti.forEach(c => { if (c.file_id) sbByFileId[c.file_id] = c; });
+
+    // ── 2. Scansiona cartelle Drive ──────────────────────────────────────────
     const q1 = encodeURIComponent(`'${DRIVE_CONTRATTI_FOLDER}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
     const r1 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q1}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
       headers: { Authorization: 'Bearer ' + accessToken }
@@ -4808,64 +4818,109 @@ async function loadVerificaContratti() {
     const d1 = await r1.json();
     const cartelle = d1.files || [];
 
-    if (!cartelle.length) {
-      panel.innerHTML += '<div style="color:var(--text3)">Nessuna cartella trovata.</div>';
-      return;
-    }
-
-    // 2. Per ogni cartella carica i PDF
-    const colonne = { redatto: [], fs: [], fr: [], definitivo: [] };
-
+    // PDF trovati su Drive: mappa id → {id, name, folder, date}
+    const driveFiles = {}; // fileId → oggetto
     for (const cartella of cartelle) {
       const q2 = encodeURIComponent(`'${cartella.id}' in parents and trashed=false`);
       const r2 = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,mimeType,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=name`, {
         headers: { Authorization: 'Bearer ' + accessToken }
       });
       const d2 = await r2.json();
-      const files = (d2.files || []).filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-
-      files.forEach(f => {
-        const n = f.name.toLowerCase();
-        const hasFr = n.includes('_fr.') || n.includes('_fr_') || n.replace('.pdf','').endsWith('_fr');
-        const hasFs = n.includes('_fs.') || n.includes('_fs_') || n.replace('.pdf','').endsWith('_fs');
-        const hasFirmato = n.includes('_firmato') || n.includes('firmato_');
-        const item = { id: f.id, name: f.name, folder: cartella.name, date: new Date(f.modifiedTime).toLocaleDateString('it-IT') };
-        if (hasFirmato || (hasFr && hasFs)) colonne.definitivo.push(item);
-        else if (hasFr) colonne.fr.push(item);
-        else if (hasFs) colonne.fs.push(item);
-        else colonne.redatto.push(item);
-      });
+      (d2.files || [])
+        .filter(f => f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
+        .forEach(f => {
+          driveFiles[f.id] = { id: f.id, name: f.name, folder: cartella.name, date: new Date(f.modifiedTime).toLocaleDateString('it-IT') };
+        });
     }
 
-    // 3. Render colonne
+    // ── 3. Incrocio: classifica contratti ────────────────────────────────────
+    // Stato Supabase → colonna kanban
+    const statoToCol = { 'BOZZA': 'bozza', 'INVIATO': 'inviato', 'RICEVUTO FIRMATO': 'firmato', 'ARCHIVIATO': 'archiviato' };
+
+    const colonne = { bozza: [], inviato: [], firmato: [], archiviato: [], anomalie: [] };
+
+    // Contratti Supabase
+    sbContratti.forEach(c => {
+      const driveFile = c.file_id ? driveFiles[c.file_id] : null;
+      const colKey = statoToCol[c.stato] || 'bozza';
+      const item = {
+        sb: c,
+        drive: driveFile,
+        anomalia: null,
+      };
+      // Anomalie: file_id presente ma non trovato su Drive
+      if (c.file_id && !driveFile) {
+        item.anomalia = '⚠ File non trovato su Drive';
+      }
+      // Anomalia: nessun file_id
+      if (!c.file_id) {
+        item.anomalia = '⚠ Nessun file collegato';
+      }
+      if (item.anomalia) colonne.anomalie.push(item);
+      colonne[colKey].push(item);
+    });
+
+    // File Drive orfani (non linkati ad alcun contratto Supabase)
+    const orfani = Object.values(driveFiles).filter(f => !sbByFileId[f.id]);
+
+    // ── 4. Render ────────────────────────────────────────────────────────────
     const cols = [
-      { key:'redatto',    label:'REDATTO',             icon:'🔵', color:'#6b6860', bg:'var(--surface2)', border:'var(--border2)' },
-      { key:'fs',         label:'FIRMA SCRITTURATO/A', icon:'🟡', color:'#4a7ab5', bg:'#eef4ff',         border:'#4a7ab580' },
-      { key:'fr',         label:'FIRMA RESEXTENSA',    icon:'🟠', color:'#b8860b', bg:'#fff8ec',         border:'#b8860b80' },
-      { key:'definitivo', label:'DEFINITIVO',          icon:'✅', color:'#2e7d52', bg:'#eaf4ef',         border:'#2e7d5280' },
+      { key:'bozza',     label:'BOZZA',            icon:'🔵', color:'#6b6860', bg:'var(--surface2)', border:'var(--border2)' },
+      { key:'inviato',   label:'INVIATO',           icon:'🟡', color:'#4a7ab5', bg:'#eef4ff',         border:'#4a7ab580' },
+      { key:'firmato',   label:'RICEVUTO FIRMATO',  icon:'🟠', color:'#b8860b', bg:'#fff8ec',         border:'#b8860b80' },
+      { key:'archiviato',label:'ARCHIVIATO',        icon:'✅', color:'#2e7d52', bg:'#eaf4ef',         border:'#2e7d5280' },
     ];
 
-    const renderCard = item => `
-      <div class="kanban-card">
-        <div class="kanban-card-folder">📁 ${item.folder}</div>
-        <div class="kanban-card-name">${item.name}</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:4px;flex-wrap:wrap">
-          <span style="font-size:10px;color:var(--text3)">${item.date}</span>
-          <div style="display:flex;gap:4px">
-            <a href="https://drive.google.com/file/d/${item.id}/view" target="_blank" class="btn-export kanban-card-dl" style="text-decoration:none">👁 Visualizza</a>
-            <button class="btn-export kanban-card-dl" onclick="downloadDriveFile('${item.id}','${item.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+    const renderCard = item => {
+      const c = item.sb;
+      const f = item.drive;
+      const hasAnomalia = !!item.anomalia;
+      const borderAnomalia = hasAnomalia ? 'border-left:3px solid #ef4444;' : '';
+      return `
+        <div class="kanban-card" style="${borderAnomalia}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+            <div>
+              <div class="kanban-card-folder" style="font-weight:600;color:var(--text1)">${c.scritturato||'—'}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">${c.spettacolo||'—'} · ${c.tipo||'—'}</div>
+            </div>
+            <span style="font-size:10px;color:var(--text3);white-space:nowrap">${c.data_creazione||''}</span>
           </div>
+          ${hasAnomalia ? `<div style="font-size:10px;color:#ef4444;margin-top:4px">${item.anomalia}</div>` : ''}
+          ${f ? `
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">📄 ${f.name}</div>
+            <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
+              <a href="https://drive.google.com/file/d/${f.id}/view" target="_blank" class="btn-export kanban-card-dl" style="text-decoration:none">👁 Visualizza</a>
+              <button class="btn-export kanban-card-dl" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
+            </div>` : `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic">Nessun file Drive collegato</div>`}
+          ${c.note ? `<div style="font-size:10px;color:var(--text3);margin-top:4px;border-top:1px solid var(--border);padding-top:4px">${c.note}</div>` : ''}
+        </div>`;
+    };
+
+    const renderOrfano = f => `
+      <div class="kanban-card" style="border-left:3px solid #f59e0b">
+        <div style="font-size:10px;color:#b45309;font-weight:600;margin-bottom:4px">⚠ File senza contratto in archivio</div>
+        <div class="kanban-card-folder">📁 ${f.folder}</div>
+        <div class="kanban-card-name">${f.name}</div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <a href="https://drive.google.com/file/d/${f.id}/view" target="_blank" class="btn-export kanban-card-dl" style="text-decoration:none">👁 Visualizza</a>
+          <button class="btn-export kanban-card-dl" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">↓ Scarica</button>
         </div>
       </div>`;
+
+    const totSb = sbContratti.length;
+    const totDrive = Object.keys(driveFiles).length;
+    const totAnomalie = colonne.anomalie.length + orfani.length;
 
     panel.innerHTML = `
       <div class="kanban-header">
         <div class="kanban-title">📋 Verifica Contratti</div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <span style="font-size:12px;color:var(--text3)">${cartelle.length} nominativi · ${Object.values(colonne).flat().length} contratti totali</span>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--text3)">${totSb} in archivio · ${totDrive} file Drive · ${cartelle.length} nominativi</span>
+          ${totAnomalie > 0 ? `<span style="font-size:11px;color:#ef4444;font-weight:600">⚠ ${totAnomalie} anomali${totAnomalie===1?'a':'e'}</span>` : '<span style="font-size:11px;color:#22c55e;font-weight:600">✓ Nessuna anomalia</span>'}
           <button class="btn-export" onclick="loadVerificaContratti()">↺ Aggiorna</button>
         </div>
       </div>
+
       <div class="kanban-grid">
         ${cols.map(col => `
           <div class="kanban-col">
@@ -4880,10 +4935,23 @@ async function loadVerificaContratti() {
                 : `<div class="kanban-empty">Nessun contratto</div>`}
             </div>
           </div>`).join('')}
-      </div>`;
+      </div>
+
+      ${(colonne.anomalie.length > 0 || orfani.length > 0) ? `
+        <div style="margin-top:32px">
+          <div style="font-size:12px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px">
+            ⚠ Anomalie rilevate (${totAnomalie})
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px">
+            ${colonne.anomalie.map(item => renderCard(item)).join('')}
+            ${orfani.map(f => renderOrfano(f)).join('')}
+          </div>
+        </div>` : ''}`;
 
   } catch(e) {
-    panel.innerHTML = `<div style="color:var(--text3)">Errore: ${e.message}</div>`;
+    panel.innerHTML = `
+      <div class="kanban-header"><div class="kanban-title">📋 Verifica Contratti</div><button class="btn-export" onclick="loadVerificaContratti()">↺ Aggiorna</button></div>
+      <div style="color:#ef4444;padding:16px">Errore: ${e.message}</div>`;
   }
 }
 // ─────────────────────────────────────────────────────────────────────────────
