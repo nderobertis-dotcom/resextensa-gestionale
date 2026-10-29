@@ -8908,7 +8908,7 @@ async function sortAndSaveTeatri() {
 async function migrateTeatriToSupabase() {
   if (!confirm(`Importare ${teatri.length} teatri da Sheets a Supabase?\n\nQuesta operazione va eseguita UNA SOLA VOLTA. I teatri già presenti su Supabase con lo stesso nome verranno saltati.`)) return;
   setSyncStatus('loading', 'Migrazione in corso…');
-  let ok = 0, skip = 0, err = 0;
+  let ok = 0, skip = 0, err = 0;  // skip = già esistenti (409)
   for (const t of teatri) {
     if (!t.nome_struttura) continue;
     try {
@@ -8923,12 +8923,14 @@ async function migrateTeatriToSupabase() {
           pr: t.pr || null
         })
       });
-      if (r.status === 409 || r.status === 201 || r.ok) { ok++; }
-      else { console.warn('Teatro skip/err', t.nome_struttura, r.status); err++; }
+      if (r.status === 409) { skip++; }
+      else if (r.ok) { ok++; }
+      else { const txt = await r.text().catch(()=>''); console.warn('Teatro err', t.nome_struttura, r.status, txt); err++; }
     } catch(e) { console.error('Migrazione teatro', t.nome_struttura, e); err++; }
   }
   setSyncStatus('ok', 'Migrazione completata');
-  showToast(`Migrazione completata: ${ok} importati, ${err} errori`, err ? 'error' : 'success');
+  const _migrMsg = [ok && `${ok} importati`, skip && `${skip} già presenti`, err && `${err} errori`].filter(Boolean).join(', ');
+  showToast(`Migrazione completata: ${_migrMsg}`, err ? 'error' : 'success');
   if (err === 0) {
     // Freeze: svuota tab Teatri su Sheets
     if (confirm('Migrazione riuscita! Vuoi svuotare il tab Teatri su Google Sheets per completare il freeze?')) {
