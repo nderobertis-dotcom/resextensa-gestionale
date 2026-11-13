@@ -482,6 +482,9 @@ if (typeof SUPABASE_URL === 'undefined') {
     <button class="tab-btn" id="tab-agibilita" onclick="switchTab('agibilita')">
       📑 Agibilità
     </button>
+    <button class="tab-btn" id="tab-riepilogo-agib" onclick="switchTab('riepilogo-agib')">
+      📊 Riepilogo
+    </button>
     <button class="tab-btn" id="tab-fornitori" onclick="switchTab('fornitori')">
       🛒 Fornitori
     </button>
@@ -1441,6 +1444,64 @@ if (typeof SUPABASE_URL === 'undefined') {
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- TAB RIEPILOGO AGIBILITÀ -->
+<div id="panel-riepilogo-agib" style="display:none;height:calc(100vh - 128px);overflow:hidden;flex-direction:column">
+
+  <!-- Barra filtri -->
+  <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;white-space:nowrap">Filtri</div>
+
+    <!-- Nominativo -->
+    <div style="display:flex;flex-direction:column;gap:3px;min-width:200px">
+      <label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Nominativo</label>
+      <select id="ragib-filtro-nome" onchange="renderRiepilogoAgib()" style="font-size:12px;padding:5px 8px">
+        <option value="">Tutti</option>
+      </select>
+    </div>
+
+    <!-- Mese da -->
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Mese da</label>
+      <select id="ragib-filtro-mese-da" onchange="renderRiepilogoAgib()" style="font-size:12px;padding:5px 8px">
+        <option value="">Tutti</option>
+      </select>
+    </div>
+
+    <!-- Mese a -->
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Mese a</label>
+      <select id="ragib-filtro-mese-al" onchange="renderRiepilogoAgib()" style="font-size:12px;padding:5px 8px">
+        <option value="">Tutti</option>
+      </select>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <!-- Totali rapidi -->
+    <div style="display:flex;gap:20px;align-items:center">
+      <div style="text-align:center">
+        <div id="ragib-stat-nominativi" style="font-family:'DM Mono',monospace;font-size:20px;color:var(--accent);font-weight:500">—</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin-top:2px">Nominativi</div>
+      </div>
+      <div style="text-align:center">
+        <div id="ragib-stat-giornate" style="font-family:'DM Mono',monospace;font-size:20px;color:var(--accent);font-weight:500">—</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin-top:2px">Giornate tot.</div>
+      </div>
+    </div>
+
+    <!-- Stampa -->
+    <button onclick="stampaRiepilogoAgib()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;white-space:nowrap">
+      🖨 Stampa / PDF
+    </button>
+  </div>
+
+  <!-- Tabella -->
+  <div style="flex:1;overflow:auto;padding:16px 20px" id="ragib-table-wrap">
+    <div id="ragib-loading" style="text-align:center;padding:40px;color:var(--text3)">Caricamento…</div>
+    <div id="ragib-table-container" style="display:none"></div>
   </div>
 </div>
 
@@ -3718,7 +3779,7 @@ async function saveCalendarioToSheets() {
 }
 
 function switchTab(tab) {
-  ['home','rubrica','spettacoli','compagnie','contratti','teatri','agibilita'].forEach(t => {
+  ['home','rubrica','spettacoli','compagnie','contratti','teatri','agibilita','riepilogo-agib'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.classList.toggle('active', t===tab);
   });
@@ -3733,6 +3794,7 @@ function switchTab(tab) {
   document.getElementById('panel-modulistica').style.display = tab==='modulistica' ? 'flex' : 'none';
   document.getElementById('panel-fornitori').style.display = tab==='fornitori' ? 'flex' : 'none';
   document.getElementById('panel-agibilita').style.display = tab==='agibilita' ? 'flex' : 'none';
+  document.getElementById('panel-riepilogo-agib').style.display = tab==='riepilogo-agib' ? 'flex' : 'none';
   if (tab==='spettacoli') loadCalendario().then(()=>renderSpettacoli());
   if (tab==='compagnie') loadCompagnie();
   if (tab==='contratti') loadVerificaContratti();
@@ -3742,6 +3804,7 @@ function switchTab(tab) {
   if (tab==='modulistica') initModulistica();
   if (tab==='fornitori') loadFornitori();
   if (tab==='agibilita') loadAgibilita();
+  if (tab==='riepilogo-agib') loadRiepilogoAgib();
   if (tab==='home') renderHome();
 }
 
@@ -10239,6 +10302,203 @@ function generaPDFAgib(id) {
   setTimeout(() => { try { win.print(); } catch(e){} }, 500);
 }
 document.getElementById('allegatiModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeAllegatiModal(); });
+
+// ─── RIEPILOGO GIORNATE AGIBILITÀ ─────────────────────────────────────────────
+const MESI_LABEL = {5:'Mag',6:'Giu',7:'Lug',8:'Ago',9:'Set',10:'Ott',11:'Nov',12:'Dic',1:'Gen',2:'Feb',3:'Mar',4:'Apr'};
+const MESI_STAGIONE = [5,6,7,8,9,10,11,12];
+let _ragibData = null;
+
+function parseAgibDate(s) {
+  if (!s) return null;
+  s = s.trim().replace(/\s/g,'');
+  try {
+    if (s.includes('/')) {
+      const p = s.split('/');
+      if (p.length === 3) {
+        let [d,m,y] = p;
+        if (y.length === 4) return new Date(+y, +m-1, +d);
+        if (d.length === 4) return new Date(+d, +m-1, +y);
+      }
+      return null;
+    }
+    if (s.length === 8) return new Date(+s.slice(4), +s.slice(2,4)-1, +s.slice(0,2));
+    return null;
+  } catch { return null; }
+}
+
+function daysInMonth(d1, d2, year, month) {
+  const mStart = new Date(year, month-1, 1);
+  const mEnd   = new Date(year, month, 0);
+  const start  = d1 > mStart ? d1 : mStart;
+  const end    = d2 < mEnd   ? d2 : mEnd;
+  if (start > end) return 0;
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function aggregaRiepilogo(rows) {
+  const agg = {};
+  const mesiSet = new Set();
+  for (const r of rows) {
+    const d1 = parseAgibDate(r.data_dal);
+    const d2 = parseAgibDate(r.data_al);
+    if (!d1 || !d2 || d2 < d1) continue;
+    const nome = (r.cognome_nome || '').trim();
+    if (!nome) continue;
+    if (!agg[nome]) agg[nome] = {};
+    for (const m of MESI_STAGIONE) {
+      const g = daysInMonth(d1, d2, 2026, m);
+      if (g > 0) { agg[nome][m] = (agg[nome][m]||0) + g; mesiSet.add(m); }
+    }
+  }
+  return { agg, mesiAttivi: MESI_STAGIONE.filter(m => mesiSet.has(m)) };
+}
+
+async function loadRiepilogoAgib() {
+  if (_ragibData) { buildRiepilogoFiltri(); renderRiepilogoAgib(); return; }
+  document.getElementById('ragib-loading').style.display = 'block';
+  document.getElementById('ragib-table-container').style.display = 'none';
+  try {
+    const r = await sbFetch('/rest/v1/agibilita?select=cognome_nome,data_dal,data_al&order=cognome_nome.asc');
+    if (!r.ok) throw new Error(await r.text());
+    _ragibData = await r.json();
+    buildRiepilogoFiltri();
+    renderRiepilogoAgib();
+  } catch(e) {
+    document.getElementById('ragib-loading').textContent = 'Errore: ' + e.message;
+  }
+}
+
+function buildRiepilogoFiltri() {
+  const { agg, mesiAttivi } = aggregaRiepilogo(_ragibData);
+  const nomi = Object.keys(agg).sort();
+  const selNome = document.getElementById('ragib-filtro-nome');
+  const prevNome = selNome.value;
+  selNome.innerHTML = '<option value="">Tutti</option>' +
+    nomi.map(n => `<option value="${n}"${n===prevNome?' selected':''}>${n}</option>`).join('');
+  const mesiopts = mesiAttivi.map(m => `<option value="${m}">${MESI_LABEL[m]}</option>`).join('');
+  const selDa = document.getElementById('ragib-filtro-mese-da');
+  const selAl = document.getElementById('ragib-filtro-mese-al');
+  const prevDa = selDa.value, prevAl = selAl.value;
+  selDa.innerHTML = '<option value="">Tutti</option>' + mesiopts;
+  selAl.innerHTML = '<option value="">Tutti</option>' + mesiopts;
+  if (prevDa) selDa.value = prevDa;
+  if (prevAl) selAl.value = prevAl;
+}
+
+function renderRiepilogoAgib() {
+  if (!_ragibData) return;
+  const filtroNome = document.getElementById('ragib-filtro-nome').value;
+  const filtroDa   = parseInt(document.getElementById('ragib-filtro-mese-da').value) || null;
+  const filtroAl   = parseInt(document.getElementById('ragib-filtro-mese-al').value) || null;
+  const { agg, mesiAttivi } = aggregaRiepilogo(_ragibData);
+  const mesi = mesiAttivi.filter(m => (!filtroDa || m >= filtroDa) && (!filtroAl || m <= filtroAl));
+  let nomi = Object.keys(agg).sort();
+  if (filtroNome) nomi = nomi.filter(n => n === filtroNome);
+  const totGiornate = nomi.reduce((s,n) => s + mesi.reduce((sm,m) => sm + (agg[n][m]||0), 0), 0);
+  document.getElementById('ragib-stat-nominativi').textContent = nomi.length;
+  document.getElementById('ragib-stat-giornate').textContent = totGiornate;
+
+  const thS = `style="background:var(--accent);color:#fff;padding:7px 10px;text-align:center;font-size:11px;font-weight:600;white-space:nowrap;position:sticky;top:0;z-index:2"`;
+  const thNS = `style="background:var(--accent);color:#fff;padding:7px 12px;text-align:left;font-size:11px;font-weight:600;white-space:nowrap;position:sticky;top:0;left:0;z-index:3"`;
+  let html = `<table id="ragib-table" style="border-collapse:collapse;width:100%;font-size:12px;min-width:600px">
+  <thead><tr>
+    <th ${thNS}>Nominativo</th>
+    ${mesi.map(m=>`<th ${thS}>${MESI_LABEL[m]}</th>`).join('')}
+    <th ${thS} style="background:#6b5230;min-width:60px">Totale</th>
+  </tr></thead><tbody>`;
+
+  const totMese = {};
+  let totGen = 0;
+  nomi.forEach((nome, i) => {
+    const bg = i%2===0 ? '#f9f8f5' : '#fff';
+    let totRow = 0;
+    const cells = mesi.map(m => {
+      const g = agg[nome][m]||0;
+      totMese[m] = (totMese[m]||0) + g;
+      totRow += g;
+      return `<td style="padding:6px 10px;text-align:center;border-bottom:1px solid #e8e6e0;color:${g?'var(--text)':'var(--text3)'}">${g||''}</td>`;
+    }).join('');
+    totGen += totRow;
+    html += `<tr style="background:${bg}">
+      <td style="padding:6px 12px;border-bottom:1px solid #e8e6e0;font-weight:500;white-space:nowrap;position:sticky;left:0;background:${bg};z-index:1">${nome}</td>
+      ${cells}
+      <td style="padding:6px 10px;text-align:center;border-bottom:1px solid #e8e6e0;font-weight:700;color:var(--accent)">${totRow}</td>
+    </tr>`;
+  });
+  const totCells = mesi.map(m =>
+    `<td style="padding:7px 10px;text-align:center;font-weight:700;color:var(--accent);background:#f5f0e8;border-top:2px solid var(--accent)">${totMese[m]||0}</td>`
+  ).join('');
+  html += `<tr>
+    <td style="padding:7px 12px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent);background:#f5f0e8;position:sticky;left:0;border-top:2px solid var(--accent)">Totale mensile</td>
+    ${totCells}
+    <td style="padding:7px 10px;text-align:center;font-weight:700;font-size:13px;color:var(--accent);background:#ede8dc;border-top:2px solid var(--accent)">${totGen}</td>
+  </tr></tbody></table>`;
+
+  document.getElementById('ragib-loading').style.display = 'none';
+  const container = document.getElementById('ragib-table-container');
+  container.style.display = 'block';
+  container.innerHTML = html;
+}
+
+function stampaRiepilogoAgib() {
+  const tableEl = document.getElementById('ragib-table');
+  if (!tableEl) return;
+  const filtroNome = document.getElementById('ragib-filtro-nome').value;
+  const selDa = document.getElementById('ragib-filtro-mese-da');
+  const selAl = document.getElementById('ragib-filtro-mese-al');
+  const filtroDaTxt = selDa.options[selDa.selectedIndex]?.text || '';
+  const filtroAlTxt = selAl.options[selAl.selectedIndex]?.text || '';
+  let filtriDesc = [];
+  if (filtroNome) filtriDesc.push('Nominativo: ' + filtroNome);
+  if (filtroDaTxt && filtroDaTxt !== 'Tutti') filtriDesc.push('Da: ' + filtroDaTxt);
+  if (filtroAlTxt && filtroAlTxt !== 'Tutti') filtriDesc.push('A: ' + filtroAlTxt);
+  const dataStampa = new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'});
+
+  // pulizia sticky per stampa
+  const cleanTable = tableEl.outerHTML
+    .replace(/position:sticky[^;]*;/g,'')
+    .replace(/z-index:\d+[^;]*;/g,'')
+    .replace(/left:0[^;]*;/g,'');
+
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+  <meta charset="UTF-8">
+  <title>Riepilogo Giornate Agibilità 2026</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',sans-serif;font-size:11px;color:#1a1a18;padding:20px}
+    .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid #8a6d3b;padding-bottom:12px}
+    .pt{font-size:15px;font-weight:700;color:#8a6d3b;letter-spacing:.04em}
+    .ps{font-size:11px;color:#6b6860;margin-top:4px}
+    .pf{font-size:10px;color:#6b6860;margin-top:5px;font-style:italic}
+    .pd{font-size:10px;color:#a09d96;text-align:right}
+    table{border-collapse:collapse;width:100%;font-size:11px}
+    th{background:#8a6d3b;color:#fff;padding:6px 8px;text-align:center;font-size:10px;font-weight:600;white-space:nowrap}
+    th:first-child{text-align:left}
+    th:last-child{background:#6b5230}
+    td{padding:5px 8px;text-align:center;border-bottom:1px solid #e8e6e0}
+    td:first-child{text-align:left;font-weight:500;white-space:nowrap}
+    td:last-child{font-weight:700;color:#8a6d3b}
+    tr:nth-child(even){background:#f9f8f5}
+    tr:last-child td{background:#f5f0e8;font-weight:700;color:#8a6d3b;border-top:2px solid #8a6d3b}
+    tr:last-child td:last-child{background:#ede8dc;font-size:12px}
+    @media print{body{padding:8px}@page{size:A4 landscape;margin:.8cm}}
+  </style></head><body>
+  <div class="ph">
+    <div>
+      <div class="pt">ResExtensa — Riepilogo Giornate Agibilità 2026</div>
+      <div class="ps">Giornate di assunzione per nominativo e per mese</div>
+      ${filtriDesc.length ? `<div class="pf">Filtri: ${filtriDesc.join(' · ')}</div>` : ''}
+    </div>
+    <div class="pd">Stampato il ${dataStampa}</div>
+  </div>
+  ${cleanTable}
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>{ win.print(); }, 400);
+}
 
 // ─── ALLEGATI PRATICHE AGIBILITÀ ──────────────────────────────────────────────
 let allegatiPraticaId = null;
