@@ -1454,12 +1454,22 @@ if (typeof SUPABASE_URL === 'undefined') {
   <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);font-weight:600;white-space:nowrap">Filtri</div>
 
-    <!-- Nominativo -->
-    <div style="display:flex;flex-direction:column;gap:3px;min-width:200px">
+    <!-- Nominativo multi-select -->
+    <div style="display:flex;flex-direction:column;gap:3px;position:relative" id="ragib-nome-wrap">
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Nominativo</label>
-      <select id="ragib-filtro-nome" onchange="renderRiepilogoAgib()" style="font-size:12px;padding:5px 8px">
-        <option value="">Tutti</option>
-      </select>
+      <button id="ragib-nome-btn" onclick="toggleRagibNomeDropdown(event)"
+        style="font-size:12px;padding:5px 28px 5px 8px;min-width:220px;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--text);position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        Tutti
+        <span style="position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:9px;color:var(--text3)">▼</span>
+      </button>
+      <div id="ragib-nome-dropdown"
+        style="display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:260px;max-height:280px;overflow-y:auto;padding:6px 0;margin-top:3px">
+        <div style="padding:6px 10px;border-bottom:1px solid var(--border);display:flex;gap:8px">
+          <button onclick="ragibNomeSelezioneAll(true)"  style="font-size:10px;padding:2px 6px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer;color:var(--text3)">Tutti</button>
+          <button onclick="ragibNomeSelezioneAll(false)" style="font-size:10px;padding:2px 6px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer;color:var(--text3)">Nessuno</button>
+        </div>
+        <div id="ragib-nome-list" style="padding:4px 0"></div>
+      </div>
     </div>
 
     <!-- Mese da -->
@@ -1934,6 +1944,15 @@ const ADMINS = [
   'resextensadancecompany@gmail.com',
 ];
 // ─────────────────────────────────────────────────────────────────────────────
+
+// chiude dropdown nominativo riepilogo se si clicca fuori
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('ragib-nome-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const dd = document.getElementById('ragib-nome-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 window.onload = () => {
@@ -10368,13 +10387,52 @@ async function loadRiepilogoAgib() {
   }
 }
 
+// set dei nominativi selezionati (vuoto = tutti)
+let _ragibNomiSelezionati = new Set();
+
+function toggleRagibNomeDropdown(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('ragib-nome-dropdown');
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+function ragibNomeSelezioneAll(all) {
+  const checks = document.querySelectorAll('#ragib-nome-list input[type=checkbox]');
+  checks.forEach(cb => { cb.checked = all; });
+  _ragibNomiSelezionati = all ? new Set() : new Set(['__nessuno__']);
+  aggiornaRagibNomeBtn();
+  renderRiepilogoAgib();
+}
+
+function aggiornaRagibNomeBtn() {
+  const checks = [...document.querySelectorAll('#ragib-nome-list input[type=checkbox]')];
+  const sel = checks.filter(c => c.checked);
+  const btn = document.getElementById('ragib-nome-btn');
+  const span = btn.querySelector('span');
+  if (sel.length === 0 || sel.length === checks.length) {
+    btn.textContent = 'Tutti';
+  } else if (sel.length === 1) {
+    btn.textContent = sel[0].value;
+  } else {
+    btn.textContent = `${sel.length} selezionati`;
+  }
+  btn.appendChild(span);
+}
+
 function buildRiepilogoFiltri() {
   const { agg, mesiAttivi } = aggregaRiepilogo(_ragibData);
   const nomi = Object.keys(agg).sort();
-  const selNome = document.getElementById('ragib-filtro-nome');
-  const prevNome = selNome.value;
-  selNome.innerHTML = '<option value="">Tutti</option>' +
-    nomi.map(n => `<option value="${n}"${n===prevNome?' selected':''}>${n}</option>`).join('');
+  const list = document.getElementById('ragib-nome-list');
+  const prevSel = new Set([..._ragibNomiSelezionati]);
+  list.innerHTML = nomi.map(n => {
+    const checked = prevSel.size === 0 || prevSel.has(n) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:12px;color:var(--text)" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <input type="checkbox" value="${n}" ${checked} onchange="onRagibNomeChange()" style="accent-color:var(--accent)">
+      ${n}
+    </label>`;
+  }).join('');
+  aggiornaRagibNomeBtn();
+
   const mesiopts = mesiAttivi.map(m => `<option value="${m}">${MESI_LABEL[m]}</option>`).join('');
   const selDa = document.getElementById('ragib-filtro-mese-da');
   const selAl = document.getElementById('ragib-filtro-mese-al');
@@ -10385,15 +10443,22 @@ function buildRiepilogoFiltri() {
   if (prevAl) selAl.value = prevAl;
 }
 
+function onRagibNomeChange() {
+  const checks = [...document.querySelectorAll('#ragib-nome-list input[type=checkbox]')];
+  const sel = checks.filter(c => c.checked).map(c => c.value);
+  _ragibNomiSelezionati = sel.length === checks.length ? new Set() : new Set(sel);
+  aggiornaRagibNomeBtn();
+  renderRiepilogoAgib();
+}
+
 function renderRiepilogoAgib() {
   if (!_ragibData) return;
-  const filtroNome = document.getElementById('ragib-filtro-nome').value;
-  const filtroDa   = parseInt(document.getElementById('ragib-filtro-mese-da').value) || null;
-  const filtroAl   = parseInt(document.getElementById('ragib-filtro-mese-al').value) || null;
+  const filtroDa = parseInt(document.getElementById('ragib-filtro-mese-da').value) || null;
+  const filtroAl = parseInt(document.getElementById('ragib-filtro-mese-al').value) || null;
   const { agg, mesiAttivi } = aggregaRiepilogo(_ragibData);
   const mesi = mesiAttivi.filter(m => (!filtroDa || m >= filtroDa) && (!filtroAl || m <= filtroAl));
   let nomi = Object.keys(agg).sort();
-  if (filtroNome) nomi = nomi.filter(n => n === filtroNome);
+  if (_ragibNomiSelezionati.size > 0) nomi = nomi.filter(n => _ragibNomiSelezionati.has(n));
   const totGiornate = nomi.reduce((s,n) => s + mesi.reduce((sm,m) => sm + (agg[n][m]||0), 0), 0);
   document.getElementById('ragib-stat-nominativi').textContent = nomi.length;
   document.getElementById('ragib-stat-giornate').textContent = totGiornate;
@@ -10445,13 +10510,15 @@ function renderRiepilogoAgib() {
 function stampaRiepilogoAgib() {
   const tableEl = document.getElementById('ragib-table');
   if (!tableEl) return;
-  const filtroNome = document.getElementById('ragib-filtro-nome').value;
   const selDa = document.getElementById('ragib-filtro-mese-da');
   const selAl = document.getElementById('ragib-filtro-mese-al');
   const filtroDaTxt = selDa.options[selDa.selectedIndex]?.text || '';
   const filtroAlTxt = selAl.options[selAl.selectedIndex]?.text || '';
   let filtriDesc = [];
-  if (filtroNome) filtriDesc.push('Nominativo: ' + filtroNome);
+  if (_ragibNomiSelezionati.size > 0) {
+    const nomiArr = [..._ragibNomiSelezionati];
+    filtriDesc.push(nomiArr.length === 1 ? nomiArr[0] : `${nomiArr.length} nominativi: ${nomiArr.join(', ')}`);
+  }
   if (filtroDaTxt && filtroDaTxt !== 'Tutti') filtriDesc.push('Da: ' + filtroDaTxt);
   if (filtroAlTxt && filtroAlTxt !== 'Tutti') filtriDesc.push('A: ' + filtroAlTxt);
   const dataStampa = new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'});
